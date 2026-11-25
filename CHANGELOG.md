@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.20.0 — 2026-11-25
+
+Time management that reads the clock instead of the config.
+
+- **The search was bounded by the setting, never by the clock.** `moveTimeMs`
+  came from `phaseMoveTime` and the watchdog waited `movetime * 6 + 6000`, so
+  with 4 s on the clock the engine could still be thinking after the flag fell.
+  `clockBoundMoveTime` caps the search at a fifth of what is left (never above
+  the configured value, floor 150 ms) and `searchBudgetMs` now caps the deadline
+  at half the clock, so a dead engine is noticed while there is still time to
+  click.
+- Measured why it matters: 57,340 blitz moves from the public archives, 2.6%
+  played with under 5 s left — about one such move per game.
+- Three tests for the bounds, including that a healthy clock changes nothing.
+  139 tests.
+
 ## 1.19.2 — 2026-11-25
 
 Measured the thing 1.19.0 assumed: a destroyed NNUE worker is ready again in

@@ -104,6 +104,20 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## Low clock is not an edge case
+
+57,340 moves from three blitz leaderboard players in October 2026 (Hikaru,
+jefferyx, Andreikka), read from the `%clk` comments of their public PGN:
+
+- median clock at a move: **53.7 s**
+- **2.6%** of moves are played with under 5 s left
+- 6% under 10 s, 23.8% under 30 s
+
+At roughly 40 moves of your own per game, that is about one move per game inside
+the window where the old `movetime * 6 + 6000` deadline (10.2 s for a 700 ms
+search) could outlive the flag. The budget assumes a full clock; the clock is
+what actually runs out.
+
 ## What a rebuild costs
 
 Measured in the live tab on the analysis page, three times in a row, each one

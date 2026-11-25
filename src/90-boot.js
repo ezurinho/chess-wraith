@@ -795,7 +795,8 @@ function analyze(snapshot, force) {
     turn: snapshot.turn,
     flipped: snapshot.flipped,
     depth: cfg.maxDepth,
-    moveTimeMs: phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)),
+    clockSeconds: state.clockSeconds,
+    moveTimeMs: clockBoundMoveTime(phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)), state.clockSeconds),
     multiPv: Math.max(1, cfg.multiPv),
     elo: resolveElo(),
     skill: 20

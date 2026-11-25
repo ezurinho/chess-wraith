@@ -165,7 +165,21 @@ function formatAge(ms) {
 
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
-  return movetime * 6 + 6000;
+  const base = movetime * 6 + 6000;
+  const clock = Number(job && job.clockSeconds);
+  // Half the clock is already lost. Waiting longer than that for an engine that
+  // may be dead costs the game, not the move.
+  if (!Number.isFinite(clock) || clock <= 0) return base;
+  return Math.min(base, Math.max(1500, Math.round(clock * 500)));
+}
+
+// How long this move is allowed to search. The published budget assumes a full
+// clock; with four seconds left, a 900 ms search plus the click is a flag.
+function clockBoundMoveTime(moveTimeMs, clockSeconds) {
+  const move = clampInt(moveTimeMs, 120, 6000, 700);
+  const clock = Number(clockSeconds);
+  if (!Number.isFinite(clock) || clock <= 0) return move;
+  return Math.max(150, Math.min(move, Math.round(clock * 200)));
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
