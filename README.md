@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.20.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.21.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -98,7 +98,8 @@ until jsDelivr serves the new tag. A failing check never reaches a tag.
 | **Accuracy guard** | `acplBand(elo)` is the loss a human at that rating averages per move. Past 15 assessed moves, an account under 45% of its band gets 12 cp of extra slack at a time (cap 160) for that session; over twice the band, it gives it back. Your saved setting is never rewritten. |
 | **Verification** | After playing, it re-reads the board. If the move did not land it retries with the other gesture, then re-arms the same move up to three times (0.9 s, 1.8 s, 2.7 s) before stopping with `the board is not taking moves`. A promotion dialog is waited for (up to ~1 s) instead of clicked blind. |
 | **No stalls** | A 2 s tick that sees your turn, a fresh analysis and nothing armed re-arms the move: the panel used to say `playing` while a swallowed callback left it sitting there. |
-| **Pauses** | Game over, promotion dialog, premove on the board, low clock, hidden tab. |
+| **Hidden tab** | Chrome batches a hidden tab's timers to roughly one per minute, and chess.com keeps the clock running either way. A 1 s worker ticker pings the page while the tab is out of sight, because worker intervals are not batched the same way page timers are; when the 2 s tick itself arrives more than 1.8× late the panel says `tab hidden · timers batched` instead of letting the user blame the board. |
+| **Pauses** | Game over, promotion dialog, premove on the board, low clock, hidden tab while AFK is off. |
 | **Updates** | The panel checks `cdn.jsdelivr.net/gh/ezurinho/chess-wraith@latest/package.json` on boot and every six hours (GitHub's release API as fallback), and again whenever you come back to the tab, the window regains focus or the network returns, at most once every five minutes. The last answer is cached, so a reload paints the `UPDATE vX.Y.Z` pill immediately instead of four seconds later. Both requests are public static files; nothing about the account leaves the tab. |
 | **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. A target strip with the accuracy band and a fill bar, live ACPL, the opponent estimate, your pace, their tempo, games played, time left and an account card with the signed-in user. |
 

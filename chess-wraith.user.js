@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.20.0
+// @version      1.21.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.20.0';
+const VERSION = '1.21.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.20.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.21.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -223,6 +223,18 @@ function moveRetryPlan(attempt) {
   const n = Math.max(1, Math.floor(Number(attempt) || 1));
   if (n > 3) return { retry: false, delayMs: 0 };
   return { retry: true, delayMs: 900 * n };
+}
+
+// A hidden tab gets its timers batched: the 2 s scan can come back a minute late.
+// That is the browser, not the board, and knowing it is the difference between
+// "the script stalled" and "keep the tab visible".
+function throttleDecision(opts) {
+  const o = opts || {};
+  if (!o.hidden) return false;
+  const lag = Number(o.lagMs);
+  const expected = Number(o.expectedMs);
+  if (!Number.isFinite(lag) || !Number.isFinite(expected) || expected <= 0) return false;
+  return lag > Math.max(2500, expected * 1.8);
 }
 
 // Should the idle tick arm a move right now? A finished game is the trap: the
@@ -3826,6 +3838,8 @@ class WraithPanel {
     this.el.warn.textContent = v.warn || '';
     this.el.foot.textContent = v.passiveTab
       ? 'second tab · passive'
+      : v.throttled
+        ? 'tab hidden · timers batched'
       : v.status === 'thinking'
         ? 'thinking'
         : autoOn
@@ -3969,6 +3983,9 @@ const state = {
   eloSource: 'target',
   clockPeak: 0,
   passiveTab: false,
+  throttled: false,
+  lastScanAt: 0,
+  lastTickAt: 0,
   autoMovedGrid: null,
   // A click that did not land, and a move that showed up on our turn without us:
   // both are counted before the session stops, because one bad scan is not a
@@ -4351,6 +4368,7 @@ function registerButler() {
       clearAutoTimer();
       clearRematchTimer();
       stopKeepAlive();
+      stopPageTicker();
       engine.destroy();
       panel.unmount();
       if (boardObserver) boardObserver.disconnect();
@@ -4592,6 +4610,7 @@ function statusView() {
     updateAt: state.updateAt,
     updateError: state.updateError,
     updateChecking: state.updateChecking,
+    throttled: state.throttled,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -4903,6 +4922,7 @@ function scheduleScan(delayMs = 90) {
 }
 
 function runScan() {
+  state.lastScanAt = Date.now();
   const side = mySide(state.snapshot ? state.snapshot.flipped : false);
   const scanned = scanBoard(side);
   if (!scanned) {
@@ -5016,6 +5036,48 @@ function runScan() {
 let boardObserver = null;
 let docObserver = null;
 
+// A hidden tab is not allowed to run its timers on time, and chess.com keeps the
+// clock running anyway: the 2 s scan returns a minute late and the flag falls in
+// between. A worker runs its intervals on a different budget, so this one pings
+// the page while the tab is out of sight. If the browser batches it too, the
+// panel says so and the user knows it is the tab, not the board.
+let pageTicker = null;
+
+function startPageTicker() {
+  if (pageTicker) return;
+  try {
+    const source = [
+      'let t = null;',
+      'self.onmessage = (e) => {',
+      '  if (e.data === "start" && t === null) t = setInterval(() => self.postMessage(1), 1000);',
+      '  if (e.data === "stop") { clearInterval(t); t = null; }',
+      '};'
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    worker.onmessage = () => {
+      if (document.visibilityState !== 'hidden' || !state.autoPlay || state.thinking) return;
+      if (Date.now() - state.lastScanAt < 3000) return;
+      scheduleScan(0);
+    };
+    worker.postMessage('start');
+    pageTicker = worker;
+  } catch {
+    pageTicker = null;
+  }
+}
+
+function stopPageTicker() {
+  if (!pageTicker) return;
+  try {
+    pageTicker.terminate();
+  } catch {
+    /* already gone */
+  }
+  pageTicker = null;
+}
+
 function attachBoard(boardEl) {
   if (boardObserver) boardObserver.disconnect();
   state.boardEl = boardEl;
@@ -5067,6 +5129,7 @@ function reportText() {
     `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''
   ];
   return lines.filter(Boolean).join('\n');
@@ -5251,7 +5314,23 @@ function boot() {
   docObserver.observe(document.body || document.documentElement, { childList: true, subtree: true });
 
   runScan();
+  startPageTicker();
   scanTimer = setInterval(() => {
+    const tickAt = Date.now();
+    if (state.lastTickAt) {
+      const throttled = throttleDecision({
+        hidden: document.visibilityState === 'hidden',
+        lagMs: tickAt - state.lastTickAt,
+        expectedMs: 2000
+      });
+      if (throttled !== state.throttled) {
+        state.throttled = throttled;
+        if (throttled && !state.warn) state.warn = 'tab hidden · timers batched by the browser';
+        if (!throttled && /timers batched/.test(state.warn || '')) state.warn = '';
+        refreshPanel();
+      }
+    }
+    state.lastTickAt = tickAt;
     if (!state.boardEl || !state.boardEl.isConnected) {
       scheduleScan(0);
       return;

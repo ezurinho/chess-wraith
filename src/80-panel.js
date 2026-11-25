@@ -627,6 +627,8 @@ class WraithPanel {
     this.el.warn.textContent = v.warn || '';
     this.el.foot.textContent = v.passiveTab
       ? 'second tab · passive'
+      : v.throttled
+        ? 'tab hidden · timers batched'
       : v.status === 'thinking'
         ? 'thinking'
         : autoOn

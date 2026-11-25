@@ -105,6 +105,18 @@ function moveRetryPlan(attempt) {
   return { retry: true, delayMs: 900 * n };
 }
 
+// A hidden tab gets its timers batched: the 2 s scan can come back a minute late.
+// That is the browser, not the board, and knowing it is the difference between
+// "the script stalled" and "keep the tab visible".
+function throttleDecision(opts) {
+  const o = opts || {};
+  if (!o.hidden) return false;
+  const lag = Number(o.lagMs);
+  const expected = Number(o.expectedMs);
+  if (!Number.isFinite(lag) || !Number.isFinite(expected) || expected <= 0) return false;
+  return lag > Math.max(2500, expected * 1.8);
+}
+
 // Should the idle tick arm a move right now? A finished game is the trap: the
 // board does not change when the clock runs out, so the last analysis still
 // matches the last position and the turn still looks ours.

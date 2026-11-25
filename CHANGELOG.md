@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.21.0 — 2026-11-25
+
+AFK in a hidden tab, which is how AFK actually runs.
+
+- **Chrome batches a hidden tab's timers to about one per minute.** With AFK on,
+  `pauseWhenHidden` is off on purpose, so the 2 s scan and the move delay come
+  back late while chess.com's clock keeps counting. Nothing in the panel said
+  so: it looked like the board had stopped taking moves.
+- A 1 s worker ticker now pings the page while the tab is hidden, since worker
+  intervals are not batched the same way page timers are. Best effort by
+  nature — the browser sets the rules — but it is the only wake-up left when the
+  main thread is starved.
+- The scan tick measures its own lag. More than 1.8× late (or 2.5 s, whichever
+  is bigger) while the tab is hidden sets `state.throttled` and the panel foot
+  says `tab hidden · timers batched`. The report text carries it too. Detection
+  is exact; the ticker is the mitigation.
+- A test for the rule: a minute for a 2 s tick is throttling, 2.4 s is jitter, a
+  visible tab is never throttled. 140 tests.
+
 ## 1.20.0 — 2026-11-25
 
 Time management that reads the clock instead of the config.

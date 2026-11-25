@@ -4,7 +4,7 @@ const { loadFragments } = require('./helpers.js');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js'],
-  `{ moveRetryPlan, autoArmDecision }`
+  `{ moveRetryPlan, autoArmDecision, throttleDecision }`
 );
 
 test('a swallowed click gets three growing attempts, then an honest stop', () => {
@@ -12,6 +12,14 @@ test('a swallowed click gets three growing attempts, then an honest stop', () =>
   assert.deepEqual([api.moveRetryPlan(2).retry, api.moveRetryPlan(2).delayMs], [true, 1800]);
   assert.deepEqual([api.moveRetryPlan(3).retry, api.moveRetryPlan(3).delayMs], [true, 2700]);
   assert.deepEqual([api.moveRetryPlan(4).retry, api.moveRetryPlan(4).delayMs], [false, 0], 'the fourth miss is the board, not the click');
+});
+
+test('a batched timer is only called batched when the tab is hidden', () => {
+  assert.equal(api.throttleDecision({ hidden: true, lagMs: 60000, expectedMs: 2000 }), true, 'a minute for a 2 s tick');
+  assert.equal(api.throttleDecision({ hidden: false, lagMs: 60000, expectedMs: 2000 }), false, 'a visible tab is just busy');
+  assert.equal(api.throttleDecision({ hidden: true, lagMs: 2400, expectedMs: 2000 }), false, 'a little jitter is not throttling');
+  assert.equal(api.throttleDecision({ hidden: true, lagMs: 5200, expectedMs: 2000 }), true, 'more than 1.8x is a batch');
+  assert.equal(api.throttleDecision({ hidden: true, lagMs: NaN, expectedMs: 2000 }), false, 'no measurement, no claim');
 });
 
 const idle = {
