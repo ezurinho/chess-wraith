@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1 — 2026-11-25
+
+People get slower as a session goes on; the delay now does too, 2% an hour
+capped at 6% after three hours (the same drift `nitro-wraith`'s typing model
+uses, from de Jong et al. 2020 on time-on-task). 83 tests.
+
 ## 1.6.0 — 2026-11-25
 
 The rating is no longer a number you type. It is the account's own.

@@ -125,6 +125,15 @@ function chooseMove(lines, cfg, opts = {}) {
   return { line: picked.line, cpLoss: picked.cpLoss, reason: profile.label };
 }
 
+// A session has a shape: the first half hour is the sharpest, and after three
+// hours the same player takes about 6% longer per move. Real time-on-task data
+// shows the interval creeping up ~2% an hour (de Jong et al. 2020), and the
+// typing model nitro-wraith ships uses the same drift.
+function fatigueFactor(sessionMs) {
+  const hours = Number(sessionMs) > 0 ? Number(sessionMs) / 3600000 : 0;
+  return 1 + clamp(hours * 0.02, 0, 0.06);
+}
+
 // How long a person would spend here. Two draws averaged instead of one: the
 // distribution is triangular, mostly near the middle, which is what real think
 // times look like. The dials below are the ones a fixed timer cannot fake.
@@ -161,6 +170,7 @@ function computeDelay(cfg, opts = {}) {
 
   if (opts.legalMoveCount === 1) ms *= 0.45;
   else if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
+  ms *= fatigueFactor(opts.sessionMs);
   if (opts.isCheck) ms *= 1.12;
   if (opts.isCapture) ms *= 0.92;
 

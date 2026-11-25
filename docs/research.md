@@ -87,7 +87,9 @@ A model trained on human games allocates more time in the early middle game
 ([Rheude et al. 2021](https://ml-research.github.io/papers/rheude2021time.pdf)).
 So the delay here moves with the gap between the top two lines, checks, captures,
 the phase, the time control and the account's own learned median, and a forced
-move is played almost at once. A fixed window is the part that looks like a clock.
+move is played almost at once. A long session also drifts 2% slower per hour,
+capped at 6% after three hours - the same time-on-task effect the typing model in
+`nitro-wraith` carries. A fixed window is the part that looks like a clock.
 
 ## 3. How this compares with nitro-wraith
 

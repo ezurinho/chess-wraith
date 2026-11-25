@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, sideScore, clamp, clampInt, median, pushBounded, LEGIT }`
+  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, fatigueFactor, sideScore, clamp, clampInt, median, pushBounded, LEGIT }`
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -184,4 +184,13 @@ test('median and pushBounded behave on the edge cases the pace code feeds them',
   assert.equal(api.pushBounded([1, 2], 3, 2).join(','), '2,3');
   assert.equal(api.pushBounded(null, 7, 3).join(','), '7');
   assert.equal(api.pushBounded([1], NaN, 3).join(','), '1');
+});
+
+test('a long session gets slower, like a person not a metronome', () => {
+  assert.equal(api.fatigueFactor(0), 1);
+  assert.equal(api.fatigueFactor(NaN), 1);
+  assert.equal(api.fatigueFactor(3600000), 1.02);
+  assert.equal(api.fatigueFactor(3 * 3600000), 1.06);
+  // The cap: eight hours is not eight times slower.
+  assert.equal(api.fatigueFactor(8 * 3600000), 1.06);
 });

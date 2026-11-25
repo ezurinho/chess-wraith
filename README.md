@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.6.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.6.1-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -80,7 +80,7 @@ cache serves it and the whole thing works offline.
 | **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. |
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`Skill Level`) tuned to the rating on the board. |
 | **One way to play** | No `GM`/`rage`/`full engine` presets and no switch out of it: the panel shows `LEGIT` and means it. The strength is anchored to your own published rating and may drift only 75 cp below or 25 above it (your target Elo ihen nobody is measured yet), the chosen move stays within the slack band of the best one, and the engine is never asked for its raw best line — there is no deliberate-miss dice either. |
-| **Pacing** | Delays inside your own window, plus the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), a 3.5% chance of a rare second thought, and faster play on a low clock. The window is then kept inside 0.65×–1.5× of this account's own learned rhythm, and never below 35% of the opponent's think time. |
+| **Pacing** | Delays inside your own window, moved by the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), the phase, the time control (bullet plays at half the delay, rapid at 1.15×), a forced move at 45%, a 3.5% chance of a rare second thought, faster play on a low clock and a 2%-an-hour session drift capped at 6%. The window stays inside 0.65×–1.5× of this account's own learned rhythm and never below 35% of the opponent's think time. |
 | **Your own rating** | Once per six hours, the public profile endpoint is asked for the signed-in account's rating in every time class. The class on the board (bullet/blitz/rapid/daily, derived from the clock) picks the anchor; the panel shows `1840 blitz` and `Playing at 1840 · acct`. No rating, a blocked request or a signed-out browser falls back to the manual Target Elo, then to 1500. |
 | **Per account** | Settings are global; the rating anchor, the learned pace, the opening memory and the accuracy-guard slack are stored per signed-in username, so two accounts on one browser do not share a fingerprint. |
 | **Hand on the board** | A click outside the panel defers the pending move for 2 s, twice; after that the script stops and says `paused: your hand is on the board`. |

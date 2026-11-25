@@ -631,7 +631,8 @@ function scheduleAutoMove(result) {
     clockSeconds: state.clockSeconds,
     oppTempoMs: median(state.tempoSamples),
     baselineMs: paceBaseline(),
-    budgetSeconds: state.clockPeak
+    budgetSeconds: state.clockPeak,
+    sessionMs: Date.now() - state.sessionStart
   });
 
   const targetFen = result.fen;
