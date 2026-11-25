@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.11.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.12.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -83,7 +83,7 @@ until jsDelivr serves the new tag. A failing check never reaches a tag.
 | --- | --- |
 | **Board reading** | Grid, orientation, move list (`data-ply` or `.node` rows), last-move highlights, clocks, opponent rating and the game-over modal, straight from the DOM. |
 | **Turn detection** | The turn is taken from the move list, the running clock or the last-move highlight, and the source is recorded. When none of the three is readable the panel says `turn not readable; not playing` and nothing is played on a guess. |
-| **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. |
+| **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. Search time follows the material: 0.85× in the opening, 1.35× with ten men or fewer, because that is where a game is converted or thrown away. |
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`Skill Level`) tuned to the rating on the board. |
 | **One way to play** | No `GM`/`rage`/`full engine` presets and no switch out of it: the panel shows `LEGIT` and means it. The strength is anchored to your own published rating and may drift only 75 cp below or 25 above it (your target Elo ihen nobody is measured yet), the chosen move stays within the slack band of the best one, and the engine is never asked for its raw best line — there is no deliberate-miss dice either. |
 | **Pacing** | Delays inside your own window, moved by the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), the phase, the time control (bullet plays at half the delay, rapid at 1.15×), a forced move at 45%, a 3.5% chance of a rare second thought, faster play on a low clock and a 2%-an-hour session drift capped at 6%. The window stays inside 0.65×–1.5× of this account's own rhythm and never below 35% of the opponent's think time. The rhythm itself is measured, not guessed: the median `%clk` of the account's own moves in its last 40 games of the same time class (the opponent's clocks are in the same PGN and are ignored), falling back to the locally learned sample. It is also capped at a eighteenth of the remaining clock, so a six second median does not flag the account. |

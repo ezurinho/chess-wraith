@@ -645,9 +645,7 @@ class WraithPanel {
       this.el.update.setAttribute('aria-label', `Update available: v${latest}`);
     }
     this.el.latest.textContent = latest ? latest : '–';
-    this.el.checked.textContent = v.updateAt
-      ? `${Math.max(0, Math.round((Date.now() - v.updateAt) / 60000))}m ago`
-      : 'never';
+    this.el.checked.textContent = v.updateAt ? formatAge(Date.now() - v.updateAt) : 'never';
     this.el.updateState.textContent = v.updateChecking
       ? 'checking…'
       : v.updateError

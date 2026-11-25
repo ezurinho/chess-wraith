@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.12.0 — 2026-11-25
+
+Review of the search and of the update row.
+
+- **Search time follows the phase.** An opening move does not need the full
+  700 ms and the ten-man endgame is where the half-pawn decides the result, so
+  the request is scaled by material: 0.85× in the opening (first 16 plies, full
+  board), 1.15× at 11–16 men, 1.35× at 10 men or fewer. The watchdog budget is
+  derived from the same number, so nothing waits longer than before.
+- **`checked` reads like a sentence**: `just now`, `5m ago`, `3h ago`, `3d ago`
+  instead of `4320m ago` after a long break.
+- The debug API gains `phaseTime(fen, ply)`, which is how the scaling was
+  verified against the live build.
+- Three tests for the phase scale, the budget bounds and the age text. 113 tests.
+
 ## 1.11.0 — 2026-11-25
 
 The update pill now shows up on its own; it used to depend on a timer that a

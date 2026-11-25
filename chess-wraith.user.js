@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.11.0
+// @version      1.12.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -107,7 +107,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.11.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.12.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -228,6 +228,38 @@ function foreignMoveSeen(opts) {
 
 // A search that never answers must not wedge the panel forever. The budget is
 // generous relative to the request so a slow-but-working search still finishes.
+// Pawn count is the honest phase signal: material is what the position is made
+// of, while the move number lies the moment a piece is traded.
+function phaseTimeScale(fen, ply) {
+  const field = String(fen || '').split(' ')[0];
+  const men = (field.match(/[prnbqkPRNBQK]/g) || []).length;
+  if (!men) return 1;
+  if (men <= 10) return 1.35;
+  if (men <= 16) return 1.15;
+  if (Number(ply) > 0 && Number(ply) <= 16) return 0.85;
+  return 1;
+}
+
+// A conversion is where a lost half-pawn decides the game, and an opening book
+// move does not need 700 ms of search. The ceiling stays where the engine's
+// watchdog expects it.
+function phaseMoveTime(baseMs, fen, ply) {
+  const base = clampInt(baseMs, 120, 6000, 700);
+  return clampInt(Math.round(base * phaseTimeScale(fen, ply)), 150, 5000, base);
+}
+
+// "checked 3h ago" reads better than "checked 187m ago".
+function formatAge(ms) {
+  const delta = Number(ms);
+  if (!Number.isFinite(delta) || delta < 0) return 'never';
+  if (delta < 60000) return 'just now';
+  const minutes = Math.round(delta / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
   return movetime * 6 + 6000;
@@ -3662,9 +3694,7 @@ class WraithPanel {
       this.el.update.setAttribute('aria-label', `Update available: v${latest}`);
     }
     this.el.latest.textContent = latest ? latest : '–';
-    this.el.checked.textContent = v.updateAt
-      ? `${Math.max(0, Math.round((Date.now() - v.updateAt) / 60000))}m ago`
-      : 'never';
+    this.el.checked.textContent = v.updateAt ? formatAge(Date.now() - v.updateAt) : 'never';
     this.el.updateState.textContent = v.updateChecking
       ? 'checking…'
       : v.updateError
@@ -4091,6 +4121,7 @@ function registerButler() {
     panel,
     chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate }),
     computeDelay: (opts) => computeDelay(cfg, opts),
+    phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
     scan: () => runScan(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
@@ -4369,7 +4400,7 @@ function analyze(snapshot, force) {
     turn: snapshot.turn,
     flipped: snapshot.flipped,
     depth: cfg.maxDepth,
-    moveTimeMs: cfg.moveTimeMs,
+    moveTimeMs: phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)),
     multiPv: Math.max(1, cfg.multiPv),
     elo: resolveElo(),
     skill: 20

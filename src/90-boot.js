@@ -401,6 +401,7 @@ function registerButler() {
     panel,
     chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate }),
     computeDelay: (opts) => computeDelay(cfg, opts),
+    phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
     scan: () => runScan(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
@@ -679,7 +680,7 @@ function analyze(snapshot, force) {
     turn: snapshot.turn,
     flipped: snapshot.flipped,
     depth: cfg.maxDepth,
-    moveTimeMs: cfg.moveTimeMs,
+    moveTimeMs: phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)),
     multiPv: Math.max(1, cfg.multiPv),
     elo: resolveElo(),
     skill: 20

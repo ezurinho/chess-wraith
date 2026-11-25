@@ -111,6 +111,38 @@ function foreignMoveSeen(opts) {
 
 // A search that never answers must not wedge the panel forever. The budget is
 // generous relative to the request so a slow-but-working search still finishes.
+// Pawn count is the honest phase signal: material is what the position is made
+// of, while the move number lies the moment a piece is traded.
+function phaseTimeScale(fen, ply) {
+  const field = String(fen || '').split(' ')[0];
+  const men = (field.match(/[prnbqkPRNBQK]/g) || []).length;
+  if (!men) return 1;
+  if (men <= 10) return 1.35;
+  if (men <= 16) return 1.15;
+  if (Number(ply) > 0 && Number(ply) <= 16) return 0.85;
+  return 1;
+}
+
+// A conversion is where a lost half-pawn decides the game, and an opening book
+// move does not need 700 ms of search. The ceiling stays where the engine's
+// watchdog expects it.
+function phaseMoveTime(baseMs, fen, ply) {
+  const base = clampInt(baseMs, 120, 6000, 700);
+  return clampInt(Math.round(base * phaseTimeScale(fen, ply)), 150, 5000, base);
+}
+
+// "checked 3h ago" reads better than "checked 187m ago".
+function formatAge(ms) {
+  const delta = Number(ms);
+  if (!Number.isFinite(delta) || delta < 0) return 'never';
+  if (delta < 60000) return 'just now';
+  const minutes = Math.round(delta / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
   return movetime * 6 + 6000;
