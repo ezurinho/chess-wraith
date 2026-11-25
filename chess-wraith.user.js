@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.4.2
+// @version      1.5.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,13 +41,21 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.4.2';
+const VERSION = '1.5.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
+
+// The panel checks this on boot and every six hours; both answers are public
+// static files, so the request carries nothing about the account.
+const UPDATE_REPO = 'ezurinho/chess-wraith';
+const UPDATE_META_URL = `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@latest/package.json`;
+const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+const UPDATE_DOWNLOAD_URL = `https://github.com/${UPDATE_REPO}/releases/latest/download/chess-wraith.user.js`;
+const UPDATE_PAGE_URL = `https://github.com/${UPDATE_REPO}/releases/latest`;
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 const CONFIG = {
   // Engine
   targetElo: 1650,
-  style: 'adaptive', // 'adaptive' | 'gm' | 'club' | 'casual' | 'engine'
   maxDepth: 14,
   moveTimeMs: 700,
   multiPv: 4,
@@ -89,20 +97,15 @@ const CONFIG = {
   showLines: 3
 };
 
-// Public, user-facing presets. The panel writes these into CONFIG.
-const STYLES = {
-  // `miss` is the chance of a deliberate, capped inaccuracy: only the weaker
-  // presets carry one, so "Casual" looks casual instead of merely random.
-  adaptive: { elo: null, skill: 20, slack: 40, miss: 0.05, label: 'Adaptive' },
-  gm: { elo: 2250, skill: 20, slack: 26, miss: 0, label: 'GM-like' },
-  club: { elo: 1650, skill: 20, slack: 70, miss: 0, label: 'Club' },
-  casual: { elo: 1350, skill: 20, slack: 120, miss: 0.12, label: 'Casual' },
-  engine: { elo: null, skill: 20, slack: 0, miss: 0, label: 'Full engine' }
-};
+// There is one way to play and it is the honest one: no GM/rage presets, no
+// "full engine" switch. The engine is capped to a rating a human at this table
+// could plausibly hold, and nothing here ever asks it to play its raw best.
+const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
+const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -169,6 +172,27 @@ function pushBounded(list, value, cap) {
 }
 // Two tabs of the same browser must not drive the same board. The lease is a
 // heartbeat; whoever holds a fresh one keeps the wheel, a closed tab expires.
+function versionParts(value) {
+  const core = String(value == null ? '' : value).trim().replace(/^v/i, '').split(/[+-]/)[0];
+  const parts = core.split('.').map((n) => Number.parseInt(n, 10));
+  if (!parts.length || parts.some((n) => !Number.isFinite(n) || n < 0)) return null;
+  return parts;
+}
+
+// Strictly newer, or it is not an update: a meta file that cannot be parsed
+// must never make the panel nag.
+function versionNewer(next, current) {
+  const a = versionParts(next);
+  const b = versionParts(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
 function tabLeaseDecision(entry, now, ttlMs, myId) {
   if (!entry || typeof entry !== 'object') return 'claim';
   const at = Number(entry.at);
@@ -2153,12 +2177,8 @@ function sideScore(line) {
 // bottom of the scale, flattening at the top. This is the only strength dial
 // the bundled 2019 build honours, so the styles go through it.
 function effectiveElo(cfg, opts = {}) {
-  if (cfg.style === 'engine') return null;
-  if (cfg.style === 'adaptive') {
-    const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : 1500;
-    return Math.round(clamp(base + 130, 1320, 2600));
-  }
-  return clampInt(cfg.targetElo, 1320, 3190, 1650);
+  const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : clampInt(cfg.targetElo, 1320, 3190, 1650);
+  return Math.round(clamp(base + 130, 1320, 2600));
 }
 
 // How many centipawns a human at this rating actually loses per move. Rough
@@ -2185,12 +2205,11 @@ function acplGuard(opts) {
 }
 
 function styleProfile(cfg, opts = {}) {
-  const preset = STYLES[cfg.style] || STYLES.adaptive;
   return {
     elo: effectiveElo(cfg, opts),
-    slack: cfg.style === 'engine' ? 0 : Math.max(cfg.humanSlackCp, preset.slack),
-    miss: cfg.style === 'engine' ? 0 : Number(preset.miss) || 0,
-    label: preset.label
+    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack),
+    miss: LEGIT.miss,
+    label: LEGIT.label
   };
 }
 
@@ -2851,6 +2870,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .panel[data-collapsed="true"] .body{display:none}
 .panel[data-collapsed="true"] .head{border-bottom:0}
 .panel[data-collapsed="true"] .head::after{display:none}
+.upd{display:inline-flex;align-items:center;gap:5px;margin-right:2px;padding:3px 7px;border-radius:99px;border:1px solid color-mix(in srgb,var(--acc) 42%,transparent);background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc);font:800 7.5px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;text-decoration:none;white-space:nowrap;animation:nt-pulse 1.9s ease-in-out infinite}
+.upd:hover{background:color-mix(in srgb,var(--acc) 24%,transparent)}
+.upd svg{width:10px;height:10px;flex:none}
+.upd[hidden]{display:none}
+@keyframes nt-pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--acc) 45%,transparent)}55%{box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 0%,transparent)}}
+.card-actions{display:flex;gap:6px;padding:7px 0 0}
+.card-actions .act{flex:1;padding:5px 8px;border-radius:7px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);color:var(--ink-2);font:700 8px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;text-align:center;cursor:pointer;text-decoration:none}
+.card-actions .act:hover{border-color:var(--acc);color:var(--acc)}
 .band{display:grid;gap:5px;margin:2px 0 9px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.022);border:1px solid var(--line)}
 .band-h{display:flex;align-items:baseline;justify-content:space-between;font:700 7.5px/1 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--dim-2)}
 .band-h b{font:700 11px/1 var(--font-mono);letter-spacing:0;color:var(--acc)}
@@ -2876,6 +2903,7 @@ const PANEL_HTML = `
     <span class="title">CHESS WRAITH</span>
     <span class="sub" data-el="engine">starting</span>
   </div>
+  <a class="upd" data-el="update" href="${UPDATE_DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer" hidden title="A newer version is on GitHub" aria-label="Update available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg><span>Update</span></a>
   <button class="iconbtn" type="button" data-el="min" title="Collapse (double-click the title)" aria-label="Collapse panel">${ICON.min}</button>
   <button class="iconbtn" type="button" data-el="hide" title="Hide (Alt+Shift+H)" aria-label="Hide panel">${ICON.hide}</button>
 </div>
@@ -2883,7 +2911,7 @@ const PANEL_HTML = `
   <div class="chips">
     <button class="chip" type="button" data-el="auto" aria-pressed="false"><span class="k">AUTO</span><span data-el="autoTxt">OFF</span></button>
     <button class="chip afk" type="button" data-el="afk" aria-pressed="false"><span class="k">AFK</span><span data-el="afkTxt">OFF</span></button>
-    <span class="chip" data-el="styleChip" style="cursor:default">AUTO</span>
+    <span class="chip legit" data-el="styleChip" style="cursor:default" title="One way to play: never the engine's raw best, always inside a human band">LEGIT</span>
     <span class="pace" data-el="clock">—</span>
   </div>
   <div class="race-line" aria-hidden="true"><i data-el="fill"></i></div>
@@ -2933,15 +2961,7 @@ const PANEL_HTML = `
         </div>
       </div>
       <div class="view v-tune">
-        <div class="view-head"><span>Tune</span><b>style · engine · panel</b></div>
-        <div class="seg" data-el="seg">
-          <button type="button" data-style="adaptive">Adaptive</button>
-          <button type="button" data-style="club">Club</button>
-          <button type="button" data-style="casual">Casual</button>
-          <button type="button" data-style="gm">GM</button>
-          <button type="button" data-style="engine">Full</button>
-          <button type="button" data-style="custom" data-el="customBtn">Custom</button>
-        </div>
+        <div class="view-head"><span>Tune</span><b>legit · engine · panel</b></div>
         <div class="card">
           <div class="card-h"><span class="card-t">Engine</span><span class="card-s">local, no server</span></div>
           <div class="set"><span class="set-lbl">Target Elo<i>drives Skill Level</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="1320" max="3190" step="10"></span></div>
@@ -2980,6 +3000,18 @@ const PANEL_HTML = `
           <div class="info-row"><span>Engine</span><b data-el="engineInfo">–</b></div>
           <div class="info-row"><span>Keep-alive</span><b data-el="kaInfo">off</b></div>
           <div class="info-row"><span>Source</span><a href="https://github.com/ezurinho/chess-wraith" target="_blank" rel="noopener noreferrer">github.com/ezurinho/chess-wraith</a></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Updates</span><span class="card-s" data-el="updateState">checking…</span></div>
+          <div class="rows">
+            <div class="row"><span>Installed</span><b data-el="build">–</b></div>
+            <div class="row"><span>Latest</span><b data-el="latest">–</b></div>
+            <div class="row"><span>Checked</span><b data-el="checked">never</b></div>
+          </div>
+          <div class="card-actions">
+            <button class="act" type="button" data-el="checkNow">check now</button>
+            <a class="act" href="${UPDATE_PAGE_URL}" target="_blank" rel="noopener noreferrer">open GitHub</a>
+          </div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Keys</span><span class="card-s">while the tab is focused</span></div>
@@ -3047,25 +3079,15 @@ class WraithPanel {
     on(this.el.afk, 'click', () => this.handlers.toggleAfk());
     on(this.el.hide, 'click', () => this.handlers.hide());
     on(this.el.min, 'click', () => this.toggleCollapsed());
+    on(this.el.checkNow, 'click', () => {
+      if (this.handlers.checkUpdate) this.handlers.checkUpdate();
+    });
     on(this.el.head, 'dblclick', () => this.toggleCollapsed());
 
     for (const btn of this.panel.querySelectorAll('[data-tab-btn]')) {
       on(btn, 'click', () => this.setTab(btn.dataset.tabBtn));
     }
 
-    for (const btn of this.panel.querySelectorAll('[data-style]')) {
-      on(btn, 'click', () => {
-        const style = btn.dataset.style;
-        if (style === 'custom') {
-          this.setTab('tune');
-          this.el.elo.focus();
-          return;
-        }
-        this.cfg.style = style;
-        this.handlers.settingsChanged(this.cfg);
-        this.handlers.refresh();
-      });
-    }
 
     for (const btn of this.panel.querySelectorAll('[data-theme-btn]')) {
       on(btn, 'click', () => {
@@ -3245,7 +3267,7 @@ class WraithPanel {
     this.el.afk.setAttribute('aria-pressed', String(afkOn));
     this.el.afkTxt.textContent = afkOn ? 'ON' : 'OFF';
 
-    this.el.styleChip.textContent = v.styleLabel || (STYLES[this.cfg.style] || STYLES.adaptive).label;
+    this.el.styleChip.textContent = v.styleLabel || LEGIT.label;
     this.el.clock.textContent = Number.isFinite(v.clock) ? `${Math.round(v.clock)}s` : '—';
     this.el.fill.style.setProperty('--fill', String(clamp((v.ply || 0) / 80, 0, 1)));
     this.el.warn.textContent = v.warn || '';
@@ -3257,12 +3279,26 @@ class WraithPanel {
           ? 'auto play armed'
           : 'idle';
     this.el.build.textContent = v.version || VERSION;
+    const latest = String(v.updateLatest || '');
+    const newer = versionNewer(latest, v.version || VERSION);
+    this.el.update.hidden = !newer;
+    if (newer) this.el.update.querySelector('span').textContent = `Update ${latest}`;
+    this.el.latest.textContent = latest ? latest : '–';
+    this.el.checked.textContent = v.updateAt
+      ? `${Math.max(0, Math.round((Date.now() - v.updateAt) / 60000))}m ago`
+      : 'never';
+    this.el.updateState.textContent = v.updateChecking
+      ? 'checking…'
+      : v.updateError
+        ? `failed · ${v.updateError}`
+        : newer
+          ? 'newer available'
+          : latest
+            ? 'up to date'
+            : 'not checked';
     this.el.kaInfo.textContent = v.keepAlive || 'off';
 
-    for (const btn of this.panel.querySelectorAll('[data-style]')) {
-      if (btn.dataset.style === 'custom') continue;
-      btn.setAttribute('aria-pressed', String(btn.dataset.style === this.cfg.style));
-    }
+
     for (const sw of this.panel.querySelectorAll('[data-toggle]')) {
       const key = sw.dataset.toggle;
       const on = key === 'playHidden' ? !this.cfg.pauseWhenHidden : Boolean(this.cfg[key]);
@@ -3340,7 +3376,11 @@ const state = {
   gamesPlayed: 1,
   slackBoost: 0,
   passiveTab: false,
-  autoMovedGrid: null
+  autoMovedGrid: null,
+  updateLatest: '',
+  updateAt: 0,
+  updateError: '',
+  updateChecking: false
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -3436,6 +3476,54 @@ function debugEnabled() {
   }
 }
 
+// Two public static files answer this, and neither knows who is asking: the
+// jsDelivr copy of package.json first, the GitHub API as the fallback.
+async function readVersion(url) {
+  const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+  if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+  const text = await response.text();
+  const tagged = text.match(/@version\s+v?([\d.]+)/i);
+  if (tagged) return tagged[1];
+  const parsed = JSON.parse(text);
+  return String(parsed.version || parsed.tag_name || '').replace(/^v/i, '');
+}
+
+async function checkUpdate() {
+  if (state.updateChecking) return false;
+  state.updateChecking = true;
+  refreshPanel();
+  try {
+    let latest = '';
+    try {
+      latest = await readVersion(UPDATE_META_URL);
+    } catch {
+      latest = '';
+    }
+    if (!versionParts(latest)) latest = await readVersion(UPDATE_API_URL);
+    if (!versionParts(latest)) throw new Error('no version');
+    state.updateLatest = latest;
+    state.updateError = '';
+  } catch (error) {
+    state.updateLatest = '';
+    state.updateError = String((error && error.message) || error).slice(0, 60);
+  } finally {
+    state.updateChecking = false;
+    state.updateAt = Date.now();
+    refreshPanel();
+  }
+  return !state.updateError;
+}
+
+function startUpdateCheck() {
+  // Six seconds: the engine and the board matter more than a version number.
+  setTimeout(() => {
+    checkUpdate();
+  }, 6000);
+  setInterval(() => {
+    checkUpdate();
+  }, UPDATE_CHECK_MS);
+}
+
 function registerButler() {
   if (!debugEnabled()) return;
   const api = {
@@ -3454,6 +3542,7 @@ function registerButler() {
     },
     ready: () => engine.ready,
     retryEngine: () => engine.retryNnue(),
+    checkUpdate,
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
     unload() {
@@ -3587,7 +3676,7 @@ function statusView() {
     acpl: state.myAcpl,
     elo: state.effectiveElo,
     ply: snap ? plyOf(snap) : 0,
-    styleLabel: (STYLES[cfg.style] || STYLES.adaptive).label,
+    styleLabel: LEGIT.label,
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
     account: currentAccount(),
     pace: paceBaseline(),
@@ -3595,6 +3684,10 @@ function statusView() {
     band: acplBand(state.effectiveElo || cfg.targetElo),
     slackBoost: state.slackBoost,
     passiveTab: state.passiveTab,
+    updateLatest: state.updateLatest,
+    updateAt: state.updateAt,
+    updateError: state.updateError,
+    updateChecking: state.updateChecking,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -4027,6 +4120,7 @@ const panel = new WraithPanel(cfg, {
     runScan();
     analyze(state.snapshot, true);
   },
+  checkUpdate,
   hide: () => panel.toggleHidden(),
   refresh: () => refreshPanel(),
   settingsChanged,
@@ -4091,6 +4185,7 @@ function boot() {
   panel.mount();
   heartbeatTab();
   setInterval(heartbeatTab, 3000);
+  startUpdateCheck();
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();

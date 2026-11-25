@@ -1,10 +1,18 @@
-const VERSION = '1.4.2';
+const VERSION = '1.5.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
+
+// The panel checks this on boot and every six hours; both answers are public
+// static files, so the request carries nothing about the account.
+const UPDATE_REPO = 'ezurinho/chess-wraith';
+const UPDATE_META_URL = `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@latest/package.json`;
+const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+const UPDATE_DOWNLOAD_URL = `https://github.com/${UPDATE_REPO}/releases/latest/download/chess-wraith.user.js`;
+const UPDATE_PAGE_URL = `https://github.com/${UPDATE_REPO}/releases/latest`;
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 const CONFIG = {
   // Engine
   targetElo: 1650,
-  style: 'adaptive', // 'adaptive' | 'gm' | 'club' | 'casual' | 'engine'
   maxDepth: 14,
   moveTimeMs: 700,
   multiPv: 4,
@@ -46,20 +54,15 @@ const CONFIG = {
   showLines: 3
 };
 
-// Public, user-facing presets. The panel writes these into CONFIG.
-const STYLES = {
-  // `miss` is the chance of a deliberate, capped inaccuracy: only the weaker
-  // presets carry one, so "Casual" looks casual instead of merely random.
-  adaptive: { elo: null, skill: 20, slack: 40, miss: 0.05, label: 'Adaptive' },
-  gm: { elo: 2250, skill: 20, slack: 26, miss: 0, label: 'GM-like' },
-  club: { elo: 1650, skill: 20, slack: 70, miss: 0, label: 'Club' },
-  casual: { elo: 1350, skill: 20, slack: 120, miss: 0.12, label: 'Casual' },
-  engine: { elo: null, skill: 20, slack: 0, miss: 0, label: 'Full engine' }
-};
+// There is one way to play and it is the honest one: no GM/rage presets, no
+// "full engine" switch. The engine is capped to a rating a human at this table
+// could plausibly hold, and nothing here ever asks it to play its raw best.
+const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
+const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

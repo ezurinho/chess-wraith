@@ -57,6 +57,27 @@ function pushBounded(list, value, cap) {
 }
 // Two tabs of the same browser must not drive the same board. The lease is a
 // heartbeat; whoever holds a fresh one keeps the wheel, a closed tab expires.
+function versionParts(value) {
+  const core = String(value == null ? '' : value).trim().replace(/^v/i, '').split(/[+-]/)[0];
+  const parts = core.split('.').map((n) => Number.parseInt(n, 10));
+  if (!parts.length || parts.some((n) => !Number.isFinite(n) || n < 0)) return null;
+  return parts;
+}
+
+// Strictly newer, or it is not an update: a meta file that cannot be parsed
+// must never make the panel nag.
+function versionNewer(next, current) {
+  const a = versionParts(next);
+  const b = versionParts(current);
+  if (!a || !b) return false;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
 function tabLeaseDecision(entry, now, ttlMs, myId) {
   if (!entry || typeof entry !== 'object') return 'claim';
   const at = Number(entry.at);

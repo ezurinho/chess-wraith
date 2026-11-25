@@ -15,12 +15,8 @@ function sideScore(line) {
 // bottom of the scale, flattening at the top. This is the only strength dial
 // the bundled 2019 build honours, so the styles go through it.
 function effectiveElo(cfg, opts = {}) {
-  if (cfg.style === 'engine') return null;
-  if (cfg.style === 'adaptive') {
-    const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : 1500;
-    return Math.round(clamp(base + 130, 1320, 2600));
-  }
-  return clampInt(cfg.targetElo, 1320, 3190, 1650);
+  const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : clampInt(cfg.targetElo, 1320, 3190, 1650);
+  return Math.round(clamp(base + 130, 1320, 2600));
 }
 
 // How many centipawns a human at this rating actually loses per move. Rough
@@ -47,12 +43,11 @@ function acplGuard(opts) {
 }
 
 function styleProfile(cfg, opts = {}) {
-  const preset = STYLES[cfg.style] || STYLES.adaptive;
   return {
     elo: effectiveElo(cfg, opts),
-    slack: cfg.style === 'engine' ? 0 : Math.max(cfg.humanSlackCp, preset.slack),
-    miss: cfg.style === 'engine' ? 0 : Number(preset.miss) || 0,
-    label: preset.label
+    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack),
+    miss: LEGIT.miss,
+    label: LEGIT.label
   };
 }
 

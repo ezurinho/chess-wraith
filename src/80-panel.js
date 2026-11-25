@@ -208,6 +208,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .panel[data-collapsed="true"] .body{display:none}
 .panel[data-collapsed="true"] .head{border-bottom:0}
 .panel[data-collapsed="true"] .head::after{display:none}
+.upd{display:inline-flex;align-items:center;gap:5px;margin-right:2px;padding:3px 7px;border-radius:99px;border:1px solid color-mix(in srgb,var(--acc) 42%,transparent);background:color-mix(in srgb,var(--acc) 15%,transparent);color:var(--acc);font:800 7.5px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;text-decoration:none;white-space:nowrap;animation:nt-pulse 1.9s ease-in-out infinite}
+.upd:hover{background:color-mix(in srgb,var(--acc) 24%,transparent)}
+.upd svg{width:10px;height:10px;flex:none}
+.upd[hidden]{display:none}
+@keyframes nt-pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--acc) 45%,transparent)}55%{box-shadow:0 0 0 4px color-mix(in srgb,var(--acc) 0%,transparent)}}
+.card-actions{display:flex;gap:6px;padding:7px 0 0}
+.card-actions .act{flex:1;padding:5px 8px;border-radius:7px;border:1px solid var(--line-strong);background:rgba(255,255,255,.03);color:var(--ink-2);font:700 8px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;text-align:center;cursor:pointer;text-decoration:none}
+.card-actions .act:hover{border-color:var(--acc);color:var(--acc)}
 .band{display:grid;gap:5px;margin:2px 0 9px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.022);border:1px solid var(--line)}
 .band-h{display:flex;align-items:baseline;justify-content:space-between;font:700 7.5px/1 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--dim-2)}
 .band-h b{font:700 11px/1 var(--font-mono);letter-spacing:0;color:var(--acc)}
@@ -233,6 +241,7 @@ const PANEL_HTML = `
     <span class="title">CHESS WRAITH</span>
     <span class="sub" data-el="engine">starting</span>
   </div>
+  <a class="upd" data-el="update" href="${UPDATE_DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer" hidden title="A newer version is on GitHub" aria-label="Update available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg><span>Update</span></a>
   <button class="iconbtn" type="button" data-el="min" title="Collapse (double-click the title)" aria-label="Collapse panel">${ICON.min}</button>
   <button class="iconbtn" type="button" data-el="hide" title="Hide (Alt+Shift+H)" aria-label="Hide panel">${ICON.hide}</button>
 </div>
@@ -240,7 +249,7 @@ const PANEL_HTML = `
   <div class="chips">
     <button class="chip" type="button" data-el="auto" aria-pressed="false"><span class="k">AUTO</span><span data-el="autoTxt">OFF</span></button>
     <button class="chip afk" type="button" data-el="afk" aria-pressed="false"><span class="k">AFK</span><span data-el="afkTxt">OFF</span></button>
-    <span class="chip" data-el="styleChip" style="cursor:default">AUTO</span>
+    <span class="chip legit" data-el="styleChip" style="cursor:default" title="One way to play: never the engine's raw best, always inside a human band">LEGIT</span>
     <span class="pace" data-el="clock">—</span>
   </div>
   <div class="race-line" aria-hidden="true"><i data-el="fill"></i></div>
@@ -290,15 +299,7 @@ const PANEL_HTML = `
         </div>
       </div>
       <div class="view v-tune">
-        <div class="view-head"><span>Tune</span><b>style · engine · panel</b></div>
-        <div class="seg" data-el="seg">
-          <button type="button" data-style="adaptive">Adaptive</button>
-          <button type="button" data-style="club">Club</button>
-          <button type="button" data-style="casual">Casual</button>
-          <button type="button" data-style="gm">GM</button>
-          <button type="button" data-style="engine">Full</button>
-          <button type="button" data-style="custom" data-el="customBtn">Custom</button>
-        </div>
+        <div class="view-head"><span>Tune</span><b>legit · engine · panel</b></div>
         <div class="card">
           <div class="card-h"><span class="card-t">Engine</span><span class="card-s">local, no server</span></div>
           <div class="set"><span class="set-lbl">Target Elo<i>drives Skill Level</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="1320" max="3190" step="10"></span></div>
@@ -337,6 +338,18 @@ const PANEL_HTML = `
           <div class="info-row"><span>Engine</span><b data-el="engineInfo">–</b></div>
           <div class="info-row"><span>Keep-alive</span><b data-el="kaInfo">off</b></div>
           <div class="info-row"><span>Source</span><a href="https://github.com/ezurinho/chess-wraith" target="_blank" rel="noopener noreferrer">github.com/ezurinho/chess-wraith</a></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Updates</span><span class="card-s" data-el="updateState">checking…</span></div>
+          <div class="rows">
+            <div class="row"><span>Installed</span><b data-el="build">–</b></div>
+            <div class="row"><span>Latest</span><b data-el="latest">–</b></div>
+            <div class="row"><span>Checked</span><b data-el="checked">never</b></div>
+          </div>
+          <div class="card-actions">
+            <button class="act" type="button" data-el="checkNow">check now</button>
+            <a class="act" href="${UPDATE_PAGE_URL}" target="_blank" rel="noopener noreferrer">open GitHub</a>
+          </div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Keys</span><span class="card-s">while the tab is focused</span></div>
@@ -404,25 +417,15 @@ class WraithPanel {
     on(this.el.afk, 'click', () => this.handlers.toggleAfk());
     on(this.el.hide, 'click', () => this.handlers.hide());
     on(this.el.min, 'click', () => this.toggleCollapsed());
+    on(this.el.checkNow, 'click', () => {
+      if (this.handlers.checkUpdate) this.handlers.checkUpdate();
+    });
     on(this.el.head, 'dblclick', () => this.toggleCollapsed());
 
     for (const btn of this.panel.querySelectorAll('[data-tab-btn]')) {
       on(btn, 'click', () => this.setTab(btn.dataset.tabBtn));
     }
 
-    for (const btn of this.panel.querySelectorAll('[data-style]')) {
-      on(btn, 'click', () => {
-        const style = btn.dataset.style;
-        if (style === 'custom') {
-          this.setTab('tune');
-          this.el.elo.focus();
-          return;
-        }
-        this.cfg.style = style;
-        this.handlers.settingsChanged(this.cfg);
-        this.handlers.refresh();
-      });
-    }
 
     for (const btn of this.panel.querySelectorAll('[data-theme-btn]')) {
       on(btn, 'click', () => {
@@ -602,7 +605,7 @@ class WraithPanel {
     this.el.afk.setAttribute('aria-pressed', String(afkOn));
     this.el.afkTxt.textContent = afkOn ? 'ON' : 'OFF';
 
-    this.el.styleChip.textContent = v.styleLabel || (STYLES[this.cfg.style] || STYLES.adaptive).label;
+    this.el.styleChip.textContent = v.styleLabel || LEGIT.label;
     this.el.clock.textContent = Number.isFinite(v.clock) ? `${Math.round(v.clock)}s` : '—';
     this.el.fill.style.setProperty('--fill', String(clamp((v.ply || 0) / 80, 0, 1)));
     this.el.warn.textContent = v.warn || '';
@@ -614,12 +617,26 @@ class WraithPanel {
           ? 'auto play armed'
           : 'idle';
     this.el.build.textContent = v.version || VERSION;
+    const latest = String(v.updateLatest || '');
+    const newer = versionNewer(latest, v.version || VERSION);
+    this.el.update.hidden = !newer;
+    if (newer) this.el.update.querySelector('span').textContent = `Update ${latest}`;
+    this.el.latest.textContent = latest ? latest : '–';
+    this.el.checked.textContent = v.updateAt
+      ? `${Math.max(0, Math.round((Date.now() - v.updateAt) / 60000))}m ago`
+      : 'never';
+    this.el.updateState.textContent = v.updateChecking
+      ? 'checking…'
+      : v.updateError
+        ? `failed · ${v.updateError}`
+        : newer
+          ? 'newer available'
+          : latest
+            ? 'up to date'
+            : 'not checked';
     this.el.kaInfo.textContent = v.keepAlive || 'off';
 
-    for (const btn of this.panel.querySelectorAll('[data-style]')) {
-      if (btn.dataset.style === 'custom') continue;
-      btn.setAttribute('aria-pressed', String(btn.dataset.style === this.cfg.style));
-    }
+
     for (const sw of this.panel.querySelectorAll('[data-toggle]')) {
       const key = sw.dataset.toggle;
       const on = key === 'playHidden' ? !this.cfg.pauseWhenHidden : Boolean(this.cfg[key]);

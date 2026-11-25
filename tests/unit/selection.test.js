@@ -11,7 +11,6 @@ const api = loadFragments(
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
 const baseCfg = {
-  style: 'club',
   humanSlackCp: 70,
   minThinkMs: 700,
   maxThinkMs: 3200,
@@ -19,11 +18,22 @@ const baseCfg = {
   clockFloorSeconds: 12
 };
 
-test('engine style always takes the top move', () => {
-  const lines = [line('e2e4', 40), line('d2d4', 30), line('g1f3', 20)];
-  const pick = api.chooseMove(lines, { ...baseCfg, style: 'engine' }, { top1Streak: 0 });
-  assert.equal(pick.line.bestUci, 'e2e4');
-  assert.equal(pick.cpLoss, 0);
+test('there is one way to play and there is no switch out of it', () => {
+  assert.deepEqual(Object.keys(api.STYLES), ['legit']);
+  const profile = api.styleProfile({ humanSlackCp: 40 }, { oppElo: 1200 });
+  assert.equal(profile.label, 'Legit');
+  assert.equal(profile.miss, 0);
+  assert.equal(profile.elo, 1330);
+});
+
+test('the slack is the ceiling on how far a pick may drift from the best', () => {
+  const lines = [line('e2e4', 40), line('d2d4', -90), line('a2a3', -300)];
+  const narrow = { ...baseCfg, humanSlackCp: 30 };
+  for (let i = 0; i < 200; i++) {
+    const pick = api.chooseMove(lines, narrow, { top1Streak: 0 });
+    assert.equal(pick.line.bestUci, 'e2e4');
+    assert.equal(pick.cpLoss, 0);
+  }
 });
 
 test('a mate in one is never traded for a quieter move', () => {
@@ -33,7 +43,7 @@ test('a mate in one is never traded for a quieter move', () => {
   assert.equal(pick.reason, 'mate');
 });
 
-test('club keeps only near-equal candidates and never a losing line', () => {
+test('the legit band keeps only near-equal candidates and never a losing line', () => {
   const lines = [line('e2e4', 40), line('d2d4', 10), line('a2a3', -260)];
   for (let i = 0; i < 40; i++) {
     const pick = api.chooseMove(lines, baseCfg, { top1Streak: 0 });
@@ -75,27 +85,24 @@ test('Skill Level is derived from the target Elo, not left at 20', () => {
   assert.equal(api.eloToSkill(0), 20);
 });
 
-test('adaptive sits just above the opponent it has measured', () => {
-  assert.equal(api.effectiveElo({ style: 'adaptive', targetElo: 1650 }, { oppElo: 1200 }), 1330);
-  assert.equal(api.effectiveElo({ style: 'adaptive', targetElo: 1650 }, { oppElo: 2000 }), 2130);
-  assert.equal(api.effectiveElo({ style: 'adaptive', targetElo: 1650 }, {}), 1630);
-  assert.equal(api.effectiveElo({ style: 'engine' }, { oppElo: 1200 }), null);
-  assert.equal(api.effectiveElo({ style: 'club', targetElo: 1700 }, {}), 1700);
+test('the rating sits just above the opponent, with no preset to move it', () => {
+  assert.equal(api.effectiveElo({ targetElo: 1650 }, { oppElo: 1200 }), 1330);
+  assert.equal(api.effectiveElo({ targetElo: 1650 }, { oppElo: 2000 }), 2130);
+  assert.equal(api.effectiveElo({ targetElo: 1650 }, {}), 1780);
+  assert.equal(api.effectiveElo({ targetElo: 900 }, {}), 1450);
+  assert.equal(api.effectiveElo({}, { oppElo: 5000 }), 2600);
 });
 
-test('the casual preset misses on purpose, capped near its own slack', () => {
-  const casualCfg = { ...baseCfg, style: 'casual', humanSlackCp: 0 };
+test('nothing misses on purpose: there is no sloppy preset to fall into', () => {
+  // Even with the slack setting at zero the legit floor of 40 cp stands: this
+  // script is never asked to play the engine's raw best line.
+  const cfg = { ...baseCfg, humanSlackCp: 0 };
   const lines = [line('e2e4', 40), line('d2d4', 0), line('a2a3', -160)];
-  let misses = 0;
-  for (let i = 0; i < 600; i++) {
-    const pick = api.chooseMove(lines, casualCfg, { top1Streak: 0 });
-    if (pick.reason === 'miss') {
-      misses++;
-      assert.ok(pick.cpLoss <= 120 * 2.5, `miss too large: ${pick.cpLoss}`);
-    }
+  for (let i = 0; i < 300; i++) {
+    const pick = api.chooseMove(lines, cfg, { top1Streak: 0 });
+    assert.notEqual(pick.reason, 'miss');
+    assert.ok(pick.cpLoss <= 40, `played ${pick.cpLoss} cp off the best`);
   }
-  assert.ok(misses > 0, 'casual never missed in 600 draws');
-  assert.ok(misses < 180, `casual missed too often: ${misses}/600`);
 });
 
 test('a repeated first move is down-weighted across games', () => {

@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.4.2-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.5.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -78,9 +78,8 @@ cache serves it and the whole thing works offline.
 | **Board reading** | Grid, orientation, move list (`data-ply` or `.node` rows), last-move highlights, clocks, opponent rating and the game-over modal, straight from the DOM. |
 | **Turn detection** | The turn is taken from the move list, the running clock or the last-move highlight, and the source is recorded. When none of the three is readable the panel says `turn not readable; not playing` and nothing is played on a guess. |
 | **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. |
-| **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`UCI_Elo`) when a style asks for it. |
-| **Styles** | `adaptive` (measures the opponent's centipawn loss, then sits ~130 Elo above them), `gm`, `club`, `casual` and `full engine`. The target Elo is applied to the engine itself through `Skill Level`, so a preset changes how well it plays, not only how randomly it picks. |
-| **Deliberate misses** | Casual misses 12% of the time, Adaptive 5%, capped at 2.5× the style's slack. Never at the cost of a forced mate; Club and GM always play their best available line. |
+| **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`Skill Level`) tuned to the rating on the board. |
+| **One way to play** | No `GM`/`rage`/`full engine` presets and no switch to leave it: the panel shows `LEGIT` and means it. The rating sits ~130 Elo above the opponent it measured (your target Elo when nobody is measured yet), the chosen move stays within the slack band of the best one, and the engine is never asked for its raw best line — there is no deliberate-miss dice either. |
 | **Pacing** | Delays inside your own window, plus the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), a 3.5% chance of a rare second thought, and faster play on a low clock. The window is then kept inside 0.65×–1.5× of this account's own learned rhythm, and never below 35% of the opponent's think time. |
 | **Per account** | Settings are global; the opening memory and the learned pace are stored per signed-in username, so two accounts on one browser do not share a fingerprint. |
 | **Hand on the board** | A click outside the panel defers the pending move for 2 s, twice; after that the script stops and says `paused: your hand is on the board`. |
@@ -92,6 +91,7 @@ cache serves it and the whole thing works offline.
 | **Accuracy guard** | `acplBand(elo)` is the loss a human at that rating averages per move. Past 15 assessed moves, an account under 45% of its band gets 12 cp of extra slack at a time (cap 160) for that session; over twice the band, it gives it back. Your saved setting is never rewritten. |
 | **Verification** | After playing, it re-reads the board. If the move did not land it retries once, then pauses auto-play and says why. |
 | **Pauses** | Game over, promotion dialog, premove on the board, low clock, hidden tab. |
+| **Updates** | The panel checks `cdn.jsdelivr.net/gh/ezurinho/chess-wraith@latest/package.json` on boot and every six hours (GitHub's release API as fallback), then shows an `UPDATE vX.Y.Z` pill in the header that installs the latest release. Both requests are public static files; nothing about the account leaves the tab. |
 | **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. A target strip with the accuracy band and a fill bar, live ACPL, the opponent estimate, your pace, their tempo, games played, time left and an account card with the signed-in user. |
 
 ## Honest limits

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.5.0 — 2026-11-25
+
+Two changes: the panel now tells you when there is a newer release, and there is
+no longer any way to make it play like an engine.
+
+- **Update pill.** On boot and every six hours the panel reads
+  `cdn.jsdelivr.net/gh/ezurinho/chess-wraith@latest/package.json` (GitHub's
+  release API as the fallback) and shows `UPDATE vX.Y.Z` in the header when the
+  latest tag is newer. Clicking it downloads the latest release; the Info tab has
+  the installed/latest/checked rows, a `check now` button and a link to GitHub.
+  `versionNewer()` never treats an unparseable answer as an update.
+- **One mode: legit.** The `adaptive`/`gm`/`club`/`casual`/`full engine` presets
+  are gone, along with the deliberate-miss dice. The header shows a static
+  `LEGIT` chip, the rating sits ~130 Elo above the measured opponent (your
+  target Elo when there is none), and the slack floor of 40 cp means not even a
+  slack setting of zero asks Stockfish for its raw best line.
+- 76 tests (was 72): `tests/unit/update.test.js` covers the version comparison
+  and the pinned update URLs, and the selection tests now assert the single
+  legit contract instead of the removed presets.
+
 ## 1.4.2 — 2026-11-25
 
 CI caught a flaky assertion in the pace test, and the flake was the feature

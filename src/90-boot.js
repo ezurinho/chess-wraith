@@ -64,7 +64,11 @@ const state = {
   gamesPlayed: 1,
   slackBoost: 0,
   passiveTab: false,
-  autoMovedGrid: null
+  autoMovedGrid: null,
+  updateLatest: '',
+  updateAt: 0,
+  updateError: '',
+  updateChecking: false
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -160,6 +164,54 @@ function debugEnabled() {
   }
 }
 
+// Two public static files answer this, and neither knows who is asking: the
+// jsDelivr copy of package.json first, the GitHub API as the fallback.
+async function readVersion(url) {
+  const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+  if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+  const text = await response.text();
+  const tagged = text.match(/@version\s+v?([\d.]+)/i);
+  if (tagged) return tagged[1];
+  const parsed = JSON.parse(text);
+  return String(parsed.version || parsed.tag_name || '').replace(/^v/i, '');
+}
+
+async function checkUpdate() {
+  if (state.updateChecking) return false;
+  state.updateChecking = true;
+  refreshPanel();
+  try {
+    let latest = '';
+    try {
+      latest = await readVersion(UPDATE_META_URL);
+    } catch {
+      latest = '';
+    }
+    if (!versionParts(latest)) latest = await readVersion(UPDATE_API_URL);
+    if (!versionParts(latest)) throw new Error('no version');
+    state.updateLatest = latest;
+    state.updateError = '';
+  } catch (error) {
+    state.updateLatest = '';
+    state.updateError = String((error && error.message) || error).slice(0, 60);
+  } finally {
+    state.updateChecking = false;
+    state.updateAt = Date.now();
+    refreshPanel();
+  }
+  return !state.updateError;
+}
+
+function startUpdateCheck() {
+  // Six seconds: the engine and the board matter more than a version number.
+  setTimeout(() => {
+    checkUpdate();
+  }, 6000);
+  setInterval(() => {
+    checkUpdate();
+  }, UPDATE_CHECK_MS);
+}
+
 function registerButler() {
   if (!debugEnabled()) return;
   const api = {
@@ -178,6 +230,7 @@ function registerButler() {
     },
     ready: () => engine.ready,
     retryEngine: () => engine.retryNnue(),
+    checkUpdate,
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
     unload() {
@@ -311,7 +364,7 @@ function statusView() {
     acpl: state.myAcpl,
     elo: state.effectiveElo,
     ply: snap ? plyOf(snap) : 0,
-    styleLabel: (STYLES[cfg.style] || STYLES.adaptive).label,
+    styleLabel: LEGIT.label,
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
     account: currentAccount(),
     pace: paceBaseline(),
@@ -319,6 +372,10 @@ function statusView() {
     band: acplBand(state.effectiveElo || cfg.targetElo),
     slackBoost: state.slackBoost,
     passiveTab: state.passiveTab,
+    updateLatest: state.updateLatest,
+    updateAt: state.updateAt,
+    updateError: state.updateError,
+    updateChecking: state.updateChecking,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -751,6 +808,7 @@ const panel = new WraithPanel(cfg, {
     runScan();
     analyze(state.snapshot, true);
   },
+  checkUpdate,
   hide: () => panel.toggleHidden(),
   refresh: () => refreshPanel(),
   settingsChanged,
@@ -815,6 +873,7 @@ function boot() {
   panel.mount();
   heartbeatTab();
   setInterval(heartbeatTab, 3000);
+  startUpdateCheck();
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();
