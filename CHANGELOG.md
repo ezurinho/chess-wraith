@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1 — 2026-11-25
+
+- The published-pace cache is now per account **and per time class**. A player
+  who alternates bullet and blitz was re-downloading the same half megabyte of
+  PGN on every switch, because the single entry was keyed only by account.
+- One test for the key, and the pace harness now resolves the signed-in name the
+  same way the page does. 103 tests.
+
 ## 1.8.0 — 2026-11-25
 
 The pace anchor stops averaging the opponent into your own rhythm.

@@ -75,13 +75,15 @@ function paceFromGames(games, timeClass, user) {
   return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
 }
 
-function paceProfileKey() {
-  return `chess-wraith-acct-pace-v1:${currentAccount()}`;
+// One entry per account and time class: a player who alternates bullet and
+// blitz would otherwise re-download half a megabyte of PGN on every switch.
+function paceProfileKey(timeClass) {
+  return `chess-wraith-acct-pace-v1:${currentAccount()}:${timeClass || 'blitz'}`;
 }
 
 function readPaceProfile(timeClass) {
   try {
-    const cached = JSON.parse(localStorage.getItem(paceProfileKey()) || 'null');
+    const cached = JSON.parse(localStorage.getItem(paceProfileKey(timeClass)) || 'null');
     if (!cached || cached.cls !== timeClass) return null;
     if (!(Number(cached.at) > 0)) return null;
     if (Date.now() - Number(cached.at) > PACEPROFILE_TTL_MS && !cached.retryAt) return null;
@@ -94,7 +96,7 @@ function readPaceProfile(timeClass) {
 
 function persistPaceProfile(value) {
   try {
-    localStorage.setItem(paceProfileKey(), JSON.stringify(value));
+    localStorage.setItem(paceProfileKey(value && value.cls), JSON.stringify(value));
   } catch {
     /* private mode: the session keeps the value */
   }

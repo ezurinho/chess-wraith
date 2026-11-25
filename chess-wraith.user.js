@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.8.0
+// @version      1.8.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.8.0';
+const VERSION = '1.8.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.8.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.8.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2352,13 +2352,15 @@ function paceFromGames(games, timeClass, user) {
   return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
 }
 
-function paceProfileKey() {
-  return `chess-wraith-acct-pace-v1:${currentAccount()}`;
+// One entry per account and time class: a player who alternates bullet and
+// blitz would otherwise re-download half a megabyte of PGN on every switch.
+function paceProfileKey(timeClass) {
+  return `chess-wraith-acct-pace-v1:${currentAccount()}:${timeClass || 'blitz'}`;
 }
 
 function readPaceProfile(timeClass) {
   try {
-    const cached = JSON.parse(localStorage.getItem(paceProfileKey()) || 'null');
+    const cached = JSON.parse(localStorage.getItem(paceProfileKey(timeClass)) || 'null');
     if (!cached || cached.cls !== timeClass) return null;
     if (!(Number(cached.at) > 0)) return null;
     if (Date.now() - Number(cached.at) > PACEPROFILE_TTL_MS && !cached.retryAt) return null;
@@ -2371,7 +2373,7 @@ function readPaceProfile(timeClass) {
 
 function persistPaceProfile(value) {
   try {
-    localStorage.setItem(paceProfileKey(), JSON.stringify(value));
+    localStorage.setItem(paceProfileKey(value && value.cls), JSON.stringify(value));
   } catch {
     /* private mode: the session keeps the value */
   }

@@ -23,7 +23,8 @@ function harness() {
     RegExp,
     fetch: () => { throw new Error('unexpected fetch'); },
     localStorage: { getItem: () => null, setItem: () => {} },
-    currentAccount: () => 'hikaru',
+    document: { querySelector: () => ({ textContent: 'hikaru' }) },
+    window: {},
     refreshPanel: () => {},
     state: { clockPeak: 0, clockSeconds: 0, paceProfile: null, pacePending: false, paceError: '' }
   });
@@ -126,4 +127,11 @@ test('the newest games are read first, so an old season cannot set the pace', ()
   const profile = api.paceFromGames(games, 'blitz', 'Hikaru');
   assert.equal(profile.games, 1, 'the one recent game is the one that is read');
   assert.ok(profile.samples >= 4);
+});
+test('the cache is per time class, so switching bullet and blitz does not refetch', () => {
+  const api = harness();
+  const bullet = api.paceProfileKey('bullet');
+  const blitz = api.paceProfileKey('blitz');
+  assert.notEqual(bullet, blitz);
+  assert.ok(bullet.includes('hikaru'), 'and it is per account');
 });
