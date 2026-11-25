@@ -31,6 +31,10 @@
   <a href="CHANGELOG.md">Changelog</a>
 </p>
 
+<p align="center">
+  <img src="assets/panel.png" width="90%" alt="CHESS WRAITH panel beside a chess.com analysis board">
+</p>
+
 > One tab, one account, no passwords. The engine, the board reader and the
 > panel all run locally; nothing is uploaded and there is no telemetry.
 
@@ -65,7 +69,7 @@ cache serves it and the whole thing works offline.
 | Area | Behaviour |
 | --- | --- |
 | **Board reading** | Grid, orientation, ply/SAN move list, last-move highlights, clocks, opponent rating and the game-over modal, straight from the DOM. |
-| **Engine** | Stockfish 19 NNUE (Lite, single thread) compiled to WASM and started in a blob worker, with WDL win/draw/loss and MultiPV. A pure-JS `stockfish.js` is the fallback. |
+| **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. |
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`UCI_Elo`) when a style asks for it. |
 | **Styles** | `adaptive` (studies the opponent, then plays slightly above them), `gm`, `club`, `casual` and `full engine`. |
 | **Pacing** | Delays inside your own window with capture/check nudges, faster play on a low clock, and a governor that stops it from taking move #1 every single turn. |
@@ -88,6 +92,11 @@ cache serves it and the whole thing works offline.
 - **DOM changes break the reader.** chess.com ships UI changes; when the board
   markup changes, the selectors in `src/40-board.js` need updating. The panel
   will show `waiting for a board…` instead of failing silently.
+- **The effective engine today is Stockfish 2019 JS.** The NNUE build from the
+  extension needs its `.wasm` next to a real script URL; inside a userscript blob
+  worker it never answers `uci`, so the script gives it four seconds and then
+  falls back. That build is weaker and has no WDL bar. A same-origin copy of the
+  engine (a small local server, or a future inlined build) would restore NNUE.
 - **Not tested on a live rated game.** Verified on the live analysis board:
   board reading in both orientations, clocks, highlights, SAN list, synthetic
   click and drag moves, engine boot and a full auto-play turn.
@@ -97,8 +106,9 @@ cache serves it and the whole thing works offline.
 The userscript is a single file; the 1.8 MB engine is not embedded. On boot it
 fetches `vendor/stockfish-19-lite-single.js` from this repo through jsDelivr,
 prefixes it with a small shim that points the `.wasm` request at the matching
-mirror URL, and starts it as a blob worker. If that fails it falls back to
-`vendor/stockfish.js` (no WASM). Nothing is fetched from anywhere else.
+mirror URL, and starts it as a blob worker. If the worker has not answered `uci`
+within four seconds it falls back to `vendor/stockfish.js` (Stockfish 2019, no
+WASM) from the same mirror. Nothing is fetched from anywhere else.
 
 ## Development
 

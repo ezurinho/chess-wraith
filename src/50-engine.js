@@ -59,12 +59,14 @@ class WraithEngine {
         /* already gone */
       }
     }
+    if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
+    if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
     this.worker = null;
     this.ready = false;
     this.searching = false;
 
     const source = preferNnue ? await this.#nnueWorkerSource() : await this.#plainWorkerSource();
-    this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish JS';
+    this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish 2019 JS';
     const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     const worker = new Worker(url);
     URL.revokeObjectURL(url);
@@ -73,13 +75,28 @@ class WraithEngine {
     worker.onmessage = (event) => this.#onLine(event.data);
     worker.onerror = (event) => {
       if (preferNnue) {
-        this.onError && this.onError('NNUE worker failed to start; falling back');
+        this.onError && this.onError('NNUE worker failed to start; using the JS engine');
         this.#spawn(false).catch(() => {});
         return;
       }
       this.onError && this.onError(event && event.message ? event.message : 'engine worker error');
     };
+
     this.#send('uci');
+    // A worker that boots asynchronously can drop the first message. Ask again
+    // once, then give the whole handshake a deadline.
+    this.uciRetryTimer = setTimeout(() => {
+      if (!this.ready && this.worker === worker) this.#send('uci');
+    }, 1200);
+    this.handshakeTimer = setTimeout(() => {
+      if (this.ready || this.worker !== worker) return;
+      if (preferNnue) {
+        this.onError && this.onError('NNUE engine did not start; using the JS engine');
+        this.#spawn(false).catch(() => {});
+      } else {
+        this.onError && this.onError('engine did not answer uci');
+      }
+    }, 4000);
   }
 
   async #fetchText(url) {
@@ -111,6 +128,8 @@ class WraithEngine {
     if (!line) return;
 
     if (line === 'uciok') {
+      if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
+      if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
       this.#send(`setoption name Hash value ${CONFIG.hashMb}`);
       if (this.mode.includes('19')) this.#send('setoption name UCI_ShowWDL value true');
       this.#send('isready');
@@ -119,6 +138,7 @@ class WraithEngine {
 
     if (line === 'readyok') {
       this.ready = true;
+      if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
       this.onReady && this.onReady(this.mode);
       return;
     }

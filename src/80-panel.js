@@ -3,12 +3,12 @@
 
 const PANEL_CSS = `
 :host{all:initial;font-family:Inter,"Segoe UI",system-ui,sans-serif}
-.wrap{position:fixed;top:16px;right:16px;width:286px;pointer-events:auto;z-index:2147483000;
+.wrap{position:fixed;top:16px;right:16px;width:304px;box-sizing:border-box;pointer-events:auto;z-index:2147483000;
   color:#ece7dc;background:rgba(18,17,15,.96);border:1px solid #3a3630;border-radius:12px;
   box-shadow:0 16px 40px rgba(0,0,0,.55);overflow:hidden;font-size:12px;line-height:1.4;user-select:none}
 .wrap.collapsed{width:auto}
 .wrap.collapsed .body{display:none}
-.head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1d1b18;border-bottom:1px solid #33302b;cursor:grab}
+.head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 10px;background:#1d1b18;border-bottom:1px solid #33302b;cursor:grab}
 .head:active{cursor:grabbing}
 .brand{font-weight:700;letter-spacing:.4px;font-size:11px;color:#f0e9db;flex:1}
 .brand small{font-weight:500;color:#8d877c;margin-left:6px;letter-spacing:0}
@@ -24,13 +24,13 @@ const PANEL_CSS = `
 .lines{background:#0d0c0a;border:1px solid #2b2721;border-radius:8px;padding:6px 7px;display:flex;flex-direction:column;gap:3px}
 .line{display:flex;gap:6px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .line b{color:#6fe0b0;min-width:42px;flex:none}.line.alt b{color:#d8a84c}
-.line span{overflow:hidden;text-overflow:ellipsis}
+.line span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .badge{font-size:9.5px;border:1px solid #3a3630;border-radius:999px;padding:1px 6px;color:#a29a8c}
 .badge.live{border-color:#2fa474;color:#6fe0b0}
 .badge.warn{border-color:#7a4141;color:#e08c8c}
-.btns{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.btns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
 button{font:inherit;font-size:10.5px;font-weight:600;color:#e6e0d3;background:#26221d;border:1px solid #3c3830;
-  border-radius:7px;padding:6px 4px;cursor:pointer}
+  border-radius:7px;padding:6px 2px;cursor:pointer;min-width:0;box-sizing:border-box}
 button:hover{background:#332e27}
 button.on{background:rgba(57,181,127,.18);border-color:#2fa474;color:#7fe3b8}
 button.active{background:#2a3a33;border-color:#2fa474}

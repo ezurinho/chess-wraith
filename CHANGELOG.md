@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.1 — 2026-11-25
+
+Verified against the published mirror (jsDelivr) on the live chess.com analysis
+board, which exposed two real defects:
+
+- The NNUE build never answers `uci` inside a userscript blob worker (it loses
+  the script URL it needs to locate `stockfish.wasm`), so the engine stayed
+  "starting" forever. The script now asks twice, waits four seconds, and falls
+  back to the bundled Stockfish 2019 JS build, which is what actually runs.
+- Panel buttons were one pixel family too wide for the header at 286 px; the
+  panel is now 304 px with a zero-minimum grid, so the settings button no longer
+  sits on the border.
+
 ## 1.0.0 — 2026-11-25
 
 First release.

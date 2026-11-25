@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.0.0
+// @version      1.0.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -1633,12 +1633,14 @@ class WraithEngine {
         /* already gone */
       }
     }
+    if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
+    if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
     this.worker = null;
     this.ready = false;
     this.searching = false;
 
     const source = preferNnue ? await this.#nnueWorkerSource() : await this.#plainWorkerSource();
-    this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish JS';
+    this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish 2019 JS';
     const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     const worker = new Worker(url);
     URL.revokeObjectURL(url);
@@ -1647,13 +1649,28 @@ class WraithEngine {
     worker.onmessage = (event) => this.#onLine(event.data);
     worker.onerror = (event) => {
       if (preferNnue) {
-        this.onError && this.onError('NNUE worker failed to start; falling back');
+        this.onError && this.onError('NNUE worker failed to start; using the JS engine');
         this.#spawn(false).catch(() => {});
         return;
       }
       this.onError && this.onError(event && event.message ? event.message : 'engine worker error');
     };
+
     this.#send('uci');
+    // A worker that boots asynchronously can drop the first message. Ask again
+    // once, then give the whole handshake a deadline.
+    this.uciRetryTimer = setTimeout(() => {
+      if (!this.ready && this.worker === worker) this.#send('uci');
+    }, 1200);
+    this.handshakeTimer = setTimeout(() => {
+      if (this.ready || this.worker !== worker) return;
+      if (preferNnue) {
+        this.onError && this.onError('NNUE engine did not start; using the JS engine');
+        this.#spawn(false).catch(() => {});
+      } else {
+        this.onError && this.onError('engine did not answer uci');
+      }
+    }, 4000);
   }
 
   async #fetchText(url) {
@@ -1685,6 +1702,8 @@ class WraithEngine {
     if (!line) return;
 
     if (line === 'uciok') {
+      if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
+      if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
       this.#send(`setoption name Hash value ${CONFIG.hashMb}`);
       if (this.mode.includes('19')) this.#send('setoption name UCI_ShowWDL value true');
       this.#send('isready');
@@ -1693,6 +1712,7 @@ class WraithEngine {
 
     if (line === 'readyok') {
       this.ready = true;
+      if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
       this.onReady && this.onReady(this.mode);
       return;
     }
@@ -2057,12 +2077,12 @@ async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options 
 
 const PANEL_CSS = `
 :host{all:initial;font-family:Inter,"Segoe UI",system-ui,sans-serif}
-.wrap{position:fixed;top:16px;right:16px;width:286px;pointer-events:auto;z-index:2147483000;
+.wrap{position:fixed;top:16px;right:16px;width:304px;box-sizing:border-box;pointer-events:auto;z-index:2147483000;
   color:#ece7dc;background:rgba(18,17,15,.96);border:1px solid #3a3630;border-radius:12px;
   box-shadow:0 16px 40px rgba(0,0,0,.55);overflow:hidden;font-size:12px;line-height:1.4;user-select:none}
 .wrap.collapsed{width:auto}
 .wrap.collapsed .body{display:none}
-.head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#1d1b18;border-bottom:1px solid #33302b;cursor:grab}
+.head{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 10px;background:#1d1b18;border-bottom:1px solid #33302b;cursor:grab}
 .head:active{cursor:grabbing}
 .brand{font-weight:700;letter-spacing:.4px;font-size:11px;color:#f0e9db;flex:1}
 .brand small{font-weight:500;color:#8d877c;margin-left:6px;letter-spacing:0}
@@ -2078,13 +2098,13 @@ const PANEL_CSS = `
 .lines{background:#0d0c0a;border:1px solid #2b2721;border-radius:8px;padding:6px 7px;display:flex;flex-direction:column;gap:3px}
 .line{display:flex;gap:6px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .line b{color:#6fe0b0;min-width:42px;flex:none}.line.alt b{color:#d8a84c}
-.line span{overflow:hidden;text-overflow:ellipsis}
+.line span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .badge{font-size:9.5px;border:1px solid #3a3630;border-radius:999px;padding:1px 6px;color:#a29a8c}
 .badge.live{border-color:#2fa474;color:#6fe0b0}
 .badge.warn{border-color:#7a4141;color:#e08c8c}
-.btns{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.btns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
 button{font:inherit;font-size:10.5px;font-weight:600;color:#e6e0d3;background:#26221d;border:1px solid #3c3830;
-  border-radius:7px;padding:6px 4px;cursor:pointer}
+  border-radius:7px;padding:6px 2px;cursor:pointer;min-width:0;box-sizing:border-box}
 button:hover{background:#332e27}
 button.on{background:rgba(57,181,127,.18);border-color:#2fa474;color:#7fe3b8}
 button.active{background:#2a3a33;border-color:#2fa474}
