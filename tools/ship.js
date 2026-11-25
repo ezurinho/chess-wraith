@@ -20,8 +20,13 @@ if (!/^\d+\.\d+\.\d+$/.test(version)) {
 
 // `npm.cmd` is a batch file: Node refuses to spawn it without a shell (the
 // 2024 command-injection fix), and a shell would re-split any argument with a
-// space. So npm gets the shell and only ever receives plain words.
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+// space. When the caller is npm itself (the normal case) it hands over the path
+// to its JS entry point, which needs no shell at all.
+function runCheck() {
+  const cli = process.env.npm_execpath;
+  if (cli && /\.js$/.test(cli)) return run(process.execPath, [cli, 'run', 'check']);
+  return run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', '--silent', 'check'], { shell: process.platform === 'win32' });
+}
 
 function run(cmd, args, options = {}) {
   const result = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', ...options });
@@ -65,7 +70,7 @@ async function waitForCdn(v) {
 (async () => {
   console.log(`ship: ${version} - ${title}`);
   run('node', ['tools/release.js', 'prepare', version]);
-  run(npm, ['run', 'check'], { shell: true });
+  runCheck();
   fs.writeFileSync(path.join(root, '.release-notes.md'), notesFor(version));
   run('git', ['add', '-A']);
   run('git', ['commit', '-m', `release: ${version} - ${title}`]);

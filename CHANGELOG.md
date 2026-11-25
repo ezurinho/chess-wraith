@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.3 — 2026-11-25
+
+`npm run ship` passed each word of the release title through a shell. It now
+spawns npm through its JavaScript entry point, so arguments keep their exact
+boundaries and the deprecation warning about shell concatenation is gone.
+
 ## 1.6.2 — 2026-11-25
 
 - **A failed rating request no longer retries on every reload.** chess.com's
