@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.2 — 2026-11-25
+
+A code review turned up three things the previous release claimed but did not
+do. All three are fixed, and the play itself is closer to a person.
+
+- **The styles never weakened the engine.** `mode.includes('19')` is true for
+  "Stockfish 2019 JS", so the fallback took the NNUE-only option path and every
+  preset played at full strength. A real `nnue` flag now selects the branch, and
+  the fallback maps the target Elo onto `Skill Level` (1320 → 0, 3190 → 20).
+- **Adaptive mode never measured the opponent.** The loss was read from
+  `state.analysis` after it had been cleared, so `oppCpLosses` stayed empty and
+  the estimate was always 1500. Measurement moved to the moment the new position
+  is evaluated, which is the only point where both evaluations exist.
+- **Dead code removed:** `turnOverride: cfg.sideOverride === 'auto' ? 'auto' : 'auto'`.
+- **Deliberate misses:** the Casual preset now misses 12% of the time and
+  Adaptive 5%, capped at 2.5× the slack, never throwing away a forced mate. Club
+  and GM stay clean.
+- **Opening variety:** the first two plies are remembered in localStorage and a
+  first move repeated three times in six games is down-weighted to 28%.
+- **Time from the position, not only the clock:** the gap between the top two
+  lines moves the delay (±18–28%), checks add 12%, captures come 8% faster, and
+  3.5% of moves get a rare second thought 1.45–1.95× longer.
+- **Panel:** live ACPL for your own moves, opponent estimate and the target Elo.
+- 22 unit tests (was 16), including the Elo→skill map, adaptive targeting, miss
+  rate, repeat penalty, gap-driven delay and the rethink cap.
+
 ## 1.0.1 — 2026-11-25
 
 Verified against the published mirror (jsDelivr) on the live chess.com analysis

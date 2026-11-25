@@ -58,6 +58,7 @@ const PANEL_HTML = `
   </div>
   <div class="meta" data-el="meta">waiting for a board…</div>
   <div class="lines" data-el="lines"></div>
+  <div class="meta" data-el="sub"></div>
   <div class="row">
     <span class="badge" data-el="mode">Auto: OFF</span>
     <span class="warnline" data-el="warn"></span>
@@ -243,6 +244,11 @@ class WraithPanel {
     this.el.mode.className = `badge ${autoPlay ? 'live' : ''}`;
     this.el.auto.classList.toggle('on', Boolean(autoPlay));
     this.el.warn.textContent = warn || (opponent ? `opp ${opponent}` : '');
+    const bits = [];
+    if (view.acpl !== null && view.acpl !== undefined && view.acpl > 0) bits.push(`you ${Math.round(view.acpl)} acpl`);
+    if (view.estimate) bits.push(`opp ~${view.estimate}`);
+    if (view.elo) bits.push(`target ${view.elo}`);
+    this.el.sub.textContent = bits.join(' · ');
     if (this.el.style.value !== this.cfg.style) this.el.style.value = this.cfg.style;
     this.el.settings.classList.toggle('hidden', !this.el.conf.classList.contains('active'));
   }

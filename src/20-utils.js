@@ -7,6 +7,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const gaussian = () => (Math.random() + Math.random() + Math.random()) / 3 - 0.5;
 
+// Skill Level 0..20 is all the bundled 2019 engine honours; map the target Elo
+// onto it so a "Club" preset is actually weaker, not just more random.
+function eloToSkill(elo) {
+  const value = Number(elo);
+  if (!Number.isFinite(value) || value <= 0) return 20;
+  const clamped = clamp(value, 1320, 3190);
+  return Math.round(((clamped - 1320) / (3190 - 1320)) * 20);
+}
+
 function pickEnum(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }

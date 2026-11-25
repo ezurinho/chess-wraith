@@ -17,6 +17,9 @@ class WraithEngine {
     this.onError = null;
     this.lastOptions = {};
     this.booted = null;
+    // Not derived from the mode string: "Stockfish 2019 JS" contains "19" too,
+    // and that made the fallback take the NNUE-only option path.
+    this.nnue = false;
   }
 
   async boot() {
@@ -67,6 +70,7 @@ class WraithEngine {
 
     const source = preferNnue ? await this.#nnueWorkerSource() : await this.#plainWorkerSource();
     this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish 2019 JS';
+    this.nnue = Boolean(preferNnue);
     const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     const worker = new Worker(url);
     URL.revokeObjectURL(url);
@@ -131,7 +135,7 @@ class WraithEngine {
       if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
       if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
       this.#send(`setoption name Hash value ${CONFIG.hashMb}`);
-      if (this.mode.includes('19')) this.#send('setoption name UCI_ShowWDL value true');
+      if (this.nnue) this.#send('setoption name UCI_ShowWDL value true');
       this.#send('isready');
       return;
     }
@@ -237,11 +241,18 @@ class WraithEngine {
   #applyOptions(job) {
     const elo = job.elo;
     const limit = Number.isFinite(elo) && elo > 0;
-    if (this.mode.includes('19')) {
+    if (this.nnue) {
       this.#send(`setoption name UCI_LimitStrength value ${limit ? 'true' : 'false'}`);
       if (limit) this.#send(`setoption name UCI_Elo value ${clampInt(elo, 1320, 3190, 1650)}`);
+      this.#send(`setoption name Skill Level value ${clampInt(job.skill, 0, 20, 20)}`);
+    } else {
+      // The 2019 build has no UCI_Elo: Skill Level is the whole strength dial.
+      const skill = limit ? eloToSkill(elo) : clampInt(job.skill, 0, 20, 20);
+      if (this.lastOptions.skill !== skill) {
+        this.#send(`setoption name Skill Level value ${skill}`);
+        this.lastOptions.skill = skill;
+      }
     }
-    if (!limit) this.#send(`setoption name Skill Level value ${clampInt(job.skill, 0, 20, 20)}`);
     const multiPv = clampInt(job.multiPv, 1, 5, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);

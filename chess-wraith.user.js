@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.0.1
+// @version      1.0.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -75,11 +75,13 @@ const CONFIG = {
 
 // Public, user-facing presets. The panel writes these into CONFIG.
 const STYLES = {
-  adaptive: { elo: null, skill: 20, slack: 40, label: 'Adaptive' },
-  gm: { elo: 2250, skill: 20, slack: 26, label: 'GM-like' },
-  club: { elo: 1650, skill: 20, slack: 70, label: 'Club' },
-  casual: { elo: 1350, skill: 20, slack: 120, label: 'Casual' },
-  engine: { elo: null, skill: 20, slack: 0, label: 'Full engine' }
+  // `miss` is the chance of a deliberate, capped inaccuracy: only the weaker
+  // presets carry one, so "Casual" looks casual instead of merely random.
+  adaptive: { elo: null, skill: 20, slack: 40, miss: 0.05, label: 'Adaptive' },
+  gm: { elo: 2250, skill: 20, slack: 26, miss: 0, label: 'GM-like' },
+  club: { elo: 1650, skill: 20, slack: 70, miss: 0, label: 'Club' },
+  casual: { elo: 1350, skill: 20, slack: 120, miss: 0.12, label: 'Casual' },
+  engine: { elo: null, skill: 20, slack: 0, miss: 0, label: 'Full engine' }
 };
 
 const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@main/vendor';
@@ -98,6 +100,15 @@ const clampInt = (v, lo, hi, fallback) => {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const gaussian = () => (Math.random() + Math.random() + Math.random()) / 3 - 0.5;
+
+// Skill Level 0..20 is all the bundled 2019 engine honours; map the target Elo
+// onto it so a "Club" preset is actually weaker, not just more random.
+function eloToSkill(elo) {
+  const value = Number(elo);
+  if (!Number.isFinite(value) || value <= 0) return 20;
+  const clamped = clamp(value, 1320, 3190);
+  return Math.round(((clamped - 1320) / (3190 - 1320)) * 20);
+}
 
 function pickEnum(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
@@ -1591,6 +1602,9 @@ class WraithEngine {
     this.onError = null;
     this.lastOptions = {};
     this.booted = null;
+    // Not derived from the mode string: "Stockfish 2019 JS" contains "19" too,
+    // and that made the fallback take the NNUE-only option path.
+    this.nnue = false;
   }
 
   async boot() {
@@ -1641,6 +1655,7 @@ class WraithEngine {
 
     const source = preferNnue ? await this.#nnueWorkerSource() : await this.#plainWorkerSource();
     this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish 2019 JS';
+    this.nnue = Boolean(preferNnue);
     const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
     const worker = new Worker(url);
     URL.revokeObjectURL(url);
@@ -1705,7 +1720,7 @@ class WraithEngine {
       if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
       if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
       this.#send(`setoption name Hash value ${CONFIG.hashMb}`);
-      if (this.mode.includes('19')) this.#send('setoption name UCI_ShowWDL value true');
+      if (this.nnue) this.#send('setoption name UCI_ShowWDL value true');
       this.#send('isready');
       return;
     }
@@ -1811,11 +1826,18 @@ class WraithEngine {
   #applyOptions(job) {
     const elo = job.elo;
     const limit = Number.isFinite(elo) && elo > 0;
-    if (this.mode.includes('19')) {
+    if (this.nnue) {
       this.#send(`setoption name UCI_LimitStrength value ${limit ? 'true' : 'false'}`);
       if (limit) this.#send(`setoption name UCI_Elo value ${clampInt(elo, 1320, 3190, 1650)}`);
+      this.#send(`setoption name Skill Level value ${clampInt(job.skill, 0, 20, 20)}`);
+    } else {
+      // The 2019 build has no UCI_Elo: Skill Level is the whole strength dial.
+      const skill = limit ? eloToSkill(elo) : clampInt(job.skill, 0, 20, 20);
+      if (this.lastOptions.skill !== skill) {
+        this.#send(`setoption name Skill Level value ${skill}`);
+        this.lastOptions.skill = skill;
+      }
     }
-    if (!limit) this.#send(`setoption name Skill Level value ${clampInt(job.skill, 0, 20, 20)}`);
     const multiPv = clampInt(job.multiPv, 1, 5, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
@@ -1847,8 +1869,9 @@ function positionMoves(uciMoves) {
 }
 
 // Move selection and pacing. The engine is not asked to play its raw #1 every
-// time: on a fixed style it may take a near-equal alternative, and in adaptive
-// mode it studies the opponent first and then plays slightly above them.
+// time: on a fixed style it may take a near-equal alternative, in adaptive mode
+// it studies the opponent and sits slightly above them, and the weaker presets
+// miss on purpose at a low rate instead of playing every move perfectly.
 
 function sideScore(line) {
   if (!line) return 0;
@@ -1858,13 +1881,37 @@ function sideScore(line) {
   return typeof line.scoreCp === 'number' ? line.scoreCp : 0;
 }
 
-function styleProfile(cfg) {
+// Stockfish's Skill Level is 0..20 and roughly one step per ~90 Elo at the
+// bottom of the scale, flattening at the top. This is the only strength dial
+// the bundled 2019 build honours, so the styles go through it.
+function effectiveElo(cfg, opts = {}) {
+  if (cfg.style === 'engine') return null;
+  if (cfg.style === 'adaptive') {
+    const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : 1500;
+    return Math.round(clamp(base + 130, 1320, 2600));
+  }
+  return clampInt(cfg.targetElo, 1320, 3190, 1650);
+}
+
+function styleProfile(cfg, opts = {}) {
   const preset = STYLES[cfg.style] || STYLES.adaptive;
   return {
-    elo: preset.elo,
+    elo: effectiveElo(cfg, opts),
     slack: cfg.style === 'engine' ? 0 : Math.max(cfg.humanSlackCp, preset.slack),
+    miss: cfg.style === 'engine' ? 0 : Number(preset.miss) || 0,
     label: preset.label
   };
+}
+
+function weightedPick(items) {
+  const total = items.reduce((acc, item) => acc + item.weight, 0);
+  if (!(total > 0)) return items[0] || null;
+  let roll = Math.random() * total;
+  for (const item of items) {
+    roll -= item.weight;
+    if (roll <= 0) return item;
+  }
+  return items[items.length - 1];
 }
 
 function chooseMove(lines, cfg, opts = {}) {
@@ -1875,37 +1922,54 @@ function chooseMove(lines, cfg, opts = {}) {
   if (best.mateIn !== null && best.mateIn > 0 && best.mateIn <= 3) {
     return { line: best, cpLoss: 0, reason: 'mate' };
   }
-  const profile = styleProfile(cfg);
+  const profile = styleProfile(cfg, opts);
   if (profile.slack <= 0 || lines.length === 1) {
     return { line: best, cpLoss: 0, reason: 'best' };
   }
 
   const bestScore = sideScore(best);
-  const eligible = [];
+  const legal = [];
   for (let i = 0; i < lines.length; i++) {
     const cand = lines[i];
     if (!cand || !cand.bestUci) continue;
     if (cand.mateIn !== null && cand.mateIn < 0 && (best.mateIn === null || best.mateIn >= 0)) continue;
     const drop = Math.max(0, bestScore - sideScore(cand));
-    if (drop > profile.slack) continue;
-    let weight = Math.exp(-drop / Math.max(18, profile.slack / 2));
+    legal.push({ line: cand, cpLoss: drop, index: i });
+  }
+  if (legal.length === 0) return { line: best, cpLoss: 0, reason: 'best' };
+
+  // A deliberate miss. Only the weaker presets carry a rate, it is capped at
+  // 2.5x the normal slack so it stays plausible for the level, and it never
+  // throws away a forced mate.
+  if (profile.miss > 0 && Math.random() < profile.miss) {
+    const misses = legal.filter((c) => c.cpLoss > profile.slack && c.cpLoss <= profile.slack * 2.5);
+    if (misses.length > 0) {
+      const picked = weightedPick(misses.map((c) => ({ ...c, weight: 1 / (1 + c.cpLoss / 60) })));
+      if (picked) return { line: picked.line, cpLoss: picked.cpLoss, reason: 'miss' };
+    }
+  }
+
+  const eligible = [];
+  for (const cand of legal) {
+    if (cand.cpLoss > profile.slack) continue;
+    let weight = Math.exp(-cand.cpLoss / Math.max(18, profile.slack / 2));
     // Repeatedly taking #1 is the one pattern that reads as a machine. Once the
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
-    if ((opts.top1Streak || 0) >= 3 && i === 0 && drop === 0) weight *= 0.35;
-    if (i > 0 && drop >= 8 && drop <= profile.slack) weight *= 1.35;
-    eligible.push({ line: cand, cpLoss: drop, weight });
+    if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
+    if (cand.index > 0 && cand.cpLoss >= 8) weight *= 1.35;
+    // The same first move every game is its own tell, separate from move choice.
+    if (opts.repeatUci && cand.line.bestUci === opts.repeatUci) weight *= 0.28;
+    eligible.push({ line: cand.line, cpLoss: cand.cpLoss, weight });
   }
 
   if (eligible.length === 0) return { line: best, cpLoss: 0, reason: 'best' };
-  const total = eligible.reduce((acc, item) => acc + item.weight, 0);
-  let roll = Math.random() * total;
-  for (const item of eligible) {
-    roll -= item.weight;
-    if (roll <= 0) return { line: item.line, cpLoss: item.cpLoss, reason: profile.label };
-  }
-  return { line: eligible[0].line, cpLoss: eligible[0].cpLoss, reason: profile.label };
+  const picked = weightedPick(eligible);
+  return { line: picked.line, cpLoss: picked.cpLoss, reason: profile.label };
 }
 
+// How long a person would spend here. Two draws averaged instead of one: the
+// distribution is triangular, mostly near the middle, which is what real think
+// times look like. The dials below are the ones a fixed timer cannot fake.
 function computeDelay(cfg, opts = {}) {
   const lo = Math.max(250, cfg.minThinkMs);
   const hi = Math.max(lo + 100, cfg.maxThinkMs);
@@ -1913,10 +1977,24 @@ function computeDelay(cfg, opts = {}) {
   let ms = lo + (hi - lo) * skew;
 
   const ply = Number.isFinite(opts.plyCount) ? opts.plyCount : 16;
-  if (ply < 6) ms *= 0.7;
+  if (ply < 6) ms *= 0.72;
+  else if (ply > 60) ms *= 0.86;
+
+  // Uncertainty: a position with one obvious move is played faster than one
+  // where two lines are 100cp apart.
+  const gap = Number.isFinite(opts.gapCp) ? Math.abs(opts.gapCp) : null;
+  if (gap !== null) {
+    if (gap <= 12) ms *= 0.82;
+    else if (gap >= 90) ms *= 1.28;
+  }
+
   if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
-  if (opts.isCapture) ms *= 0.85;
-  if (opts.isCheck) ms *= 0.9;
+  if (opts.isCheck) ms *= 1.12;
+  if (opts.isCapture) ms *= 0.92;
+
+  // Rare second thought, outside the normal window. The pattern-breaker a
+  // bounded uniform delay does not have.
+  if (opts.allowRethink && Math.random() < 0.035) ms *= rand(1.45, 1.95);
 
   if (cfg.pauseOnLowClock && Number.isFinite(opts.clockSeconds)) {
     if (opts.clockSeconds <= 8) ms = Math.min(ms, 420);
@@ -1924,7 +2002,6 @@ function computeDelay(cfg, opts = {}) {
   }
   return Math.round(clamp(ms, 250, 9000));
 }
-
 
 // Synthetic board input. Verified on the live chess.com board: a click pair and
 // a drag both move the piece (e2e4, e7e5, g1f3). Coordinates are jittered and
@@ -2132,6 +2209,7 @@ const PANEL_HTML = `
   </div>
   <div class="meta" data-el="meta">waiting for a board…</div>
   <div class="lines" data-el="lines"></div>
+  <div class="meta" data-el="sub"></div>
   <div class="row">
     <span class="badge" data-el="mode">Auto: OFF</span>
     <span class="warnline" data-el="warn"></span>
@@ -2317,12 +2395,19 @@ class WraithPanel {
     this.el.mode.className = `badge ${autoPlay ? 'live' : ''}`;
     this.el.auto.classList.toggle('on', Boolean(autoPlay));
     this.el.warn.textContent = warn || (opponent ? `opp ${opponent}` : '');
+    const bits = [];
+    if (view.acpl !== null && view.acpl !== undefined && view.acpl > 0) bits.push(`you ${Math.round(view.acpl)} acpl`);
+    if (view.estimate) bits.push(`opp ~${view.estimate}`);
+    if (view.elo) bits.push(`target ${view.elo}`);
+    this.el.sub.textContent = bits.join(' · ');
     if (this.el.style.value !== this.cfg.style) this.el.style.value = this.cfg.style;
     this.el.settings.classList.toggle('hidden', !this.el.conf.classList.contains('active'));
   }
 }
 
 // Orchestrator: read the board, ask the engine, wait like a human, play, verify.
+
+const OPENING_KEY = 'chess-wraith-openings-v1';
 
 const cfg = loadSettings();
 const engine = new WraithEngine();
@@ -2343,6 +2428,10 @@ const state = {
   top1Streak: 0,
   oppCpLosses: [],
   oppEloEstimate: null,
+  lossRecordedFen: null,
+  myCpLosses: [],
+  myAcpl: 0,
+  effectiveElo: null,
   warn: '',
   clockSeconds: null,
   opponentRating: null
@@ -2360,13 +2449,48 @@ function mySide(flipped) {
   return flipped ? 'b' : 'w';
 }
 
+function plyOf(snap) {
+  if (!snap) return 16;
+  if (Number.isFinite(snap.plyCount)) return snap.plyCount;
+  if (Number.isFinite(snap.fullmove)) return (snap.fullmove - 1) * 2 + (snap.turn === 'b' ? 1 : 0);
+  return 16;
+}
+
 function resolveElo() {
-  if (cfg.style === 'engine') return null;
-  if (cfg.style === 'adaptive') {
-    const base = state.oppEloEstimate || 1500;
-    return Math.round(clamp(base + 130, 1320, 2600));
+  const elo = effectiveElo(cfg, { oppElo: state.oppEloEstimate || state.opponentRating });
+  state.effectiveElo = elo;
+  return elo;
+}
+
+// --- opening variety -------------------------------------------------------
+// Always the same first move is a pattern that has nothing to do with move
+// choice, and it is the easiest one to spot across games.
+function readOpenings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OPENING_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
   }
-  return clampInt(cfg.targetElo, 1320, 3190, 1650);
+}
+
+function recordOpening(uci, ply) {
+  if (!uci || ply > 2) return;
+  const list = readOpenings();
+  list.push(uci);
+  while (list.length > 12) list.shift();
+  try {
+    localStorage.setItem(OPENING_KEY, JSON.stringify(list));
+  } catch {
+    /* storage can be blocked; variety is a bonus, not a requirement */
+  }
+}
+
+function repeatedOpening(uci, ply) {
+  if (!uci || ply > 2) return null;
+  const recent = readOpenings().slice(-6);
+  const count = recent.filter((x) => x === uci).length;
+  return count >= 2 ? uci : null;
 }
 
 function registerButler() {
@@ -2376,7 +2500,7 @@ function registerButler() {
     config: cfg,
     engine,
     panel,
-    chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak }),
+    chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate }),
     computeDelay: (opts) => computeDelay(cfg, opts),
     scan: () => runScan(),
     board: () => {
@@ -2421,7 +2545,10 @@ function statusView() {
     status: state.thinking ? 'thinking' : '',
     warn: state.warn,
     clock: state.clockSeconds,
-    opponent: state.opponentRating
+    opponent: state.opponentRating,
+    estimate: state.oppEloEstimate,
+    acpl: state.myAcpl,
+    elo: state.effectiveElo
   };
 }
 
@@ -2429,29 +2556,31 @@ function refreshPanel() {
   panel.render(statusView());
 }
 
-function updateAdaptive(snapshot, legalCount) {
+// The opponent's centipawn loss is only knowable once the position after their
+// move has been evaluated, so it is measured here and not when the move lands.
+function recordOpponentLoss(result) {
+  const snap = state.snapshot;
   const prev = state.prevSnapshot;
-  if (!prev || !prev.fen || prev.fen === snapshot.fen) return;
+  if (!snap || !prev || !result || !result.lines || result.lines.length === 0) return;
+  if (state.lossRecordedFen === snap.fen) return;
 
-  const side = mySide(snapshot.flipped);
+  const side = mySide(snap.flipped);
   const opp = side === 'w' ? 'b' : 'w';
-  const prevEval = prev.evalWhiteCp;
-  const nextEval = state.analysis && state.analysis.lines && state.analysis.lines[0]
-    ? state.analysis.lines[0].whiteCp
-    : null;
+  if (prev.turn !== opp) return;
 
-  if (prevEval === null || prevEval === undefined || nextEval === null) return;
-  if (prev.turn !== opp || snapshot.turn !== side) return;
+  const before = typeof snap.evalWhiteCp === 'number' ? snap.evalWhiteCp : null;
+  if (before === null) return;
+  const after = result.lines[0].whiteCp;
+  if (typeof after !== 'number') return;
 
-  const before = opp === 'w' ? prevEval : -prevEval;
-  const after = opp === 'w' ? nextEval : -nextEval;
-  const loss = clamp(Math.round(before - after), 0, 450);
+  state.lossRecordedFen = snap.fen;
+  const raw = opp === 'w' ? before - after : after - before;
+  const loss = clamp(Math.round(raw), 0, 450);
   state.oppCpLosses.push(loss);
   if (state.oppCpLosses.length > 24) state.oppCpLosses.shift();
   const avg = state.oppCpLosses.reduce((a, b) => a + b, 0) / state.oppCpLosses.length;
   state.oppEloEstimate = Math.round(clamp(2750 - 380 * Math.log1p(avg / 3.8), 1050, 2850));
-
-  if (legalCount === 0) state.warn = 'no legal moves';
+  state.effectiveElo = resolveElo();
 }
 
 function analyze(snapshot, force) {
@@ -2496,6 +2625,7 @@ function onFinal(result) {
   if (result.fen !== (state.snapshot && state.snapshot.fen)) return;
   state.analysis = result;
   state.thinking = false;
+  recordOpponentLoss(result);
   refreshPanel();
   if (state.autoPlay) scheduleAutoMove(result);
 }
@@ -2511,17 +2641,28 @@ function scheduleAutoMove(result) {
   if (cfg.pauseOnLowClock && Number.isFinite(state.clockSeconds) && state.clockSeconds <= 5) return;
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
 
-  const choice = chooseMove(result.lines, cfg, { top1Streak: state.top1Streak });
+  const ply = plyOf(snap);
+  const choice = chooseMove(result.lines, cfg, {
+    top1Streak: state.top1Streak,
+    oppElo: state.oppEloEstimate || state.opponentRating,
+    repeatUci: repeatedOpening(result.bestmove, ply)
+  });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
 
   const legal = Chess.generateLegalMoves(snap);
-  const isCapture = Boolean(snap.grid[move.charCodeAt(3) - 49] && snap.grid[move.charCodeAt(3) - 49][move.charCodeAt(2) - 97]);
+  const toRank = move.charCodeAt(3) - 49;
+  const toFile = move.charCodeAt(2) - 97;
+  const isCapture = Boolean(snap.grid[toRank] && snap.grid[toRank][toFile]);
+  const gapCp = result.lines.length > 1 ? Math.abs(sideScore(result.lines[0]) - sideScore(result.lines[1])) : null;
+  const bestSan = (choice && choice.line && choice.line.bestSan) || '';
   const delay = computeDelay(cfg, {
-    plyCount: snap.fullmove ? (snap.fullmove - 1) * 2 : 14,
+    plyCount: ply,
     legalMoveCount: legal.length,
     isCapture,
-    isCheck: false,
+    isCheck: /[+#]$/.test(bestSan),
+    gapCp,
+    allowRethink: true,
     clockSeconds: state.clockSeconds
   });
 
@@ -2554,6 +2695,12 @@ async function playMove(move, targetFen, choice) {
   if (landed) {
     if (choice && choice.cpLoss === 0) state.top1Streak += 1;
     else state.top1Streak = 0;
+    if (choice) {
+      state.myCpLosses.push(clamp(Math.round(choice.cpLoss || 0), 0, 600));
+      if (state.myCpLosses.length > 20) state.myCpLosses.shift();
+      state.myAcpl = state.myCpLosses.reduce((a, b) => a + b, 0) / state.myCpLosses.length;
+    }
+    recordOpening(move, plyOf(snap));
     scheduleScan(120);
     return true;
   }
@@ -2567,6 +2714,7 @@ async function playMove(move, targetFen, choice) {
     const second = scanBoard(mySide(snap.flipped));
     if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {
       state.warn = '';
+      recordOpening(move, plyOf(snap));
       scheduleScan(120);
       return true;
     }
@@ -2582,7 +2730,12 @@ async function playNow() {
   const result = state.analysis;
   if (!snap || !state.boardEl || !result) return false;
   if (result.fen !== snap.fen) return false;
-  const choice = chooseMove(result.lines, cfg, { top1Streak: state.top1Streak });
+  const ply = plyOf(snap);
+  const choice = chooseMove(result.lines, cfg, {
+    top1Streak: state.top1Streak,
+    oppElo: state.oppEloEstimate || state.opponentRating,
+    repeatUci: repeatedOpening(result.bestmove, ply)
+  });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
   return playMove(move, snap.fen, choice);
@@ -2629,23 +2782,22 @@ function runScan() {
     plyCount: scanned.plyCount,
     sanMoves: scanned.sanMoves,
     lastHighlightSquares: scanned.lastHighlightSquares,
-    activeClockTurn: scanned.activeClockTurn,
-    turnOverride: cfg.sideOverride === 'auto' ? 'auto' : 'auto'
+    activeClockTurn: scanned.activeClockTurn
   });
   if (!snapshot) return;
 
   const changed = !prev || prev.fen !== snapshot.fen;
   if (changed) {
-    snapshot.evalWhiteCp = prev && state.analysis && state.analysis.lines && state.analysis.lines[0]
-      ? state.analysis.lines[0].whiteCp
-      : null;
+    // Carry the evaluation of the position we just left onto the new snapshot:
+    // the opponent's loss is measured from it once this position is evaluated.
+    snapshot.evalWhiteCp =
+      prev && state.analysis && state.analysis.lines && state.analysis.lines[0]
+        ? state.analysis.lines[0].whiteCp
+        : null;
     state.prevSnapshot = prev;
     state.snapshot = snapshot;
     state.analysis = null;
     state.autoMovedFen = null;
-    const legal = Chess.generateLegalMoves(snapshot);
-    updateAdaptive(snapshot, legal.length);
-    state.snapshot.evalWhiteCp = null;
     if (scanned.gameOver) {
       state.autoPlay = false;
       state.warn = 'game over';

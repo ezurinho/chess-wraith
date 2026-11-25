@@ -1,6 +1,7 @@
 // Move selection and pacing. The engine is not asked to play its raw #1 every
-// time: on a fixed style it may take a near-equal alternative, and in adaptive
-// mode it studies the opponent first and then plays slightly above them.
+// time: on a fixed style it may take a near-equal alternative, in adaptive mode
+// it studies the opponent and sits slightly above them, and the weaker presets
+// miss on purpose at a low rate instead of playing every move perfectly.
 
 function sideScore(line) {
   if (!line) return 0;
@@ -10,13 +11,37 @@ function sideScore(line) {
   return typeof line.scoreCp === 'number' ? line.scoreCp : 0;
 }
 
-function styleProfile(cfg) {
+// Stockfish's Skill Level is 0..20 and roughly one step per ~90 Elo at the
+// bottom of the scale, flattening at the top. This is the only strength dial
+// the bundled 2019 build honours, so the styles go through it.
+function effectiveElo(cfg, opts = {}) {
+  if (cfg.style === 'engine') return null;
+  if (cfg.style === 'adaptive') {
+    const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : 1500;
+    return Math.round(clamp(base + 130, 1320, 2600));
+  }
+  return clampInt(cfg.targetElo, 1320, 3190, 1650);
+}
+
+function styleProfile(cfg, opts = {}) {
   const preset = STYLES[cfg.style] || STYLES.adaptive;
   return {
-    elo: preset.elo,
+    elo: effectiveElo(cfg, opts),
     slack: cfg.style === 'engine' ? 0 : Math.max(cfg.humanSlackCp, preset.slack),
+    miss: cfg.style === 'engine' ? 0 : Number(preset.miss) || 0,
     label: preset.label
   };
+}
+
+function weightedPick(items) {
+  const total = items.reduce((acc, item) => acc + item.weight, 0);
+  if (!(total > 0)) return items[0] || null;
+  let roll = Math.random() * total;
+  for (const item of items) {
+    roll -= item.weight;
+    if (roll <= 0) return item;
+  }
+  return items[items.length - 1];
 }
 
 function chooseMove(lines, cfg, opts = {}) {
@@ -27,37 +52,54 @@ function chooseMove(lines, cfg, opts = {}) {
   if (best.mateIn !== null && best.mateIn > 0 && best.mateIn <= 3) {
     return { line: best, cpLoss: 0, reason: 'mate' };
   }
-  const profile = styleProfile(cfg);
+  const profile = styleProfile(cfg, opts);
   if (profile.slack <= 0 || lines.length === 1) {
     return { line: best, cpLoss: 0, reason: 'best' };
   }
 
   const bestScore = sideScore(best);
-  const eligible = [];
+  const legal = [];
   for (let i = 0; i < lines.length; i++) {
     const cand = lines[i];
     if (!cand || !cand.bestUci) continue;
     if (cand.mateIn !== null && cand.mateIn < 0 && (best.mateIn === null || best.mateIn >= 0)) continue;
     const drop = Math.max(0, bestScore - sideScore(cand));
-    if (drop > profile.slack) continue;
-    let weight = Math.exp(-drop / Math.max(18, profile.slack / 2));
+    legal.push({ line: cand, cpLoss: drop, index: i });
+  }
+  if (legal.length === 0) return { line: best, cpLoss: 0, reason: 'best' };
+
+  // A deliberate miss. Only the weaker presets carry a rate, it is capped at
+  // 2.5x the normal slack so it stays plausible for the level, and it never
+  // throws away a forced mate.
+  if (profile.miss > 0 && Math.random() < profile.miss) {
+    const misses = legal.filter((c) => c.cpLoss > profile.slack && c.cpLoss <= profile.slack * 2.5);
+    if (misses.length > 0) {
+      const picked = weightedPick(misses.map((c) => ({ ...c, weight: 1 / (1 + c.cpLoss / 60) })));
+      if (picked) return { line: picked.line, cpLoss: picked.cpLoss, reason: 'miss' };
+    }
+  }
+
+  const eligible = [];
+  for (const cand of legal) {
+    if (cand.cpLoss > profile.slack) continue;
+    let weight = Math.exp(-cand.cpLoss / Math.max(18, profile.slack / 2));
     // Repeatedly taking #1 is the one pattern that reads as a machine. Once the
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
-    if ((opts.top1Streak || 0) >= 3 && i === 0 && drop === 0) weight *= 0.35;
-    if (i > 0 && drop >= 8 && drop <= profile.slack) weight *= 1.35;
-    eligible.push({ line: cand, cpLoss: drop, weight });
+    if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
+    if (cand.index > 0 && cand.cpLoss >= 8) weight *= 1.35;
+    // The same first move every game is its own tell, separate from move choice.
+    if (opts.repeatUci && cand.line.bestUci === opts.repeatUci) weight *= 0.28;
+    eligible.push({ line: cand.line, cpLoss: cand.cpLoss, weight });
   }
 
   if (eligible.length === 0) return { line: best, cpLoss: 0, reason: 'best' };
-  const total = eligible.reduce((acc, item) => acc + item.weight, 0);
-  let roll = Math.random() * total;
-  for (const item of eligible) {
-    roll -= item.weight;
-    if (roll <= 0) return { line: item.line, cpLoss: item.cpLoss, reason: profile.label };
-  }
-  return { line: eligible[0].line, cpLoss: eligible[0].cpLoss, reason: profile.label };
+  const picked = weightedPick(eligible);
+  return { line: picked.line, cpLoss: picked.cpLoss, reason: profile.label };
 }
 
+// How long a person would spend here. Two draws averaged instead of one: the
+// distribution is triangular, mostly near the middle, which is what real think
+// times look like. The dials below are the ones a fixed timer cannot fake.
 function computeDelay(cfg, opts = {}) {
   const lo = Math.max(250, cfg.minThinkMs);
   const hi = Math.max(lo + 100, cfg.maxThinkMs);
@@ -65,10 +107,24 @@ function computeDelay(cfg, opts = {}) {
   let ms = lo + (hi - lo) * skew;
 
   const ply = Number.isFinite(opts.plyCount) ? opts.plyCount : 16;
-  if (ply < 6) ms *= 0.7;
+  if (ply < 6) ms *= 0.72;
+  else if (ply > 60) ms *= 0.86;
+
+  // Uncertainty: a position with one obvious move is played faster than one
+  // where two lines are 100cp apart.
+  const gap = Number.isFinite(opts.gapCp) ? Math.abs(opts.gapCp) : null;
+  if (gap !== null) {
+    if (gap <= 12) ms *= 0.82;
+    else if (gap >= 90) ms *= 1.28;
+  }
+
   if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
-  if (opts.isCapture) ms *= 0.85;
-  if (opts.isCheck) ms *= 0.9;
+  if (opts.isCheck) ms *= 1.12;
+  if (opts.isCapture) ms *= 0.92;
+
+  // Rare second thought, outside the normal window. The pattern-breaker a
+  // bounded uniform delay does not have.
+  if (opts.allowRethink && Math.random() < 0.035) ms *= rand(1.45, 1.95);
 
   if (cfg.pauseOnLowClock && Number.isFinite(opts.clockSeconds)) {
     if (opts.clockSeconds <= 8) ms = Math.min(ms, 420);
@@ -76,4 +132,3 @@ function computeDelay(cfg, opts = {}) {
   }
   return Math.round(clamp(ms, 250, 9000));
 }
-

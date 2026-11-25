@@ -71,11 +71,13 @@ cache serves it and the whole thing works offline.
 | **Board reading** | Grid, orientation, ply/SAN move list, last-move highlights, clocks, opponent rating and the game-over modal, straight from the DOM. |
 | **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. |
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`UCI_Elo`) when a style asks for it. |
-| **Styles** | `adaptive` (studies the opponent, then plays slightly above them), `gm`, `club`, `casual` and `full engine`. |
-| **Pacing** | Delays inside your own window with capture/check nudges, faster play on a low clock, and a governor that stops it from taking move #1 every single turn. |
+| **Styles** | `adaptive` (measures the opponent's centipawn loss, then sits ~130 Elo above them), `gm`, `club`, `casual` and `full engine`. The target Elo is applied to the engine itself through `Skill Level`, so a preset changes how well it plays, not only how randomly it picks. |
+| **Deliberate misses** | Casual misses 12% of the time, Adaptive 5%, capped at 2.5× the style's slack. Never at the cost of a forced mate; Club and GM always play their best available line. |
+| **Pacing** | Delays inside your own window, plus the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), a 3.5% chance of a rare second thought, and faster play on a low clock. |
+| **Variety** | Your first two plies are remembered locally; a first move repeated three times in six games drops to 28% weight, and a governor keeps it off move #1 every single turn. |
 | **Verification** | After playing, it re-reads the board. If the move did not land it retries once, then pauses auto-play and says why. |
 | **Pauses** | Game over, promotion dialog, premove on the board, low clock, hidden tab. |
-| **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. |
+| **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. Shows live ACPL for your own moves, the opponent estimate and the Elo actually being targeted. |
 
 ## Honest limits
 
