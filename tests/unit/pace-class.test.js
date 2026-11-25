@@ -10,7 +10,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '55-pace.js', '60-analysis.js'],
-  `{ computeDelay, classMedianMs }`
+  `{ computeDelay, classMedianMs, paceSamplesKey }`
 );
 
 const cfg = { minThinkMs: 700, maxThinkMs: 1600, pauseOnLowClock: false, clockFloorSeconds: 30 };
@@ -50,6 +50,15 @@ test('a fresh profile starts from the measured median of its class', () => {
   assert.equal(api.classMedianMs('rapid'), 5500);
   assert.equal(api.classMedianMs('daily'), null, 'no measurement, no invented number');
   assert.equal(api.classMedianMs(undefined), null);
+});
+
+test('the learned sample is stored per account and per class', () => {
+  const bullet = api.paceSamplesKey('magnuscarlsen', 'bullet');
+  const rapid = api.paceSamplesKey('magnuscarlsen', 'rapid');
+  assert.notEqual(bullet, rapid, 'a bullet rhythm is not a rapid rhythm');
+  assert.match(bullet, /bullet$/);
+  assert.equal(api.paceSamplesKey('other', 'bullet') === bullet, false, 'accounts do not share');
+  assert.match(api.paceSamplesKey('x', null), /:any$/, 'no clock yet still resolves to one bucket');
 });
 
 test('a rapid game with no history is not played at blitz speed', () => {

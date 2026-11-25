@@ -56,7 +56,7 @@ only version anyone installs.
   median. Chess.com splits the clock comment across tokens; the parser knows.
 - `src/90-boot.js` — orchestration and the debug API.
 - `tests/unit/` — pure logic, jsdom board tests, a fake-worker engine test, the
-  pace parser, account-scoped settings and the input geometry and the promotion poll, the pace class defaults (128 tests). The real wasm download and compile still
+  pace parser, account-scoped settings and the input geometry and the promotion poll, the pace class defaults (129 tests). The real wasm download and compile still
   need a browser; the UCI protocol, options, queued searches and fallback are
   covered.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the

@@ -33,6 +33,16 @@ function classMedianMs(cls) {
   return Object.prototype.hasOwnProperty.call(PACE_CLASS_MS, cls) ? PACE_CLASS_MS[cls] : null;
 }
 
+// The learned sample needs the same split as the published one, and for the
+// same reason: a rhythm learned in 1-minute games must not pace a 10-minute
+// one. The class is part of the storage key, so a bullet median simply does not
+// exist when a rapid game looks for one.
+const PACE_SAMPLES_KEY = 'chess-wraith-pace-v1';
+
+function paceSamplesKey(account, cls) {
+  return `${PACE_SAMPLES_KEY}:${account || 'anonymous'}:${cls || 'any'}`;
+}
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];

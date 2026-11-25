@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.16.1
+// @version      1.17.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.16.1';
+const VERSION = '1.17.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.16.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.17.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2364,6 +2364,16 @@ function classMedianMs(cls) {
   return Object.prototype.hasOwnProperty.call(PACE_CLASS_MS, cls) ? PACE_CLASS_MS[cls] : null;
 }
 
+// The learned sample needs the same split as the published one, and for the
+// same reason: a rhythm learned in 1-minute games must not pace a 10-minute
+// one. The class is part of the storage key, so a bullet median simply does not
+// exist when a rapid game looks for one.
+const PACE_SAMPLES_KEY = 'chess-wraith-pace-v1';
+
+function paceSamplesKey(account, cls) {
+  return `${PACE_SAMPLES_KEY}:${account || 'anonymous'}:${cls || 'any'}`;
+}
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
@@ -3776,7 +3786,6 @@ class WraithPanel {
 // Orchestrator: read the board, ask the engine, wait like a human, play, verify.
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
-const PACE_KEY = 'chess-wraith-pace-v1';
 // The account's published rating and the slack it has earned so far are part of
 // the same per-account fingerprint as its pace and its openings.
 const RATING_KEY = 'chess-wraith-rating-v1';
@@ -3810,7 +3819,7 @@ function adoptAccountSettings(user) {
 }
 
 function paceKey() {
-  return `${PACE_KEY}:${currentAccount()}`;
+  return paceSamplesKey(currentAccount(), timeClassFromSeconds(state.clockPeak || state.clockSeconds));
 }
 
 function ratingKey() {

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.17.0 — 2026-11-25
+
+Pace, third pass: the learned sample was still class-blind, and the rapid number
+was finally measured on chess.com instead of borrowed.
+
+- **The learned median was one bucket for every time class.** The published
+  median has been per class since it was written, but the locally learned one was
+  stored under `chess-wraith-pace-v1:<user>`, so a bullet rhythm learned in
+  1-minute games could pace a 10-minute game — the same failure as the double
+  scaling fixed in 1.16.0, one layer down. The key now carries the class
+  (`…:<user>:bullet`), and a class with no history falls to its class default
+  instead of to another class's rhythm. Old samples are left in the old key and
+  ignored: forty moves rebuild the profile in one game.
+- **Rapid measured, not inherited.** October 2026 rapid leaderboard, top 50, one
+  month of games: eight of twelve sampled players had rapid games, 3,000+ moves,
+  median of per-player medians **4.3 s** (2.0-13.5 s). The default stays 5.5 s
+  for a fresh profile because that sample is the strongest end of the ladder.
+  The same dump validated the class boundaries the code uses (60/30 s bullet,
+  180/300 s blitz, 600/900 s rapid).
+- One test for the new key, and the research note that backs the numbers.
+- 129 tests.
+
 ## 1.16.1 — 2026-11-25
 
 Wording, not behaviour: 1.16.0 said the three class medians were measured on

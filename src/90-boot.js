@@ -1,7 +1,6 @@
 // Orchestrator: read the board, ask the engine, wait like a human, play, verify.
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
-const PACE_KEY = 'chess-wraith-pace-v1';
 // The account's published rating and the slack it has earned so far are part of
 // the same per-account fingerprint as its pace and its openings.
 const RATING_KEY = 'chess-wraith-rating-v1';
@@ -35,7 +34,7 @@ function adoptAccountSettings(user) {
 }
 
 function paceKey() {
-  return `${PACE_KEY}:${currentAccount()}`;
+  return paceSamplesKey(currentAccount(), timeClassFromSeconds(state.clockPeak || state.clockSeconds));
 }
 
 function ratingKey() {

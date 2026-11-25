@@ -91,6 +91,19 @@ move is played almost at once. A long session also drifts 2% slower per hour,
 capped at 6% after three hours - the same time-on-task effect the typing model in
 `nitro-wraith` carries. A fixed window is the part that looks like a clock.
 
+## What the clock says, class by class
+
+Measured from the public archive in October 2026: 328 bullet and blitz games gave
+medians of 0.70 s and 1.60 s per move. The rapid ladder was not in that sample,
+so it was measured separately from the October rapid leaderboard - the top 50,
+every fourth player, one month of games: eight of twelve had rapid games, 3,000+
+rapid moves in total, and the median of their per-game medians was **4.3 s**
+(spread 2.0-13.5 s). The default stays at 5.5 s for a fresh profile because that
+sample is the strongest end of the ladder, and the leaderboard's `time_class`
+values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
+and 300 s are blitz, 600 and 900 s are rapid.
+
+
 ## The archive API has no free lunch, but it does have a serial lane
 
 The PubAPI documentation is explicit: *"Your serial access rate is unlimited. If
