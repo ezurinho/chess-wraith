@@ -91,6 +91,19 @@ move is played almost at once. A long session also drifts 2% slower per hour,
 capped at 6% after three hours - the same time-on-task effect the typing model in
 `nitro-wraith` carries. A fixed window is the part that looks like a clock.
 
+## Why the lite single-threaded build, and not the strong one
+
+Stockfish.js 19 ships five builds. The multi-threaded ones need the page to be
+cross-origin isolated (`Cross-Origin-Opener-Policy: same-origin` plus
+`Cross-Origin-Embedder-Policy: require-corp`), and a userscript cannot add
+response headers to chess.com: `crossOriginIsolated` is false there and
+`SharedArrayBuffer` is unavailable, so `setoption name Threads` does nothing.
+The remaining choice is single-threaded full (about 94 MB of js + wasm per page
+load) or single-threaded lite (about 1.7 MB). Lite keeps the NNUE net and loses
+a few dozen Elo at long thinking times; at 150-6000 ms per move, on one thread,
+the difference is smaller than the strength we deliberately leave on the table.
+Source: [stockfish.js engine table](https://github.com/nmrugg/stockfish.js/).
+
 ## 2c. Move-level detection is now a benchmark, not a vibe
 
 ChessFraud (ACM, 2026) is the first public benchmark for move-level cheating
@@ -120,7 +133,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 96 files | 87 tests in 12 files |
+| Tests | 96 files | 90 tests in 12 files |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

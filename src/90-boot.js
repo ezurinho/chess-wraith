@@ -950,6 +950,59 @@ function onKeyDown(event) {
   }
 }
 
+// A bug report that fits in a chat: what version, what engine, what the board
+// said, what the account anchored it to, and which settings were live. The
+// panel's own text is not selectable, so a button beats asking people to retype.
+function reportText() {
+  const snap = state.snapshot;
+  const cls = state.ratingClass;
+  const ratings = state.accountRatings;
+  const rating = ratings && cls && ratings[cls] ? `${ratings[cls]} ${cls}` : 'no account rating';
+  const lines = [
+    `chess-wraith ${VERSION}`,
+    `engine ${engine.ready ? 'ready' : 'not ready'} · ${engine.mode}`,
+    snap
+      ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
+      : 'board not readable',
+    `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
+    `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.slackCp} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    state.warn ? `warn ${state.warn}` : ''
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+async function copyReport() {
+  const text = reportText();
+  let copied = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
+  } catch {
+    /* the page can deny it; the textarea is the fallback */
+  }
+  if (!copied) {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:-200px;left:0;opacity:0';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      copied = Boolean(document.execCommand && document.execCommand('copy'));
+    } catch {
+      copied = false;
+    }
+    area.remove();
+  }
+  // No console: the artifact is checked for console calls. A prompt prefilled
+  // with the text is the only fallback every browser still selects for you.
+  if (!copied && typeof prompt === 'function') prompt('chess-wraith report', text);
+  state.warn = copied ? 'report copied' : 'copy blocked; select the box and copy';
+  refreshPanel();
+}
+
 function toggleAuto() {
   state.autoPlay = !state.autoPlay;
   cfg.autoPlayOnLoad = state.autoPlay;
@@ -990,6 +1043,7 @@ const panel = new WraithPanel(cfg, {
     analyze(state.snapshot, true);
   },
   checkUpdate,
+  copyReport,
   hide: () => panel.toggleHidden(),
   refresh: () => refreshPanel(),
   settingsChanged,

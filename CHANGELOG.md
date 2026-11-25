@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.6.7 — 2026-11-25
+
+The engine stops being the untested part, and a bug report becomes one click.
+
+- **A fake-worker harness for the engine** (`tests/unit/engine.test.js`): the
+  real class boots against a stub Worker, so the UCI handshake, the hash and WDL
+  options, `UCI_LimitStrength`/`UCI_Elo` on the NNUE build, `position startpos
+  moves`, and a queued search that must send `stop` are all asserted. Four tests
+  that would have caught a handshake that never says readyok.
+- **`copy report`** in the Info tab: version, engine and mode, ply and turn
+  certainty, the account's rating and the effective Elo, the live settings and
+  the current warning, straight to the clipboard (textarea fallback if the page
+  denies it). The panel's text is not selectable, so the old way was retyping.
+- **Two more DOM fixtures**: a mid-game scan (ply, SAN history, whose clock runs,
+  clock seconds) and a flipped board read from the other side. 90 tests.
+- `docs/research.md` now records why the lite single-threaded build is the only
+  honest choice: a userscript cannot make chess.com cross-origin isolated, and
+  the full build is ~94 MB.
+
 ## 1.6.6 — 2026-11-25
 
 A move that failed to register used to fail silently.

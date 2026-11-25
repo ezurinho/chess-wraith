@@ -106,3 +106,44 @@ test('the move list is read from .node rows, figurines included', () => {
   // The values come from another realm: compare the JSON, not the prototypes.
   assert.equal(JSON.stringify(api.readSanMoveList(entries)), JSON.stringify(['e4', 'e5', 'Nf3']));
 });
+// A mid-game board plus its move list is the shape the scan loop actually sees;
+// the tracker, the list parser and the grid reader have to agree on it.
+test('a mid-game scan reports ply, SAN history and whose clock runs', () => {
+  const html = [
+    '<wc-chess-board class="board">',
+    '  <div class="piece bk square-58"></div><div class="piece bq square-48"></div>',
+    '  <div class="piece br square-88"></div><div class="piece bp square-57"></div>',
+    '  <div class="piece bp square-47"></div><div class="piece bp square-37"></div>',
+    '  <div class="piece bp square-27"></div><div class="piece bp square-17"></div>',
+    '  <div class="piece wp square-54"></div><div class="piece wp square-44"></div>',
+    '  <div class="piece wp square-34"></div><div class="piece wp square-24"></div>',
+    '  <div class="piece wp square-12"></div>',
+    '  <div class="piece wk square-51"></div><div class="piece wr square-11"></div>',
+    '  <div class="piece wr square-81"></div><div class="piece wb square-31"></div>',
+    '  <div class="piece wn square-71"></div>',
+    '  <div class="piece bn square-78"></div><div class="piece bb square-38"></div>',
+    '  <div class="piece wn square-28"></div><div class="piece wr square-18"></div>',
+    '</wc-chess-board>',
+    '<wc-simple-move-list>',
+    '  <div class="node" data-ply="1"><span class="node-san">e4</span></div>',
+    '  <div class="node" data-ply="2"><span class="node-san">e5</span></div>',
+    '</wc-simple-move-list>',
+    '<div class="board-layout-bottom"><div class="clock-component clock-player-turn">0:09</div></div>'
+  ].join('');
+  const { api } = mount(html);
+  const scan = api.scanBoard('w');
+  assert.equal(scan.valid, true);
+  assert.equal(scan.flipped, false);
+  assert.equal(scan.plyCount, 2);
+  assert.equal(JSON.stringify(scan.sanMoves), JSON.stringify(['e4', 'e5']));
+  assert.equal(scan.activeClockTurn, 'w');
+  assert.equal(scan.clockSeconds, 9);
+});
+
+test('a board marked flipped is read from the other side', () => {
+  const { api, dom } = mount(boardHtml().replace('<wc-chess-board class="board">', '<wc-chess-board class="board flipped">'));
+  const boardEl = dom.window.document.querySelector('wc-chess-board');
+  const read0 = api.readGridFromBoard(boardEl, true);
+  assert.equal(read0.valid, true);
+  assert.equal(api.Chess.gridToPlacement(read0.grid), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR');
+});

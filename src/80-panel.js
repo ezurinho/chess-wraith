@@ -338,6 +338,9 @@ const PANEL_HTML = `
           <div class="info-row"><span>Engine</span><b data-el="engineInfo">–</b></div>
           <div class="info-row"><span>Keep-alive</span><b data-el="kaInfo">off</b></div>
           <div class="info-row"><span>Source</span><a href="https://github.com/ezurinho/chess-wraith" target="_blank" rel="noopener noreferrer">github.com/ezurinho/chess-wraith</a></div>
+          <div class="card-actions">
+            <button class="act" type="button" data-el="copyReport">copy report</button>
+          </div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Updates</span><span class="card-s" data-el="updateState">checking…</span></div>
@@ -419,6 +422,9 @@ class WraithPanel {
     on(this.el.min, 'click', () => this.toggleCollapsed());
     on(this.el.checkNow, 'click', () => {
       if (this.handlers.checkUpdate) this.handlers.checkUpdate();
+    });
+    on(this.el.copyReport, 'click', () => {
+      if (this.handlers.copyReport) this.handlers.copyReport();
     });
     on(this.el.head, 'dblclick', () => this.toggleCollapsed());
 

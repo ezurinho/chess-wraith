@@ -53,8 +53,9 @@ only version anyone installs.
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic and jsdom board tests (87 tests). The worker boot is still verified by
-  hand against the live site; that is the remaining weak point.
+- `tests/unit/` — pure logic, jsdom board tests and a fake-worker engine test (90 tests).
+  The real wasm download and compile still need a browser; the UCI protocol,
+  options, queued searches and fallback are covered.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the
   selector layer is tested, not just eyeballed.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,

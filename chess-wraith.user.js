@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.6.6
+// @version      1.6.7
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.6.6';
+const VERSION = '1.6.7';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.6/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.7/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3085,6 +3085,9 @@ const PANEL_HTML = `
           <div class="info-row"><span>Engine</span><b data-el="engineInfo">–</b></div>
           <div class="info-row"><span>Keep-alive</span><b data-el="kaInfo">off</b></div>
           <div class="info-row"><span>Source</span><a href="https://github.com/ezurinho/chess-wraith" target="_blank" rel="noopener noreferrer">github.com/ezurinho/chess-wraith</a></div>
+          <div class="card-actions">
+            <button class="act" type="button" data-el="copyReport">copy report</button>
+          </div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Updates</span><span class="card-s" data-el="updateState">checking…</span></div>
@@ -3166,6 +3169,9 @@ class WraithPanel {
     on(this.el.min, 'click', () => this.toggleCollapsed());
     on(this.el.checkNow, 'click', () => {
       if (this.handlers.checkUpdate) this.handlers.checkUpdate();
+    });
+    on(this.el.copyReport, 'click', () => {
+      if (this.handlers.copyReport) this.handlers.copyReport();
     });
     on(this.el.head, 'dblclick', () => this.toggleCollapsed());
 
@@ -4364,6 +4370,59 @@ function onKeyDown(event) {
   }
 }
 
+// A bug report that fits in a chat: what version, what engine, what the board
+// said, what the account anchored it to, and which settings were live. The
+// panel's own text is not selectable, so a button beats asking people to retype.
+function reportText() {
+  const snap = state.snapshot;
+  const cls = state.ratingClass;
+  const ratings = state.accountRatings;
+  const rating = ratings && cls && ratings[cls] ? `${ratings[cls]} ${cls}` : 'no account rating';
+  const lines = [
+    `chess-wraith ${VERSION}`,
+    `engine ${engine.ready ? 'ready' : 'not ready'} · ${engine.mode}`,
+    snap
+      ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
+      : 'board not readable',
+    `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
+    `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.slackCp} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    state.warn ? `warn ${state.warn}` : ''
+  ];
+  return lines.filter(Boolean).join('\n');
+}
+
+async function copyReport() {
+  const text = reportText();
+  let copied = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    }
+  } catch {
+    /* the page can deny it; the textarea is the fallback */
+  }
+  if (!copied) {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:-200px;left:0;opacity:0';
+    document.body.appendChild(area);
+    area.select();
+    try {
+      copied = Boolean(document.execCommand && document.execCommand('copy'));
+    } catch {
+      copied = false;
+    }
+    area.remove();
+  }
+  // No console: the artifact is checked for console calls. A prompt prefilled
+  // with the text is the only fallback every browser still selects for you.
+  if (!copied && typeof prompt === 'function') prompt('chess-wraith report', text);
+  state.warn = copied ? 'report copied' : 'copy blocked; select the box and copy';
+  refreshPanel();
+}
+
 function toggleAuto() {
   state.autoPlay = !state.autoPlay;
   cfg.autoPlayOnLoad = state.autoPlay;
@@ -4404,6 +4463,7 @@ const panel = new WraithPanel(cfg, {
     analyze(state.snapshot, true);
   },
   checkUpdate,
+  copyReport,
   hide: () => panel.toggleHidden(),
   refresh: () => refreshPanel(),
   settingsChanged,
