@@ -54,7 +54,9 @@ const state = {
   lastDelayMs: 0,
   tempoSamples: [],
   boardTouchAt: 0,
-  defers: 0
+  defers: 0,
+  sessionStart: Date.now(),
+  gamesPlayed: 1
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -210,6 +212,21 @@ function syncKeepAlive() {
 // the site offers, and give up out loud instead of pretending to work.
 function queueRematch() {
   if (!cfg.autoRematch || state.rematchTried || state.rematchTimer) return;
+  const limit = sessionLimit({
+    startedAt: state.sessionStart,
+    games: state.gamesPlayed,
+    now: Date.now(),
+    maxGames: cfg.sessionMaxGames,
+    maxMs: cfg.sessionMaxMs
+  });
+  if (limit.stop) {
+    state.autoPlay = false;
+    cfg.autoRematch = false;
+    state.warn = limit.reason;
+    saveSettings(cfg);
+    refreshPanel();
+    return;
+  }
   const delay = nextGameDelay(cfg);
   state.rematchTimer = setTimeout(() => {
     state.rematchTimer = null;
@@ -237,6 +254,7 @@ function queueRematch() {
 }
 
 function onNewGame() {
+  state.gamesPlayed += 1;
   state.gameOverSeen = false;
   state.rematchTried = false;
   state.myCpLosses = [];

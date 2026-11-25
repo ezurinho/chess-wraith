@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '65-afk.js'],
-  `{ pickRematchButton, nextGameDelay, REMATCH_PRIORITY }`
+  `{ pickRematchButton, nextGameDelay, sessionLimit, REMATCH_PRIORITY }`
 );
 
 test('rematch wins over a new game when both are offered', () => {
@@ -64,4 +64,28 @@ test('the next-game delay stays inside the configured windows', () => {
 test('a hostile config falls back to the defaults instead of throwing', () => {
   const ms = api.nextGameDelay({ newGameDelayMs: 'nope', newGameLongMs: null, newGameLongChance: 'x' });
   assert.ok(Number.isFinite(ms) && ms > 0);
+});
+
+test('a session stops on games even if the clock has not moved', () => {
+  const limit = api.sessionLimit({ startedAt: 1000, games: 15, now: 5000, maxGames: 15, maxMs: 3600000 });
+  assert.equal(limit.stop, true);
+  assert.match(limit.reason, /15 games/);
+});
+
+test('a session stops on wall-clock even with games left', () => {
+  const limit = api.sessionLimit({ startedAt: 0, games: 2, now: 7200000, maxGames: 15, maxMs: 7200000 });
+  assert.equal(limit.stop, true);
+  assert.match(limit.reason, /2h/);
+});
+
+test('a session keeps going while both caps have room', () => {
+  const limit = api.sessionLimit({ startedAt: 1000, games: 3, now: 2000, maxGames: 15, maxMs: 3600000 });
+  assert.equal(limit.stop, false);
+  assert.equal(limit.reason, '');
+});
+
+test('a zero or missing cap disables that half and never divides by zero', () => {
+  assert.equal(api.sessionLimit({ startedAt: 0, games: 999, now: 0, maxGames: 0, maxMs: 0 }).stop, false);
+  assert.equal(api.sessionLimit({}).stop, false);
+  assert.equal(api.sessionLimit({ games: NaN, now: NaN, maxGames: Infinity, maxMs: NaN }).stop, false);
 });

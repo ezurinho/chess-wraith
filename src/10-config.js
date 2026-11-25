@@ -1,4 +1,4 @@
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -24,6 +24,12 @@ const CONFIG = {
   pauseOnLowClock: true,
   sideOverride: 'auto', // 'auto' | 'w' | 'b'
   onlyMyTurn: true,
+
+  // A session that never ends is the difference between "playing with help" and
+  // "a bot farming the account". Both caps end the session; the panel says which
+  // one tripped.
+  sessionMaxGames: 15,
+  sessionMaxMs: 3 * 60 * 60 * 1000,
 
   // AFK: play through the end of a game and into the next one without a human.
   // Off by default; the panel says what it is doing and why it stopped.
@@ -53,7 +59,7 @@ const STYLES = {
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.3.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.3.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

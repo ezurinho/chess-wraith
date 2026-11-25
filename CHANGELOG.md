@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.1 — 2026-11-25
+
+A session with no end is the one shape that is hard to explain away, and the AFK
+loop had none.
+
+- **Session cap.** The AFK loop stops after 15 games or 3 hours, whichever comes
+  first, and says which one it was. Both live in `CONFIG`
+  (`sessionMaxGames`, `sessionMaxMs`); zero disables either half.
+- `sessionLimit()` is pure and tested on both halves, the zero cap and the
+  missing-values case.
+- 53 tests (was 49).
+
 ## 1.3.0 — 2026-11-25
 
 The engine the README promised and the engine that ran were not the same one.
@@ -159,5 +171,6 @@ First release.
 - Hotkeys: `Alt+Shift+A` auto-play, `Alt+Shift+M` play one move, `Alt+Shift+H`
   panel.
 - Fallback engine (`stockfish.js`, no WASM) when the NNUE worker cannot start.
+
 
 

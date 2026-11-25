@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.3.0
+// @version      1.3.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -67,6 +67,12 @@ const CONFIG = {
   pauseOnLowClock: true,
   sideOverride: 'auto', // 'auto' | 'w' | 'b'
   onlyMyTurn: true,
+
+  // A session that never ends is the difference between "playing with help" and
+  // "a bot farming the account". Both caps end the session; the panel says which
+  // one tripped.
+  sessionMaxGames: 15,
+  sessionMaxMs: 3 * 60 * 60 * 1000,
 
   // AFK: play through the end of a game and into the next one without a human.
   // Off by default; the panel says what it is doing and why it stopped.
@@ -96,7 +102,7 @@ const STYLES = {
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.3.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.3.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2309,6 +2315,23 @@ function nextGameDelay(cfg, random = Math.random) {
   return Math.round(lo + random() * (hi - lo));
 }
 
+// Pure: is this session over? Games and wall-clock, whichever comes first. Zero
+// or a missing value disables that half.
+function sessionLimit({ startedAt, games, now, maxGames, maxMs }) {
+  const played = Number.isFinite(games) ? games : 0;
+  const hasStart = Number.isFinite(startedAt);
+  const start = hasStart ? startedAt : 0;
+  const t = Number.isFinite(now) ? now : 0;
+  if (Number.isFinite(maxGames) && maxGames > 0 && played >= maxGames) {
+    return { stop: true, reason: `session limit: ${maxGames} games` };
+  }
+  if (hasStart && Number.isFinite(maxMs) && maxMs > 0 && t >= start + maxMs) {
+    const hours = Math.round((maxMs / 3600000) * 10) / 10;
+    return { stop: true, reason: `session limit: ${hours}h` };
+  }
+  return { stop: false, reason: '' };
+}
+
 function isElementVisible(el) {
   if (!el || !el.isConnected) return false;
   if (el.disabled) return false;
@@ -3212,7 +3235,9 @@ const state = {
   lastDelayMs: 0,
   tempoSamples: [],
   boardTouchAt: 0,
-  defers: 0
+  defers: 0,
+  sessionStart: Date.now(),
+  gamesPlayed: 1
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -3368,6 +3393,21 @@ function syncKeepAlive() {
 // the site offers, and give up out loud instead of pretending to work.
 function queueRematch() {
   if (!cfg.autoRematch || state.rematchTried || state.rematchTimer) return;
+  const limit = sessionLimit({
+    startedAt: state.sessionStart,
+    games: state.gamesPlayed,
+    now: Date.now(),
+    maxGames: cfg.sessionMaxGames,
+    maxMs: cfg.sessionMaxMs
+  });
+  if (limit.stop) {
+    state.autoPlay = false;
+    cfg.autoRematch = false;
+    state.warn = limit.reason;
+    saveSettings(cfg);
+    refreshPanel();
+    return;
+  }
   const delay = nextGameDelay(cfg);
   state.rematchTimer = setTimeout(() => {
     state.rematchTimer = null;
@@ -3395,6 +3435,7 @@ function queueRematch() {
 }
 
 function onNewGame() {
+  state.gamesPlayed += 1;
   state.gameOverSeen = false;
   state.rematchTried = false;
   state.myCpLosses = [];
