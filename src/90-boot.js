@@ -8,10 +8,7 @@ const RATING_KEY = 'chess-wraith-rating-v1';
 const GUARD_KEY = 'chess-wraith-guard-v1';
 const RATING_TTL_MS = 6 * 60 * 60 * 1000;
 const RATING_RETRY_MS = 15 * 60 * 1000;
-// Published pace is half a megabyte of PGN; six hours is plenty for data that
-// only changes when the account finishes another game.
-const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
-const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
+
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -401,6 +398,14 @@ function registerButler() {
       add('storage', storage, storage ? 'read-write' : 'blocked');
       add('rating', state.eloSource !== 'default' || !state.accountRatings, state.accountRatings ? `${accountRatingNow() || '?'} ${state.ratingClass}` : state.ratingError || 'no account');
       add('update', !state.updateLatest || !versionNewer(state.updateLatest, VERSION), state.updateLatest || 'not checked');
+      // The pace and the pace parser are the part of the script that cannot be
+      // checked by looking at the page: if the parser breaks on a chess.com
+      // format change, the delay silently falls back to a fixed window.
+      const paced = parseClockTimes(SELFTEST_PGN, 'w');
+      add('pace parser', paced.length >= 2 && paced.every((ms) => ms === 10000), paced.length ? `${paced.length} moves, ${paced[0]} ms` : 'no samples');
+      const probe = computeDelay(cfg, { plyCount: 24, gapCp: 40, clockSeconds: 180, budgetSeconds: 180, oppTempoMs: 1400 });
+      add('delay', Number.isFinite(probe) && probe >= 250 && probe <= 9000, `${Math.round(probe)} ms`);
+      add('settings key', settingsKeyFor('Someone') === `${STORAGE_KEY}:someone` && settingsKeyFor('') === STORAGE_KEY, settingsKeyFor(currentAccount() || ''));
       return { ok: checks.every((check) => check.ok), checks };
     },
     analyzeNow: () => analyze(state.snapshot, true),

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.8.1
+// @version      1.9.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.8.1';
+const VERSION = '1.9.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.8.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.9.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2287,6 +2287,18 @@ function positionMoves(uciMoves) {
 //
 // Chess.com's PGN writer puts a space inside the comment (`{[%clk 0:02:59]}`),
 // so the clock is its own token after the move and the braces are glued to it.
+// A three-move fragment that exercises the exact shape chess.com writes: the
+// clock comment split into two tokens, the black move number carrying the dots.
+const SELFTEST_PGN = '1. e4 {[%clk 0:05:00]} 1... e5 {[%clk 0:05:00]} 2. Nf3 {[%clk 0:04:50]} ' +
+  '2... Nc6 {[%clk 0:04:50]} 3. Bb5 {[%clk 0:04:40]} 3... a6 {[%clk 0:04:40]} ' +
+  '4. Ba4 {[%clk 0:04:30]} 4... Nf6 {[%clk 0:04:30]} 5. O-O {[%clk 0:04:20]}';
+
+// Published pace is half a megabyte of PGN; six hours is plenty for data that
+// only changes when the account finishes another game. The retry window is
+// longer than the rating one: a throttled archive stays throttled.
+const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
+const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
@@ -2362,9 +2374,13 @@ function readPaceProfile(timeClass) {
   try {
     const cached = JSON.parse(localStorage.getItem(paceProfileKey(timeClass)) || 'null');
     if (!cached || cached.cls !== timeClass) return null;
+    const now = Date.now();
+    // A failed fetch is written without `at` and must not be mistaken for an
+    // empty entry, or the 20 minute backoff never happens and every scan that
+    // wants a pace hits the archive again.
+    if (Number(cached.retryAt) > 0) return cached.retryAt > now ? { error: cached.error } : null;
     if (!(Number(cached.at) > 0)) return null;
-    if (Date.now() - Number(cached.at) > PACEPROFILE_TTL_MS && !cached.retryAt) return null;
-    if (cached.retryAt && Number(cached.retryAt) > Date.now()) return { error: cached.error } ;
+    if (now - Number(cached.at) > PACEPROFILE_TTL_MS) return null;
     return cached;
   } catch {
     return null;
@@ -2394,7 +2410,9 @@ async function syncPaceProfile(force) {
   if (!state.clockPeak && !state.clockSeconds) return null;
   const timeClass = timeClassFromSeconds(state.clockPeak || state.clockSeconds);
   if (!timeClass) return null;
-  if (state.pacePending && !force) return state.paceProfile || null;
+  // A second click while the first request is in flight would download the same
+  // archive twice; the caller waits for the panel repaint instead.
+  if (state.pacePending) return state.paceProfile || null;
   const cached = readPaceProfile(timeClass);
   if (cached && !force && !cached.error) {
     state.paceProfile = cached;
@@ -2407,15 +2425,19 @@ async function syncPaceProfile(force) {
   state.pacePending = true;
   state.paceError = '';
   try {
-    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined;
     let profile = null;
     for (const offset of [0, 1]) {
+      // One timeout per request: a signal shared by both months leaves the
+      // second request with whatever is left of the first one's budget.
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
       const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
         cache: 'no-store',
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
-        signal
+        signal: controller ? controller.signal : undefined
       });
+      if (timer) clearTimeout(timer);
       if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
       const body = await response.json();
       const parsed = paceFromGames(body && body.games, timeClass, user);
@@ -3655,10 +3677,7 @@ const RATING_KEY = 'chess-wraith-rating-v1';
 const GUARD_KEY = 'chess-wraith-guard-v1';
 const RATING_TTL_MS = 6 * 60 * 60 * 1000;
 const RATING_RETRY_MS = 15 * 60 * 1000;
-// Published pace is half a megabyte of PGN; six hours is plenty for data that
-// only changes when the account finishes another game.
-const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
-const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
+
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -4048,6 +4067,14 @@ function registerButler() {
       add('storage', storage, storage ? 'read-write' : 'blocked');
       add('rating', state.eloSource !== 'default' || !state.accountRatings, state.accountRatings ? `${accountRatingNow() || '?'} ${state.ratingClass}` : state.ratingError || 'no account');
       add('update', !state.updateLatest || !versionNewer(state.updateLatest, VERSION), state.updateLatest || 'not checked');
+      // The pace and the pace parser are the part of the script that cannot be
+      // checked by looking at the page: if the parser breaks on a chess.com
+      // format change, the delay silently falls back to a fixed window.
+      const paced = parseClockTimes(SELFTEST_PGN, 'w');
+      add('pace parser', paced.length >= 2 && paced.every((ms) => ms === 10000), paced.length ? `${paced.length} moves, ${paced[0]} ms` : 'no samples');
+      const probe = computeDelay(cfg, { plyCount: 24, gapCp: 40, clockSeconds: 180, budgetSeconds: 180, oppTempoMs: 1400 });
+      add('delay', Number.isFinite(probe) && probe >= 250 && probe <= 9000, `${Math.round(probe)} ms`);
+      add('settings key', settingsKeyFor('Someone') === `${STORAGE_KEY}:someone` && settingsKeyFor('') === STORAGE_KEY, settingsKeyFor(currentAccount() || ''));
       return { ok: checks.every((check) => check.ok), checks };
     },
     analyzeNow: () => analyze(state.snapshot, true),

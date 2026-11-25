@@ -10,6 +10,18 @@
 //
 // Chess.com's PGN writer puts a space inside the comment (`{[%clk 0:02:59]}`),
 // so the clock is its own token after the move and the braces are glued to it.
+// A three-move fragment that exercises the exact shape chess.com writes: the
+// clock comment split into two tokens, the black move number carrying the dots.
+const SELFTEST_PGN = '1. e4 {[%clk 0:05:00]} 1... e5 {[%clk 0:05:00]} 2. Nf3 {[%clk 0:04:50]} ' +
+  '2... Nc6 {[%clk 0:04:50]} 3. Bb5 {[%clk 0:04:40]} 3... a6 {[%clk 0:04:40]} ' +
+  '4. Ba4 {[%clk 0:04:30]} 4... Nf6 {[%clk 0:04:30]} 5. O-O {[%clk 0:04:20]}';
+
+// Published pace is half a megabyte of PGN; six hours is plenty for data that
+// only changes when the account finishes another game. The retry window is
+// longer than the rating one: a throttled archive stays throttled.
+const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
+const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
@@ -85,9 +97,13 @@ function readPaceProfile(timeClass) {
   try {
     const cached = JSON.parse(localStorage.getItem(paceProfileKey(timeClass)) || 'null');
     if (!cached || cached.cls !== timeClass) return null;
+    const now = Date.now();
+    // A failed fetch is written without `at` and must not be mistaken for an
+    // empty entry, or the 20 minute backoff never happens and every scan that
+    // wants a pace hits the archive again.
+    if (Number(cached.retryAt) > 0) return cached.retryAt > now ? { error: cached.error } : null;
     if (!(Number(cached.at) > 0)) return null;
-    if (Date.now() - Number(cached.at) > PACEPROFILE_TTL_MS && !cached.retryAt) return null;
-    if (cached.retryAt && Number(cached.retryAt) > Date.now()) return { error: cached.error } ;
+    if (now - Number(cached.at) > PACEPROFILE_TTL_MS) return null;
     return cached;
   } catch {
     return null;
@@ -117,7 +133,9 @@ async function syncPaceProfile(force) {
   if (!state.clockPeak && !state.clockSeconds) return null;
   const timeClass = timeClassFromSeconds(state.clockPeak || state.clockSeconds);
   if (!timeClass) return null;
-  if (state.pacePending && !force) return state.paceProfile || null;
+  // A second click while the first request is in flight would download the same
+  // archive twice; the caller waits for the panel repaint instead.
+  if (state.pacePending) return state.paceProfile || null;
   const cached = readPaceProfile(timeClass);
   if (cached && !force && !cached.error) {
     state.paceProfile = cached;
@@ -130,15 +148,19 @@ async function syncPaceProfile(force) {
   state.pacePending = true;
   state.paceError = '';
   try {
-    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined;
     let profile = null;
     for (const offset of [0, 1]) {
+      // One timeout per request: a signal shared by both months leaves the
+      // second request with whatever is left of the first one's budget.
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
       const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
         cache: 'no-store',
         credentials: 'omit',
         referrerPolicy: 'no-referrer',
-        signal
+        signal: controller ? controller.signal : undefined
       });
+      if (timer) clearTimeout(timer);
       if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
       const body = await response.json();
       const parsed = paceFromGames(body && body.games, timeClass, user);

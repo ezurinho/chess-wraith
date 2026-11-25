@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.9.0 — 2026-11-25
+
+Three checks that can only fail on a real page, and two pace bugs found by
+asking what the cache was actually doing.
+
+- **`selftest()` now covers eleven checks**, not eight: the `%clk` parser is run
+  against the exact token shape chess.com writes (a silent break would leave the
+  delay on a fixed window), the delay is asserted inside 250–9000 ms for the
+  current settings, and the settings key is checked to be the scoped one. That
+  is the part of the script a unit test cannot see.
+- **The 20 minute archive backoff never worked**: an error entry is written
+  without `at`, and `readPaceProfile` rejected anything without `at` before it
+  looked at `retryAt`. Every failed fetch was retried immediately.
+- **One timeout per request** instead of one 8 s signal shared by this month and
+  last month, which left the second request whatever the first had not spent;
+  and a click during an in-flight fetch no longer starts a second download.
+- The pace constants moved into `src/55-pace.js`; they lived in boot, so the
+  standalone pace harness could not see them and the cache silently threw.
+
 ## 1.8.1 — 2026-11-25
 
 - The published-pace cache is now per account **and per time class**. A player

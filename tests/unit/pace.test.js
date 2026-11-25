@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const ROOT = path.resolve(__dirname, '../..');
 const FRAGMENTS = ['10-config.js', '20-utils.js', '55-pace.js'];
 
-function harness() {
+function harness(store) {
   const source = FRAGMENTS.map((name) => fs.readFileSync(path.join(ROOT, 'src', name), 'utf8')).join('\n');
   const context = vm.createContext({
     console,
@@ -22,7 +22,10 @@ function harness() {
     Object,
     RegExp,
     fetch: () => { throw new Error('unexpected fetch'); },
-    localStorage: { getItem: () => null, setItem: () => {} },
+    localStorage: {
+      getItem: (key) => (store && store.has(key) ? store.get(key) : null),
+      setItem: (key, value) => { if (store) store.set(key, String(value)); }
+    },
     document: { querySelector: () => ({ textContent: 'hikaru' }) },
     window: {},
     refreshPanel: () => {},
@@ -134,4 +137,36 @@ test('the cache is per time class, so switching bullet and blitz does not refetc
   const blitz = api.paceProfileKey('blitz');
   assert.notEqual(bullet, blitz);
   assert.ok(bullet.includes('hikaru'), 'and it is per account');
+});
+test('a failed fetch backs off for twenty minutes instead of retrying forever', () => {
+  const store = new Map();
+  const api = harness(store);
+  api.persistPaceProfile({ cls: 'blitz', retryAt: Date.now() + 60000, error: 'HTTP 429' });
+  const cached = api.readPaceProfile('blitz');
+  assert.deepEqual(cached, { error: 'HTTP 429' }, 'the error is remembered while it is fresh');
+  api.persistPaceProfile({ cls: 'blitz', retryAt: Date.now() - 1000, error: 'HTTP 429' });
+  assert.equal(api.readPaceProfile('blitz'), null, 'an expired backoff asks again');
+});
+
+test('a fresh profile is served from the cache and an old one is not', () => {
+  const store = new Map();
+  const api = harness(store);
+  api.persistPaceProfile({ cls: 'blitz', at: Date.now(), medianMs: 1500, samples: 900, games: 40 });
+  assert.equal(api.readPaceProfile('blitz').medianMs, 1500);
+  api.persistPaceProfile({ cls: 'blitz', at: Date.now() - 7 * 60 * 60 * 1000, medianMs: 1500 });
+  assert.equal(api.readPaceProfile('blitz'), null, 'six hour TTL');
+  assert.equal(api.readPaceProfile('bullet'), null, 'and the class is part of the key');
+});
+
+test('a click while a request is in flight does not download the archive twice', async () => {
+  let calls = 0;
+  const context = harness(new Map());
+  context.state.clockPeak = 300;
+  context.fetch = () => { calls += 1; return new Promise(() => {}); };
+  const first = context.syncPaceProfile(true);
+  const second = context.syncPaceProfile(true);
+  const secondValue = await second;
+  assert.equal(secondValue, null, 'the second call returns immediately');
+  assert.equal(calls, 1, 'only one request went out');
+  assert.ok(first);
 });
