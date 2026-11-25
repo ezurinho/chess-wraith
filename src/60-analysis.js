@@ -176,8 +176,11 @@ function computeDelay(cfg, opts = {}) {
 
   // Time control sets the scale. A 1-minute game is not played with the same
   // deliberation as a 15+10, and a fixed window is the tell that says so.
+  // Except when the baseline itself was measured for this time class: the
+  // published median already is the bullet or rapid number, and scaling it
+  // again played a 1-minute game at half the account's own rhythm.
   const budget = Number(opts.budgetSeconds);
-  if (Number.isFinite(budget) && budget > 0) {
+  if (!(baseline && opts.baselineClassScoped) && Number.isFinite(budget) && budget > 0) {
     if (budget < 120) ms *= 0.5;
     else if (budget < 300) ms *= 0.78;
     else if (budget >= 600) ms *= 1.15;

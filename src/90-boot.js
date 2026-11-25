@@ -272,6 +272,18 @@ function paceBaseline() {
   return samples.length >= 6 ? median(samples) : null;
 }
 
+// What the delay should be centred on: the account's published median for this
+// class, the median this browser has learned, or the class default for a profile
+// that has neither. The first and third are already class-specific numbers.
+function paceAnchor() {
+  const published = Number(state.paceProfile && state.paceProfile.medianMs) || 0;
+  if (published > 200) return { ms: published, classScoped: true };
+  const learned = paceBaseline();
+  if (learned) return { ms: learned, classScoped: false };
+  const fallback = classMedianMs(timeClassFromSeconds(state.clockPeak || state.clockSeconds));
+  return { ms: fallback, classScoped: Boolean(fallback) };
+}
+
 function recordPace(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return;
   try {
@@ -803,6 +815,7 @@ function scheduleAutoMove(result) {
     state.lastMyMoveAt = 0;
   }
 
+  const anchor = paceAnchor();
   const delay = computeDelay(cfg, {
     plyCount: ply,
     legalMoveCount: legal.length,
@@ -812,8 +825,11 @@ function scheduleAutoMove(result) {
     allowRethink: true,
     clockSeconds: state.clockSeconds,
     oppTempoMs: median(state.tempoSamples),
-    baselineMs: paceBaseline(),
+    baselineMs: anchor.ms,
     budgetSeconds: state.clockPeak,
+    // The published median and the class default are per class already; the
+    // learned one is not, and still scales with the clock.
+    baselineClassScoped: anchor.classScoped,
     sessionMs: Date.now() - state.sessionStart
   });
 

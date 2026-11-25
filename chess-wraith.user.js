@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.15.0
+// @version      1.16.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.15.0';
+const VERSION = '1.16.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.15.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.16.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2353,6 +2353,17 @@ const SELFTEST_PGN = '1. e4 {[%clk 0:05:00]} 1... e5 {[%clk 0:05:00]} 2. Nf3 {[%
 const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
 const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
 
+// A tab with no history yet has to start somewhere. These are the medians
+// measured on chess.com itself (328 games from the public archive), not the
+// generic 700-1600 ms window: a rapid player who answers in a second is a much
+// louder signal than one who takes five, and the window was three times too
+// fast for that class.
+const PACE_CLASS_MS = { bullet: 700, blitz: 1600, rapid: 5500 };
+
+function classMedianMs(cls) {
+  return Object.prototype.hasOwnProperty.call(PACE_CLASS_MS, cls) ? PACE_CLASS_MS[cls] : null;
+}
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
@@ -2689,8 +2700,11 @@ function computeDelay(cfg, opts = {}) {
 
   // Time control sets the scale. A 1-minute game is not played with the same
   // deliberation as a 15+10, and a fixed window is the tell that says so.
+  // Except when the baseline itself was measured for this time class: the
+  // published median already is the bullet or rapid number, and scaling it
+  // again played a 1-minute game at half the account's own rhythm.
   const budget = Number(opts.budgetSeconds);
-  if (Number.isFinite(budget) && budget > 0) {
+  if (!(baseline && opts.baselineClassScoped) && Number.isFinite(budget) && budget > 0) {
     if (budget < 120) ms *= 0.5;
     else if (budget < 300) ms *= 0.78;
     else if (budget >= 600) ms *= 1.15;
@@ -4033,6 +4047,18 @@ function paceBaseline() {
   return samples.length >= 6 ? median(samples) : null;
 }
 
+// What the delay should be centred on: the account's published median for this
+// class, the median this browser has learned, or the class default for a profile
+// that has neither. The first and third are already class-specific numbers.
+function paceAnchor() {
+  const published = Number(state.paceProfile && state.paceProfile.medianMs) || 0;
+  if (published > 200) return { ms: published, classScoped: true };
+  const learned = paceBaseline();
+  if (learned) return { ms: learned, classScoped: false };
+  const fallback = classMedianMs(timeClassFromSeconds(state.clockPeak || state.clockSeconds));
+  return { ms: fallback, classScoped: Boolean(fallback) };
+}
+
 function recordPace(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return;
   try {
@@ -4564,6 +4590,7 @@ function scheduleAutoMove(result) {
     state.lastMyMoveAt = 0;
   }
 
+  const anchor = paceAnchor();
   const delay = computeDelay(cfg, {
     plyCount: ply,
     legalMoveCount: legal.length,
@@ -4573,8 +4600,11 @@ function scheduleAutoMove(result) {
     allowRethink: true,
     clockSeconds: state.clockSeconds,
     oppTempoMs: median(state.tempoSamples),
-    baselineMs: paceBaseline(),
+    baselineMs: anchor.ms,
     budgetSeconds: state.clockPeak,
+    // The published median and the class default are per class already; the
+    // learned one is not, and still scales with the clock.
+    baselineClassScoped: anchor.classScoped,
     sessionMs: Date.now() - state.sessionStart
   });
 

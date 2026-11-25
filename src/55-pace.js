@@ -22,6 +22,17 @@ const SELFTEST_PGN = '1. e4 {[%clk 0:05:00]} 1... e5 {[%clk 0:05:00]} 2. Nf3 {[%
 const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
 const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
 
+// A tab with no history yet has to start somewhere. These are the medians
+// measured on chess.com itself (328 games from the public archive), not the
+// generic 700-1600 ms window: a rapid player who answers in a second is a much
+// louder signal than one who takes five, and the window was three times too
+// fast for that class.
+const PACE_CLASS_MS = { bullet: 700, blitz: 1600, rapid: 5500 };
+
+function classMedianMs(cls) {
+  return Object.prototype.hasOwnProperty.call(PACE_CLASS_MS, cls) ? PACE_CLASS_MS[cls] : null;
+}
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
