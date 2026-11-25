@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.5.0
+// @version      1.5.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.5.0';
+const VERSION = '1.5.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -105,7 +105,7 @@ const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3476,8 +3476,9 @@ function debugEnabled() {
   }
 }
 
-// Two public static files answer this, and neither knows who is asking: the
-// jsDelivr copy of package.json first, the GitHub API as the fallback.
+// Two public static files answer this, and neither knows who is asking. The
+// API goes first because it is immediate: jsDelivr's @latest can keep answering
+// with the previous tag for hours after a release.
 async function readVersion(url) {
   const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
   if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
@@ -3495,11 +3496,11 @@ async function checkUpdate() {
   try {
     let latest = '';
     try {
-      latest = await readVersion(UPDATE_META_URL);
+      latest = await readVersion(UPDATE_API_URL);
     } catch {
       latest = '';
     }
-    if (!versionParts(latest)) latest = await readVersion(UPDATE_API_URL);
+    if (!versionParts(latest)) latest = await readVersion(UPDATE_META_URL);
     if (!versionParts(latest)) throw new Error('no version');
     state.updateLatest = latest;
     state.updateError = '';

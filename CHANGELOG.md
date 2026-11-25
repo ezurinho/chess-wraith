@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.1 — 2026-11-25
+
+`@latest` on jsDelivr kept answering `1.4.2` for minutes after 1.5.0 was tagged,
+so a copy that had just been released was told it was up to date.
+
+- The update check asks the GitHub release API first (immediate) and falls back
+  to the jsDelivr `@latest` copy of `package.json` when that fails.
+- 76 tests, unchanged.
+
 ## 1.5.0 — 2026-11-25
 
 Two changes: the panel now tells you when there is a newer release, and there is

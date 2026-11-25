@@ -164,8 +164,9 @@ function debugEnabled() {
   }
 }
 
-// Two public static files answer this, and neither knows who is asking: the
-// jsDelivr copy of package.json first, the GitHub API as the fallback.
+// Two public static files answer this, and neither knows who is asking. The
+// API goes first because it is immediate: jsDelivr's @latest can keep answering
+// with the previous tag for hours after a release.
 async function readVersion(url) {
   const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
   if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
@@ -183,11 +184,11 @@ async function checkUpdate() {
   try {
     let latest = '';
     try {
-      latest = await readVersion(UPDATE_META_URL);
+      latest = await readVersion(UPDATE_API_URL);
     } catch {
       latest = '';
     }
-    if (!versionParts(latest)) latest = await readVersion(UPDATE_API_URL);
+    if (!versionParts(latest)) latest = await readVersion(UPDATE_META_URL);
     if (!versionParts(latest)) throw new Error('no version');
     state.updateLatest = latest;
     state.updateError = '';
