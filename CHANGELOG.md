@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1 — 2026-11-25
+
+- `docs/research.md`: the PubAPI rate-limit rule quoted, and why the pace fetch is
+  serial (two requests, six-hour cache, twenty-minute backoff on `429`).
+
 ## 1.9.0 — 2026-11-25
 
 Three checks that can only fail on a real page, and two pace bugs found by

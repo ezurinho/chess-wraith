@@ -91,6 +91,21 @@ move is played almost at once. A long session also drifts 2% slower per hour,
 capped at 6% after three hours - the same time-on-task effect the typing model in
 `nitro-wraith` carries. A fixed window is the part that looks like a clock.
 
+## The archive API has no free lunch, but it does have a serial lane
+
+The PubAPI documentation is explicit: *"Your serial access rate is unlimited. If
+you always wait to receive the response to your previous request before making
+your next request, then you should never encounter rate limiting."* Parallel
+requests may get `429 Too Many Requests`, and *"if we detect abnormal or
+suspicious activity, we may block your application entirely"*
+([published-data-api](https://www.chess.com/news/view/published-data-api)).
+
+That sentence shaped the cache: the pace sync asks for one month, waits, then
+asks for the previous month, so it is serial by construction, two requests per
+account per six hours, and a `429` is written down with a twenty minute backoff
+instead of being retried. Before 1.9.0 that backoff was dead code: the reader
+rejected entries without `at` before it looked at `retryAt`.
+
 ## The pace anchor is measured, not invented
 
 `%clk` is written on every move of a finished chess.com game, so a public
