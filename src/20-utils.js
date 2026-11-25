@@ -39,6 +39,23 @@ function forgetNnueSkip() {
   }
 }
 
+// Median of a small sample. Used for an account's own pace and for the
+// opponent's tempo: both are "what usually happens", not "what happened once".
+function median(values) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const sorted = values.filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function pushBounded(list, value, cap) {
+  const next = Array.isArray(list) ? list.slice() : [];
+  if (Number.isFinite(value) && value > 0) next.push(Math.round(value));
+  while (next.length > cap) next.shift();
+  return next;
+}
+
 // A search that never answers must not wedge the panel forever. The budget is
 // generous relative to the request so a slow-but-working search still finishes.
 function searchBudgetMs(job) {

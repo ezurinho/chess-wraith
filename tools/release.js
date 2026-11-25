@@ -33,6 +33,7 @@ function versions() {
     header: (/@version\s+(\S+)/.exec(read('src/00-header.js')) || [])[1],
     config: (/const VERSION = '([^']+)'/.exec(read('src/10-config.js')) || [])[1],
     readme: (/version-(\d+\.\d+\.\d+)-/.exec(read('README.md')) || [])[1],
+    mirror: (/@v(\d+\.\d+\.\d+)\/vendor/.exec(read('src/10-config.js')) || [])[1],
     changelog: (/^## (\d+\.\d+\.\d+)/m.exec(read('CHANGELOG.md')) || [])[1]
   };
 }
@@ -74,6 +75,8 @@ function prepare(version) {
   if (lock.packages && lock.packages['']) lock.packages[''].version = version;
   write('package-lock.json', `${JSON.stringify(lock, null, 2)}\n`);
   bumpIn('README.md', /version-\d+\.\d+\.\d+-/, `version-${version}-`);
+  // The engine URL moves with the tag: the release is what jsDelivr can serve.
+  bumpIn('src/10-config.js', /@v\d+\.\d+\.\d+\/vendor/, `@v${version}/vendor`);
   execFileSync(process.execPath, [path.join(ROOT, 'tools', 'build.js')], { cwd: ROOT, stdio: 'inherit' });
   check();
   console.log(`release: prepared ${version}`);

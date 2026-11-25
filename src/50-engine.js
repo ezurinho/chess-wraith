@@ -1,8 +1,27 @@
 // Local Stockfish 19 NNUE. The engine ships as a classic worker script plus a
-// .wasm sidecar. A blob worker cannot see its own directory, so the worker code
-// is prefixed with a fetch shim that redirects the .wasm request to the mirror
-// URL. Verified in Chrome on chess.com: blob workers and WASM compile are not
-// blocked by the page CSP.
+// .wasm sidecar. A blob worker cannot see its own directory, and the build does
+// not ask for "stockfish.wasm" either: it builds the name from self.location.href
+// plus a content hash, so the request looks like
+//   https://www.chess.comhttps://www.chess.com/554211df-...
+// Matching on ".wasm" therefore never fired and NNUE silently failed. The shim
+// below answers every request that is not the engine's own script with the wasm
+// bytes from the mirror, which is the only other thing this build fetches.
+// Verified in Chrome on chess.com: blob workers and WASM compile are not blocked
+// by the page CSP, and the engine answers uci in ~110 ms.
+
+// Pure: the worker preamble. The engine fetches exactly two things, its own
+// script (never, it is already inlined) and its wasm sidecar, so everything that
+// is not the script URL is answered with the wasm from the mirror.
+function buildNnueShim(wasmUrl, engineJsUrl) {
+  return (
+    `self.__CW_WASM=${JSON.stringify(wasmUrl)};` +
+    `self.__CW_JS=${JSON.stringify(engineJsUrl)};` +
+    '(function(){var real=self.fetch?self.fetch.bind(self):null;if(!real)return;' +
+    'self.fetch=function(u,o){var s=String(u&&u.url?u.url:u);' +
+    'if(s===self.__CW_JS)return real(u,o);' +
+    'return real(self.__CW_WASM,o);};})();\n'
+  );
+}
 
 class WraithEngine {
   constructor() {
@@ -124,12 +143,7 @@ class WraithEngine {
 
   async #nnueWorkerSource() {
     const code = await this.#fetchText(ENGINE_FILES.nnueJs);
-    const shim =
-      `self.__CW_WASM=${JSON.stringify(ENGINE_FILES.nnueWasm)};` +
-      `(function(){var f=self.fetch?self.fetch.bind(self):null;` +
-      `if(!f)return;self.fetch=function(u,o){var s=String(u&&u.url?u.url:u);` +
-      `if(s.indexOf('.wasm')>=0)return f(self.__CW_WASM,o);return f(u,o);};})();\n`;
-    return shim + code;
+    return buildNnueShim(ENGINE_FILES.nnueWasm, ENGINE_FILES.nnueJs) + code;
   }
 
   async #plainWorkerSource() {
@@ -155,6 +169,8 @@ class WraithEngine {
 
     if (line === 'readyok') {
       this.ready = true;
+      // It booted: whatever we remembered about this mirror is wrong now.
+      if (this.nnue) forgetNnueSkip();
       if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
       this.onReady && this.onReady(this.mode);
       return;

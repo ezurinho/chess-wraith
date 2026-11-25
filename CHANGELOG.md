@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.3.0 — 2026-11-25
+
+The engine the README promised and the engine that ran were not the same one.
+This release makes Stockfish 19 NNUE actually boot, and makes the pacing depend
+on the account and the opponent instead of only on a fixed window.
+
+- **NNUE was never failing to load: it was asking for the wrong file.** The
+  build does not request `stockfish.wasm`; it builds a name from
+  `self.location.href` plus a content hash, so the request looked like
+  `https://www.chess.comhttps://www.chess.com/554211df-…` and the old shim --
+  which matched on `.wasm` -- never fired. The shim now answers every request
+  that is not the engine's own script with the wasm from the mirror.
+  Measured in Chrome on chess.com: `uciok` in 111 ms, 1,285,348 nodes in
+  1,657 ms with MultiPV 3 and WDL on (≈776 kN/s, depth 18). The JS build stays
+  as the documented fallback for a blocked worker or a cold cache.
+- **The NNUE verdict is no longer sticky.** A successful boot clears the
+  seven-day skip marker, so a fix ships to browsers that had cached the old
+  failure.
+- **Pace is account-based.** Settings stay global; the opening memory and a new
+  rolling median of this account's own think times are stored per signed-in
+  username. Once there are six samples, a move is kept inside 0.65×–1.5× of the
+  account's own rhythm, so the same account does not play like two people.
+- **Pace follows the opponent.** The gap between our move landing and theirs is
+  their think time; the delay never drops below 35% of it (capped at 3.2 s),
+  because answering a ten-second opponent instantly is a pattern on its own.
+- **A hand on the board wins.** A pointerdown outside the panel defers the
+  pending move for two seconds, twice; after that the script stops and says
+  `paused: your hand is on the board`.
+- Panel: the Session card shows the account and your learned pace next to the
+  opponent's tempo.
+- 46 tests (was 37): the wasm shim against the real garbage URL, the pace band,
+  the opponent floor, and the board parser's pure helpers.
+- `tools/release.js` now also moves `ENGINE_MIRROR` to the new tag and CI fails
+  when the mirror, the package, the header, the README badge and the CHANGELOG
+  disagree.
+
 ## 1.2.0 — 2026-11-25
 
 A review against the live site found seven ways the script could be confidently
@@ -123,4 +159,5 @@ First release.
 - Hotkeys: `Alt+Shift+A` auto-play, `Alt+Shift+M` play one move, `Alt+Shift+H`
   panel.
 - Fallback engine (`stockfish.js`, no WASM) when the NNUE worker cannot start.
+
 

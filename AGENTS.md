@@ -21,11 +21,13 @@ node tools/release.js check    # package/header/README badge/CHANGELOG agree
    `tools/build.js` owns the order; a new fragment must be added there or it is
    silently dropped. `npm run build:check` catches a stale bundle, not a missing
    fragment.
-2. The version lives in four places (`package.json`, `src/00-header.js`,
-   `src/10-config.js`, the README badge) plus the top `CHANGELOG.md` section.
-   `tools/release.js check` fails when they disagree; do not hand-edit one.
-3. `ENGINE_MIRROR` is pinned to a release tag. Bumping it is part of a release:
-   bump the tag, tag the commit, then the mirror resolves.
+2. The version lives in five places (`package.json`, `src/00-header.js`,
+   `src/10-config.js`, `ENGINE_MIRROR`, the README badge) plus the top
+   `CHANGELOG.md` section. `node tools/release.js prepare <v>` moves all of them
+   and rebuilds; `check` fails when they disagree. Do not hand-edit one.
+3. `ENGINE_MIRROR` is pinned to a release tag, and it must stay equal to the
+   package version: the release is what jsDelivr can serve. The tag is created by
+   the release workflow after the checks pass.
 4. Nothing is written to `window` unless `?cw=1` is in the URL or
    `localStorage['chess-wraith-debug'] === '1'`. Keep it that way.
 5. The panel uses `textContent` for anything that came from the page. No
@@ -41,8 +43,12 @@ node tools/release.js check    # package/header/README badge/CHANGELOG agree
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic. There is no DOM test harness: the board reader is
-  verified by hand against the live site, which is the known weak point.
+- `tests/unit/` — pure logic (49 tests). There is no DOM test harness: the board
+  reader and the worker boot are verified by hand against the live site, which is
+  the known weak point.
+- `docs/research.md` — measured engine numbers, what a fair-play system can see,
+  and the comparison with `nitro-wraith`. Update the numbers when they change;
+  they are claims, and claims rot.
 
 ## Gotchas
 

@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, sideScore, clamp, clampInt, STYLES }`
+  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, sideScore, clamp, clampInt, median, pushBounded, STYLES }`
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -132,4 +132,37 @@ test('the rare rethink can exceed the window, but only when allowed', () => {
   assert.ok(boundedMax <= 3200, `bounded delay escaped its window: ${boundedMax}`);
   assert.ok(rethinkMax > 3200, `rethink never fired: ${rethinkMax}`);
   assert.ok(rethinkMax <= 9000, `rethink exceeded the hard cap: ${rethinkMax}`);
+});
+
+test('an account baseline keeps every move inside a band around its own rhythm', () => {
+  const wide = { ...baseCfg, minThinkMs: 400, maxThinkMs: 5000 };
+  const picks = [];
+  for (let i = 0; i < 200; i++) {
+    picks.push(api.computeDelay(wide, { plyCount: 20, legalMoveCount: 30, baselineMs: 2000 }));
+  }
+  picks.sort((a, b) => a - b);
+  const mid = picks[Math.floor(picks.length / 2)];
+  assert.ok(mid >= 1500 && mid <= 2800, `median off the baseline: ${mid}`);
+  assert.ok(picks[0] >= 900, `too fast for the account: ${picks[0]}`);
+});
+
+test('a slow opponent sets a floor, a fast one does not', () => {
+  const narrow = { ...baseCfg, minThinkMs: 400, maxThinkMs: 600 };
+  for (let i = 0; i < 50; i++) {
+    const slow = api.computeDelay(narrow, { plyCount: 30, oppTempoMs: 8000 });
+    assert.ok(slow >= 2800, `answered a 8s opponent in ${slow}ms`);
+    const fast = api.computeDelay(narrow, { plyCount: 30, oppTempoMs: 520 });
+    assert.ok(fast <= 900, `no floor expected, got ${fast}`);
+  }
+});
+
+test('median and pushBounded behave on the edge cases the pace code feeds them', () => {
+  assert.equal(api.median([]), null);
+  assert.equal(api.median([5]), 5);
+  assert.equal(api.median([1, 2, 3, 4]), 3);
+  assert.equal(api.median([3, 1, 2]), 2);
+  assert.equal(api.median([1, NaN, 0, -4]), 1);
+  assert.equal(api.pushBounded([1, 2], 3, 2).join(','), '2,3');
+  assert.equal(api.pushBounded(null, 7, 3).join(','), '7');
+  assert.equal(api.pushBounded([1], NaN, 3).join(','), '1');
 });

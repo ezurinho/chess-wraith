@@ -261,6 +261,8 @@ const PANEL_HTML = `
             <div class="row"><span>Your accuracy</span><b data-el="acpl">–</b></div>
             <div class="row"><span>Opponent</span><b data-el="opp">–</b></div>
             <div class="row"><span>Playing at</span><b data-el="target">–</b></div>
+            <div class="row"><span>Account</span><b data-el="account">–</b></div>
+            <div class="row"><span>Your pace</span><b data-el="pace">–</b></div>
           </div>
         </div>
       </div>
@@ -541,6 +543,10 @@ class WraithPanel {
 
     this.el.turn.textContent = v.turn ? (v.turn === 'w' ? 'White to move' : 'Black to move') : '–';
     this.el.acpl.textContent = v.acpl > 0 ? `${Math.round(v.acpl)} cp` : '–';
+    this.el.account.textContent = v.account || 'anonymous';
+    this.el.pace.textContent = v.pace
+      ? `${(v.pace / 1000).toFixed(1)}s${v.tempo ? ` · they ${(v.tempo / 1000).toFixed(1)}s` : ''}`
+      : '–';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
     this.el.target.textContent = v.elo ? String(v.elo) : 'full';
 

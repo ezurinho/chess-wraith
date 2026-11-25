@@ -118,10 +118,18 @@ function extractSanFromNode(node) {
       else if (cls.includes('king')) figurine = 'K';
     }
   }
-  const text = (node.textContent || '').trim().replace(/\s+/g, '').replace(/^\d+\.+/, '');
-  if (!text) return '';
-  if (figurine && !/^[KQRBNO0]/.test(text)) return `${figurine}${text}`;
-  return text;
+  return sanFromNodeText(node.textContent, figurine);
+}
+
+// Pure: a move node's text can carry a leading move number ("1.e4") or a whole
+// pair ("1. e4 e5"), and the piece can live in an icon instead of the text.
+function sanFromNodeText(text, figurine) {
+  const clean = String(text || '').trim().replace(/\s+/g, '').replace(/^\d+\.+/, '');
+  if (!clean) return '';
+  // A pawn "figurine" is just a pawn: prefixing it would turn exd5 into Pexd5.
+  const piece = String(figurine || '').toUpperCase();
+  if (/^[KQRBN]$/.test(piece) && !/^[KQRBNO0]/.test(clean)) return `${piece}${clean}`;
+  return clean;
 }
 
 // Move lists show up in two shapes: nodes tagged with data-ply (analysis boards
@@ -153,13 +161,24 @@ function readMoveNodes() {
 }
 
 function readSanMoveList(entries = readMoveNodes()) {
-  const moves = entries.filter((entry) => entry.ply && entry.ply > 0);
+  return sanListFromEntries(
+    entries.map((entry) => ({
+      ply: entry.ply,
+      san: extractSanFromNode(entry.node),
+      selected: entry.selected
+    }))
+  );
+}
+
+// Pure: a list with a hole cannot be trusted as a move history, so it becomes
+// an empty list instead of a wrong one.
+function sanListFromEntries(entries) {
+  const moves = (entries || []).filter((entry) => entry && entry.ply > 0 && entry.san);
   if (moves.length === 0) return [];
   const byPly = new Map();
   let maxPly = 0;
   for (const entry of moves) {
-    const san = extractSanFromNode(entry.node);
-    if (san && !byPly.has(entry.ply)) byPly.set(entry.ply, san);
+    if (!byPly.has(entry.ply)) byPly.set(entry.ply, entry.san);
     if (entry.ply > maxPly) maxPly = entry.ply;
   }
   if (maxPly === 0 || byPly.size < maxPly) return [];
@@ -169,12 +188,17 @@ function readSanMoveList(entries = readMoveNodes()) {
 }
 
 function readPlyCount(entries = readMoveNodes()) {
-  if (entries.length === 0) return null;
-  const selected = entries.find((entry) => entry.selected && entry.ply);
+  return plyFromEntries(entries);
+}
+
+// Pure: the highlighted node is the current ply; otherwise the last one is.
+function plyFromEntries(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const selected = entries.find((entry) => entry && entry.selected && entry.ply);
   if (selected) return selected.ply;
   let maxPly = 0;
   for (const entry of entries) {
-    if (entry.ply && entry.ply > maxPly) maxPly = entry.ply;
+    if (entry && entry.ply && entry.ply > maxPly) maxPly = entry.ply;
   }
   return maxPly || null;
 }

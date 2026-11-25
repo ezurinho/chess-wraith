@@ -118,6 +118,17 @@ function computeDelay(cfg, opts = {}) {
     else if (gap >= 90) ms *= 1.28;
   }
 
+  // The account's own rhythm. Once there is a baseline, a move that is wildly
+  // faster or slower than this account usually plays is the loudest signal on
+  // the page, so the delay stays inside a band around it.
+  const baseline = Number.isFinite(opts.baselineMs) && opts.baselineMs > 0 ? opts.baselineMs : null;
+  if (baseline) ms = clamp(ms, baseline * 0.65, baseline * 1.5);
+
+  // Never answer much faster than the person across the board: a wall of
+  // instant replies against someone taking ten seconds a move is a pattern.
+  const tempo = Number.isFinite(opts.oppTempoMs) && opts.oppTempoMs > 300 ? opts.oppTempoMs : null;
+  if (tempo) ms = Math.max(ms, Math.min(tempo * 0.35, 3200));
+
   if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
   if (opts.isCheck) ms *= 1.12;
   if (opts.isCapture) ms *= 0.92;

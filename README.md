@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.3.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -81,7 +81,9 @@ cache serves it and the whole thing works offline.
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`UCI_Elo`) when a style asks for it. |
 | **Styles** | `adaptive` (measures the opponent's centipawn loss, then sits ~130 Elo above them), `gm`, `club`, `casual` and `full engine`. The target Elo is applied to the engine itself through `Skill Level`, so a preset changes how well it plays, not only how randomly it picks. |
 | **Deliberate misses** | Casual misses 12% of the time, Adaptive 5%, capped at 2.5× the style's slack. Never at the cost of a forced mate; Club and GM always play their best available line. |
-| **Pacing** | Delays inside your own window, plus the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), a 3.5% chance of a rare second thought, and faster play on a low clock. |
+| **Pacing** | Delays inside your own window, plus the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), a 3.5% chance of a rare second thought, and faster play on a low clock. The window is then kept inside 0.65×–1.5× of this account's own learned rhythm, and never below 35% of the opponent's think time. |
+| **Per account** | Settings are global; the opening memory and the learned pace are stored per signed-in username, so two accounts on one browser do not share a fingerprint. |
+| **Hand on the board** | A click outside the panel defers the pending move for 2 s, twice; after that the script stops and says `paused: your hand is on the board`. |
 | **Variety** | Your first two plies are remembered locally; a first move repeated three times in six games drops to 28% weight, and a governor keeps it off move #1 every single turn. |
 | **AFK** | After a game ends it waits a human pause (1.7–4.2 s, 12% of the time 5–9.5 s), presses Rematch or the shortest new game on screen, and re-arms auto-play when the next board appears. If no button is offered it stops and says so. Optional keep-alive audio keeps the hidden tab awake, and the panel reports `on`, `blocked` or `off`. |
 | **Verification** | After playing, it re-reads the board. If the move did not land it retries once, then pauses auto-play and says why. |
@@ -103,11 +105,16 @@ cache serves it and the whole thing works offline.
 - **DOM changes break the reader.** chess.com ships UI changes; when the board
   markup changes, the selectors in `src/40-board.js` need updating. The panel
   will show `waiting for a board…` instead of failing silently.
-- **The effective engine today is Stockfish 2019 JS.** The NNUE build from the
-  extension needs its `.wasm` next to a real script URL; inside a userscript blob
-  worker it never answers `uci`, so the script gives it four seconds and then
-  falls back. That build is weaker and has no WDL bar. A same-origin copy of the
-  engine (a small local server, or a future inlined build) would restore NNUE.
+- **NNUE is not guaranteed.** Stockfish 19 Lite WASM boots in ~110 ms here and
+  runs at ~776 kN/s single-threaded, but it depends on a 1.2 MB download from
+  jsDelivr and on `WebAssembly` inside a blob worker. If either is blocked the
+  script falls back to the 2019 JS build, which is weaker and has no WDL bar.
+  The panel always names the engine that is running.
+- **Synthetic events are not trusted events.** Moves are dispatched as
+  `PointerEvent`s; `event.isTrusted` is `false` for them and no userscript can
+  change that (see [research](docs/research.md)). If chess.com ever checks that
+  flag on move input, this approach is done and only a real extension driving the
+  browser would work.
 - **Not tested on a live rated game.** Verified on the live analysis board and
   in a headless browser against today's markup: board reading in both
   orientations, start position and mid-game grids, engine boot with the JS
@@ -120,18 +127,36 @@ cache serves it and the whole thing works offline.
 
 ## How the engine is loaded
 
-The userscript is a single file; the 1.8 MB engine is not embedded. On boot it
+The userscript is a single file; the 1.2 MB engine is not embedded. On boot it
 fetches `vendor/stockfish-19-lite-single.js` through jsDelivr, prefixes it with a
-small shim that points the `.wasm` request at the matching mirror URL, and starts
-it as a blob worker. If the worker has not answered `uci` within four seconds it
+shim and starts it as a blob worker. The shim exists because the build asks for
+its wasm at a URL it builds from `self.location.href` plus a content hash
+(`https://www.chess.comhttps://www.chess.com/554211df-…`); a blob worker has no
+directory to resolve that against, so every request that is not the engine's own
+script is answered with the wasm bytes from the mirror. `uciok` arrives in about
+110 ms and the panel shows `Stockfish 19 NNUE` with WDL.
+
+If the worker does not answer within four seconds, or the boot throws, the script
 falls back to `vendor/stockfish.js` (Stockfish 2019, no WASM) from the same
 mirror. Nothing is fetched from anywhere else.
 
+Measured on chess.com, MultiPV 3 with WDL:
+
+| Build | Boot | Speed | WDL |
+| --- | --- | --- | --- |
+| `stockfish-19-lite-single` (WASM) | ~110 ms | ~776 kN/s, depth 18 in 1.7 s | yes |
+| `stockfish.js` (2019, asm.js) | ~600 ms | ~40–60 kN/s | no |
+
+
 The mirror URL is pinned to a release tag and never to `@main`: the engine runs
 with chess.com's origin, so the bytes behind it must not change without a tag.
-The NNUE verdict is cached for seven days per mirror — the four second handshake
-can only fail today, and paying it on every page load was pointless.
-`ChessWraith.retryEngine()` (debug API) clears the verdict and tries again.
+`tools/release.js` moves the pin when it bumps the version, and CI fails when the
+pin, the package, the header, the README badge and the CHANGELOG disagree.
+
+A failed NNUE boot is remembered for seven days per mirror so the four second
+handshake is not paid on every page load; a successful boot clears the marker,
+which is how the 1.3.0 fix reached browsers that had cached the old failure.
+`ChessWraith.retryEngine()` (debug API) clears it by hand.
 
 ## Development
 

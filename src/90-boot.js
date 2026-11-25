@@ -1,6 +1,26 @@
 // Orchestrator: read the board, ask the engine, wait like a human, play, verify.
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
+const PACE_KEY = 'chess-wraith-pace-v1';
+// A move landing while a hand is on the board is the one case where the script
+// must yield: playing over someone who just grabbed a piece looks exactly like
+// what it is.
+const TOUCH_GUARD_MS = 2000;
+
+// Two accounts on the same browser should not share a pace fingerprint or an
+// opening habit, so everything adaptive is keyed by whoever is signed in.
+function currentAccount() {
+  for (const sel of ['#user-username-component', '.user-username', '.profile-username']) {
+    const el = document.querySelector(sel);
+    const text = el ? (el.textContent || '').trim() : '';
+    if (text) return text.toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'anonymous';
+  }
+  return 'anonymous';
+}
+
+function paceKey() {
+  return `${PACE_KEY}:${currentAccount()}`;
+}
 
 const cfg = loadSettings();
 const engine = new WraithEngine();
@@ -29,7 +49,12 @@ const state = {
   gameOverSeen: false,
   rematchTried: false,
   rematchTimer: null,
-  keepAlive: 'off'
+  keepAlive: 'off',
+  lastMyMoveAt: 0,
+  lastDelayMs: 0,
+  tempoSamples: [],
+  boardTouchAt: 0,
+  defers: 0
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -62,7 +87,7 @@ function resolveElo() {
 // choice, and it is the easiest one to spot across games.
 function readOpenings() {
   try {
-    const raw = JSON.parse(localStorage.getItem(OPENING_KEY) || '[]');
+    const raw = JSON.parse(localStorage.getItem(`${OPENING_KEY}:${currentAccount()}`) || '[]');
     return Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [];
   } catch {
     return [];
@@ -75,9 +100,34 @@ function recordOpening(uci, ply) {
   list.push(uci);
   while (list.length > 12) list.shift();
   try {
-    localStorage.setItem(OPENING_KEY, JSON.stringify(list));
+    localStorage.setItem(`${OPENING_KEY}:${currentAccount()}`, JSON.stringify(list));
   } catch {
     /* storage can be blocked; variety is a bonus, not a requirement */
+  }
+}
+
+// This account's usual think time, learned from its own moves. Null until there
+// is enough history to mean something.
+function readPaceSamples() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(paceKey()) || '[]');
+    return Array.isArray(raw) ? raw.filter((n) => Number.isFinite(n) && n > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function paceBaseline() {
+  const samples = readPaceSamples();
+  return samples.length >= 6 ? median(samples) : null;
+}
+
+function recordPace(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return;
+  try {
+    localStorage.setItem(paceKey(), JSON.stringify(pushBounded(readPaceSamples(), ms, 40)));
+  } catch {
+    /* storage can be blocked; the baseline is an optimization, not a rule */
   }
 }
 
@@ -237,6 +287,9 @@ function statusView() {
     ply: snap ? plyOf(snap) : 0,
     styleLabel: (STYLES[cfg.style] || STYLES.adaptive).label,
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
+    account: currentAccount(),
+    pace: paceBaseline(),
+    tempo: median(state.tempoSamples),
     version: VERSION
   };
 }
@@ -358,6 +411,15 @@ function scheduleAutoMove(result) {
   const isCapture = Boolean(snap.grid[toRank] && snap.grid[toRank][toFile]);
   const gapCp = result.lines.length > 1 ? Math.abs(sideScore(result.lines[0]) - sideScore(result.lines[1])) : null;
   const bestSan = (choice && choice.line && choice.line.bestSan) || '';
+
+  // The opponent just moved while we were on their time: that gap is their
+  // think time, and it is the only tempo signal on the page.
+  if (state.lastMyMoveAt) {
+    const tempo = Date.now() - state.lastMyMoveAt;
+    if (tempo > 400 && tempo < 240000) state.tempoSamples = pushBounded(state.tempoSamples, tempo, 9);
+    state.lastMyMoveAt = 0;
+  }
+
   const delay = computeDelay(cfg, {
     plyCount: ply,
     legalMoveCount: legal.length,
@@ -365,19 +427,40 @@ function scheduleAutoMove(result) {
     isCheck: /[+#]$/.test(bestSan),
     gapCp,
     allowRethink: true,
-    clockSeconds: state.clockSeconds
+    clockSeconds: state.clockSeconds,
+    oppTempoMs: median(state.tempoSamples),
+    baselineMs: paceBaseline()
   });
 
   const targetFen = result.fen;
+  state.lastDelayMs = delay;
+  armAutoMove(move, targetFen, choice, delay);
+
+  refreshPanel();
+}
+
+function armAutoMove(move, targetFen, choice, delay) {
   state.autoTimer = setTimeout(() => {
     state.autoTimer = null;
     if (!state.autoPlay || !state.snapshot || state.snapshot.fen !== targetFen) return;
     if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
     if (cfg.pauseWhenHidden && document.hidden) return;
+
+    // Somebody is holding the board. Give them a couple of seconds, twice; if
+    // they are still there, staying out of the way is the whole point.
+    if (Date.now() - state.boardTouchAt < TOUCH_GUARD_MS) {
+      state.defers += 1;
+      if (state.defers > 2) {
+        state.warn = 'paused: your hand is on the board';
+        refreshPanel();
+        return;
+      }
+      armAutoMove(move, targetFen, choice, Math.round(rand(1500, 2600)));
+      return;
+    }
+    state.defers = 0;
     playMove(move, targetFen, choice);
   }, delay);
-
-  refreshPanel();
 }
 
 async function playMove(move, targetFen, choice) {
@@ -403,6 +486,8 @@ async function playMove(move, targetFen, choice) {
       state.myAcpl = state.myCpLosses.reduce((a, b) => a + b, 0) / state.myCpLosses.length;
     }
     recordOpening(move, plyOf(snap));
+    recordPace(state.lastDelayMs);
+    state.lastMyMoveAt = Date.now();
     scheduleScan(120);
     return true;
   }
@@ -625,6 +710,15 @@ function boot() {
   syncKeepAlive();
   engine.boot();
   window.addEventListener('keydown', onKeyDown, true);
+  // Clicks on the panel itself are not "a hand on the board".
+  window.addEventListener(
+    'pointerdown',
+    (event) => {
+      if (panel.host && event.target === panel.host) return;
+      state.boardTouchAt = Date.now();
+    },
+    true
+  );
 
   docObserver = new MutationObserver(() => {
     if (!state.boardEl || !state.boardEl.isConnected) scheduleScan(140);
