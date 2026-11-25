@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.12.0
+// @version      1.13.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -107,7 +107,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.12.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.13.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2190,6 +2190,8 @@ class WraithEngine {
   }
 
   async analyze(request) {
+    const hasMoves = Array.isArray(request && request.uciMoves) && request.uciMoves.length > 0;
+    if (!request || (!hasMoves && !request.fen)) return [];
     const ready = await this.ensureReady();
     if (!ready) return [];
     return new Promise((resolve) => {
@@ -2208,7 +2210,11 @@ class WraithEngine {
     this.lines = new Map();
     this.search = job;
     this.searching = true;
-    this.#send(job.uciMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
+    // An empty move list is not a position. `positionMoves([])` answers
+    // `position startpos`, which would have the engine analyse the opening
+    // while the board sits in the middlegame or the endgame.
+    const hasMoves = Array.isArray(job.uciMoves) && job.uciMoves.length > 0;
+    this.#send(hasMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
     this.#send(`go depth ${depth} movetime ${movetime}`);

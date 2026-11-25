@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.13.0 — 2026-11-25
+
+A real engine bug, found while proving the 1.12.0 timings against a bare FEN.
+
+- **An empty move list analysed the starting position.** `#runNow` asked
+  `job.uciMoves ? …`, and the field is always an array, so a snapshot with no
+  readable move list (a board joined mid-game, a position without history) sent
+  `position startpos` and the engine answered for the opening. On the analysed
+  endgame FEN it suggested `Nf3`, a move that does not exist there; auto-play
+  then clicked, the click did nothing and the session paused. Now the position
+  comes from the FEN unless there is at least one move to replay.
+- `analyze()` also refuses a request with neither a FEN nor moves instead of
+  sending `position fen undefined`.
+- Two tests for both branches; the old assertion that encoded `startpos` for an
+  empty history was corrected. 115 tests.
+
 ## 1.12.0 — 2026-11-25
 
 Review of the search and of the update row.

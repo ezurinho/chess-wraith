@@ -135,6 +135,54 @@ test('a search sends position and go, then resolves the formatted best move', as
   engine.destroy();
 });
 
+test('an empty move list analyses the FEN, not the starting position', async () => {
+  const { api, workers } = harness();
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+
+  const fen = '8/5pk1/6p1/8/3K4/5P2/6P1/8 w - - 0 40';
+  const done = engine.analyze({
+    fen,
+    turn: 'w',
+    flipped: false,
+    uciMoves: [],
+    depth: 12,
+    moveTimeMs: 300,
+    multiPv: 1,
+    elo: 0,
+    skill: 20
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(worker.sent.includes('position fen ' + fen), 'the position comes from the FEN');
+  assert.ok(!worker.sent.includes('position startpos'), 'the start position is not sent');
+  worker.reply('info depth 12 seldepth 16 multipv 1 score cp 12 nodes 900 pv d4d5');
+  worker.reply('bestmove d4d5');
+  const lines = await done;
+  assert.equal(lines[0].bestUci, 'd4d5');
+  engine.destroy();
+});
+
+test('a request with neither a fen nor moves resolves without searching', async () => {
+  const { api, workers } = harness();
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+
+  const lines = await engine.analyze({ turn: 'w', uciMoves: [] });
+  assert.equal(lines.length, 0);
+  assert.ok(!worker.sent.some((c) => c.startsWith('position')), 'nothing was sent');
+  engine.destroy();
+});
+
 test('the NNUE build gets the strength options the 2019 build cannot take', async () => {
   const { api, workers } = harness({ nnueSkip: false });
   const engine = new api.WraithEngine();
@@ -160,7 +208,8 @@ test('the NNUE build gets the strength options the 2019 build cannot take', asyn
   await new Promise((r) => setImmediate(r));
   assert.ok(worker.sent.includes('setoption name UCI_LimitStrength value true'));
   assert.ok(worker.sent.includes('setoption name UCI_Elo value 1800'));
-  assert.ok(worker.sent.includes('position startpos'), 'an empty history is startpos, not an empty moves list');
+  // The FEN is authoritative: an empty move list is not a position.
+  assert.ok(worker.sent.includes('position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'), 'the position comes from the FEN');
   worker.reply('bestmove e2e4');
   await done;
   engine.destroy();

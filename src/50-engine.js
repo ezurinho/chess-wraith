@@ -262,6 +262,8 @@ class WraithEngine {
   }
 
   async analyze(request) {
+    const hasMoves = Array.isArray(request && request.uciMoves) && request.uciMoves.length > 0;
+    if (!request || (!hasMoves && !request.fen)) return [];
     const ready = await this.ensureReady();
     if (!ready) return [];
     return new Promise((resolve) => {
@@ -280,7 +282,11 @@ class WraithEngine {
     this.lines = new Map();
     this.search = job;
     this.searching = true;
-    this.#send(job.uciMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
+    // An empty move list is not a position. `positionMoves([])` answers
+    // `position startpos`, which would have the engine analyse the opening
+    // while the board sits in the middlegame or the endgame.
+    const hasMoves = Array.isArray(job.uciMoves) && job.uciMoves.length > 0;
+    this.#send(hasMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
     this.#send(`go depth ${depth} movetime ${movetime}`);
