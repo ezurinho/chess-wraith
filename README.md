@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.25.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.26.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -85,6 +85,7 @@ until jsDelivr serves the new tag. A failing check never reaches a tag.
 | **Turn detection** | The turn is taken from the move list, the running clock or the last-move highlight, and the source is recorded. When none of the three is readable the panel says `turn not readable; not playing` and nothing is played on a guess. |
 | **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. Search time follows the material: 0.85× in the opening, 1.35× with ten men or fewer, because that is where a game is converted or thrown away. |
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`Skill Level`) tuned to the rating on the board. |
+| **After an AFK night** | The panel keeps the last five transitions (session limit, AFK stopped, manual move suspected, rematch pressed) and shows the newest two with a `HH:MM`. The tooltip has all five; the bug report carries them too, which is what turns "it stopped at some point" into a time and a reason. |
 | **Promotion under a flag** | The promotion dialog is painted after the drop, so it is polled — eight looks over 840 ms. That budget is fine with a minute on the clock and fatal with two seconds, so below 8 s the poll speeds up (40 ms looks) and spends at most a third of what is left. |
 | **Floor** | Stockfish's `UCI_Elo` bottoms out at 1320 (`src/search.h`, `LowestElo`). An account below that used to be aimed at a number the engine cannot take and told nothing; the panel now says `1320 · floor` and the move window widens with the gap (up to 120 cp of extra slack), so a 900-rated account gets loose choices instead of a 1320 engine pretending to be 900. |
 | **One way to play** | No `GM`/`rage`/`full engine` presets and no switch out of it: the panel shows `LEGIT` and means it. The strength is anchored to your own published rating and may drift only 75 cp below or 25 above it (your target Elo ihen nobody is measured yet), the chosen move stays within the slack band of the best one, and the engine is never asked for its raw best line — there is no deliberate-miss dice either. |

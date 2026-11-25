@@ -187,6 +187,29 @@ function promotionPollPlan(clockSeconds) {
   return { attempts: Math.max(2, Math.min(8, Math.round(budget / pauseMs))), pauseMs };
 }
 
+// A tab you left at midnight should be able to tell you what happened while
+// you were away. Five entries, newest last, consecutive repeats collapsed so a
+// retry loop cannot flush the history it is supposed to explain.
+function pushEvent(events, text, at, limit = 5) {
+  const list = Array.isArray(events) ? events.slice() : [];
+  const label = String(text == null ? '' : text).trim();
+  if (!label) return list;
+  const cap = Math.max(1, Math.round(Number(limit) || 5));
+  const last = list[list.length - 1];
+  if (last && last.text === label) return list;
+  list.push({ at: Number(at) || 0, text: label });
+  while (list.length > cap) list.shift();
+  return list;
+}
+
+// 24-hour `HH:MM` for the history line, in the page's own timezone.
+function eventClock(at) {
+  const when = new Date(Number(at) || 0);
+  const hh = String(when.getHours()).padStart(2, '0');
+  const mm = String(when.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}
+
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
   const base = movetime * 6 + 6000;

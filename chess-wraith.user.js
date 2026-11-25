@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.25.0
+// @version      1.26.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.25.0';
+const VERSION = '1.26.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.25.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.26.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -305,6 +305,29 @@ function promotionPollPlan(clockSeconds) {
   const pauseMs = clock < 4 ? 40 : 80;
   const budget = Math.max(150, Math.round(clock * 350));
   return { attempts: Math.max(2, Math.min(8, Math.round(budget / pauseMs))), pauseMs };
+}
+
+// A tab you left at midnight should be able to tell you what happened while
+// you were away. Five entries, newest last, consecutive repeats collapsed so a
+// retry loop cannot flush the history it is supposed to explain.
+function pushEvent(events, text, at, limit = 5) {
+  const list = Array.isArray(events) ? events.slice() : [];
+  const label = String(text == null ? '' : text).trim();
+  if (!label) return list;
+  const cap = Math.max(1, Math.round(Number(limit) || 5));
+  const last = list[list.length - 1];
+  if (last && last.text === label) return list;
+  list.push({ at: Number(at) || 0, text: label });
+  while (list.length > cap) list.shift();
+  return list;
+}
+
+// 24-hour `HH:MM` for the history line, in the page's own timezone.
+function eventClock(at) {
+  const when = new Date(Number(at) || 0);
+  const hh = String(when.getHours()).padStart(2, '0');
+  const mm = String(when.getMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
 }
 
 function searchBudgetMs(job) {
@@ -3487,6 +3510,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 11px;border-top:1px solid var(--line);
   font:600 8.5px/1 var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--dim-2)}
 .warnline{color:var(--ink-warn);font-size:8.5px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history{padding:6px 11px 0;font-size:8.5px;line-height:1.45;color:var(--ink-dim);display:flex;flex-direction:column;gap:2px}
+.history[hidden]{display:none}
+.history span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history b{color:var(--ink);font-weight:600;margin-right:6px}
 .panel[data-collapsed="true"]{width:auto}
 .panel[data-collapsed="true"] .body{display:none}
 .panel[data-collapsed="true"] .head{border-bottom:0}
@@ -3647,6 +3674,7 @@ const PANEL_HTML = `
       </div>
     </div>
   </div>
+  <div class="history" data-el="history" hidden></div>
   <div class="foot"><span data-el="foot">waiting</span><span class="warnline" data-el="warn"></span></div>
 </div>
 `;
@@ -3912,6 +3940,18 @@ class WraithPanel {
     this.el.clock.textContent = Number.isFinite(v.clock) ? `${Math.round(v.clock)}s` : '—';
     this.el.fill.style.setProperty('--fill', String(clamp((v.ply || 0) / 80, 0, 1)));
     this.el.warn.textContent = v.warn || '';
+    const events = Array.isArray(v.events) ? v.events.slice(-2) : [];
+    this.el.history.hidden = events.length === 0;
+    this.el.history.title = events.map((item) => `${eventClock(item.at)} ${item.text}`).join('\n');
+    this.el.history.textContent = '';
+    for (const item of events) {
+      const line = document.createElement('span');
+      const when = document.createElement('b');
+      when.textContent = eventClock(item.at);
+      line.appendChild(when);
+      line.appendChild(document.createTextNode(item.text));
+      this.el.history.appendChild(line);
+    }
     this.el.foot.textContent = v.passiveTab
       ? 'second tab · passive'
       : v.throttled
@@ -4045,6 +4085,7 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  events: [],
   // Which account the loaded settings belong to; see adoptAccountSettings().
   settingsAccount: '',
   paceProfile: null,
@@ -4543,6 +4584,7 @@ function syncKeepAlive() {
 
 function stopRematch(reason) {
   state.rematchTried = true;
+  noteEvent(reason);
   cfg.autoRematch = false;
   state.warn = reason;
   saveSettings(cfg);
@@ -4562,6 +4604,7 @@ function pressRematch() {
   if (text) state.rematchTriedTexts.push(text);
   state.rematchAttempts += 1;
   button.click();
+  noteEvent(`pressed ${text || 'the game button'}`);
   state.warn = '';
   scheduleScan(900);
   if (state.rematchAttempts >= 3) {
@@ -4595,6 +4638,7 @@ function queueRematch() {
     state.autoPlay = false;
     cfg.autoRematch = false;
     state.warn = limit.reason;
+    noteEvent(limit.reason);
     saveSettings(cfg);
     refreshPanel();
     return;
@@ -4670,6 +4714,15 @@ function toggleAfk(next) {
   refreshPanel();
 }
 
+// Every meaningful transition is written here, not just the current warn: the
+// user comes back hours later and the last line is what explains the night.
+function noteEvent(text) {
+  const next = pushEvent(state.events, text, Date.now());
+  if (next.length === state.events.length && state.events.length > 0) return;
+  state.events = next;
+  refreshPanel();
+}
+
 function statusView() {
   const snap = state.snapshot;
   const side = mySide(snap ? snap.flipped : false);
@@ -4682,6 +4735,7 @@ function statusView() {
     turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
     warn: state.warn || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
+    events: state.events,
     clock: state.clockSeconds,
     opponent: state.opponentRating,
     estimate: state.oppEloEstimate,
@@ -5078,7 +5132,10 @@ function runScan() {
       clearMoveRetry();
       state.moveMisses = 0;
       if (cfg.autoRematch) queueRematch();
-      else state.autoPlay = false;
+      else {
+        state.autoPlay = false;
+        noteEvent('game over · auto play off');
+      }
     }
     refreshPanel();
     return;
@@ -5115,6 +5172,7 @@ function runScan() {
         if (state.foreignHits >= 2) {
           state.autoPlay = false;
           state.warn = 'paused: manual move detected';
+          noteEvent('paused: manual move suspected');
         } else {
           state.warn = 'checking a move that was not mine';
           scheduleScan(700);
@@ -5228,6 +5286,9 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
+    state.events.length
+      ? `history ${state.events.map((item) => `${eventClock(item.at)} ${item.text}`).join(' | ')}`
+      : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,

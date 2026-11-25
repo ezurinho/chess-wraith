@@ -204,6 +204,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 11px;border-top:1px solid var(--line);
   font:600 8.5px/1 var(--font-mono);letter-spacing:.05em;text-transform:uppercase;color:var(--dim-2)}
 .warnline{color:var(--ink-warn);font-size:8.5px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history{padding:6px 11px 0;font-size:8.5px;line-height:1.45;color:var(--ink-dim);display:flex;flex-direction:column;gap:2px}
+.history[hidden]{display:none}
+.history span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history b{color:var(--ink);font-weight:600;margin-right:6px}
 .panel[data-collapsed="true"]{width:auto}
 .panel[data-collapsed="true"] .body{display:none}
 .panel[data-collapsed="true"] .head{border-bottom:0}
@@ -364,6 +368,7 @@ const PANEL_HTML = `
       </div>
     </div>
   </div>
+  <div class="history" data-el="history" hidden></div>
   <div class="foot"><span data-el="foot">waiting</span><span class="warnline" data-el="warn"></span></div>
 </div>
 `;
@@ -629,6 +634,18 @@ class WraithPanel {
     this.el.clock.textContent = Number.isFinite(v.clock) ? `${Math.round(v.clock)}s` : '—';
     this.el.fill.style.setProperty('--fill', String(clamp((v.ply || 0) / 80, 0, 1)));
     this.el.warn.textContent = v.warn || '';
+    const events = Array.isArray(v.events) ? v.events.slice(-2) : [];
+    this.el.history.hidden = events.length === 0;
+    this.el.history.title = events.map((item) => `${eventClock(item.at)} ${item.text}`).join('\n');
+    this.el.history.textContent = '';
+    for (const item of events) {
+      const line = document.createElement('span');
+      const when = document.createElement('b');
+      when.textContent = eventClock(item.at);
+      line.appendChild(when);
+      line.appendChild(document.createTextNode(item.text));
+      this.el.history.appendChild(line);
+    }
     this.el.foot.textContent = v.passiveTab
       ? 'second tab · passive'
       : v.throttled

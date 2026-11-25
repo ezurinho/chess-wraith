@@ -85,6 +85,7 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  events: [],
   // Which account the loaded settings belong to; see adoptAccountSettings().
   settingsAccount: '',
   paceProfile: null,
@@ -583,6 +584,7 @@ function syncKeepAlive() {
 
 function stopRematch(reason) {
   state.rematchTried = true;
+  noteEvent(reason);
   cfg.autoRematch = false;
   state.warn = reason;
   saveSettings(cfg);
@@ -602,6 +604,7 @@ function pressRematch() {
   if (text) state.rematchTriedTexts.push(text);
   state.rematchAttempts += 1;
   button.click();
+  noteEvent(`pressed ${text || 'the game button'}`);
   state.warn = '';
   scheduleScan(900);
   if (state.rematchAttempts >= 3) {
@@ -635,6 +638,7 @@ function queueRematch() {
     state.autoPlay = false;
     cfg.autoRematch = false;
     state.warn = limit.reason;
+    noteEvent(limit.reason);
     saveSettings(cfg);
     refreshPanel();
     return;
@@ -710,6 +714,15 @@ function toggleAfk(next) {
   refreshPanel();
 }
 
+// Every meaningful transition is written here, not just the current warn: the
+// user comes back hours later and the last line is what explains the night.
+function noteEvent(text) {
+  const next = pushEvent(state.events, text, Date.now());
+  if (next.length === state.events.length && state.events.length > 0) return;
+  state.events = next;
+  refreshPanel();
+}
+
 function statusView() {
   const snap = state.snapshot;
   const side = mySide(snap ? snap.flipped : false);
@@ -722,6 +735,7 @@ function statusView() {
     turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
     warn: state.warn || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
+    events: state.events,
     clock: state.clockSeconds,
     opponent: state.opponentRating,
     estimate: state.oppEloEstimate,
@@ -1118,7 +1132,10 @@ function runScan() {
       clearMoveRetry();
       state.moveMisses = 0;
       if (cfg.autoRematch) queueRematch();
-      else state.autoPlay = false;
+      else {
+        state.autoPlay = false;
+        noteEvent('game over · auto play off');
+      }
     }
     refreshPanel();
     return;
@@ -1155,6 +1172,7 @@ function runScan() {
         if (state.foreignHits >= 2) {
           state.autoPlay = false;
           state.warn = 'paused: manual move detected';
+          noteEvent('paused: manual move suspected');
         } else {
           state.warn = 'checking a move that was not mine';
           scheduleScan(700);
@@ -1268,6 +1286,9 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
+    state.events.length
+      ? `history ${state.events.map((item) => `${eventClock(item.at)} ${item.text}`).join(' | ')}`
+      : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,

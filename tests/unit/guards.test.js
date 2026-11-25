@@ -6,11 +6,33 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadFragments } = require('./helpers');
 
-const utils = loadFragments(['10-config.js', '20-utils.js'], `{ tabLeaseDecision, foreignMoveSeen }`);
+const utils = loadFragments(['10-config.js', '20-utils.js'], `{ tabLeaseDecision, foreignMoveSeen, pushEvent, eventClock }`);
 const analysis = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
   `{ acplBand, acplGuard }`
 );
+
+// The history the panel shows after an AFK night: it has to survive a retry
+// loop without turning five useful lines into five copies of the same one.
+test('the event history caps, collapses repeats and keeps the newest', () => {
+  let list = [];
+  for (let i = 1; i <= 8; i++) list = utils.pushEvent(list, `event ${i}`, i * 1000);
+  assert.equal(list.length, 5, 'five lines, not eight');
+  assert.deepEqual(list.map((item) => item.text), ['event 4', 'event 5', 'event 6', 'event 7', 'event 8']);
+  assert.equal(list[4].at, 8000);
+
+  const repeated = utils.pushEvent(list, 'event 8', 9000);
+  assert.equal(repeated.length, 5, 'a repeat of the last line is dropped');
+  assert.equal(utils.pushEvent(list, '   ', 9000).length, 5, 'blank lines are ignored');
+  assert.equal(utils.pushEvent(null, 'first', 1).length, 1, 'an empty history starts one');
+  assert.equal(utils.pushEvent(list, 'x', 1, 2).length, 2, 'the cap is honoured');
+});
+
+test('the history clock is 24-hour HH:MM', () => {
+  const at = new Date(2026, 10, 25, 7, 4).getTime();
+  assert.equal(utils.eventClock(at), '07:04');
+  assert.equal(utils.eventClock(0).length, 5);
+});
 
 test('an empty lease is claimed', () => {
   assert.equal(utils.tabLeaseDecision(null, 1000, 9000, 'me'), 'claim');

@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.26.0 — 2026-11-25
+
+A tab you left alone can say what happened.
+
+- `state.warn` was a single line: the newest reason overwrote the one before it,
+  so coming back to "paused" never said whether it stopped at 01:12 or 05:40.
+- The panel now keeps the last five transitions with an `HH:MM` — session limit,
+  AFK stopped, rematch declined, manual move suspected, rematch pressed, game
+  over with auto-play off — and shows the newest two under the foot. The
+  tooltip carries all five.
+- The bug report gained a `history` line with the same entries.
+- `pushEvent` collapses consecutive repeats and caps the list, so a retry loop
+  cannot flush the history it is meant to explain.
+- 146 tests: the cap, the repeat collapse, the blank line, the 24-hour clock,
+  and the AFK rematch press showing up in the history end to end.
+
 ## 1.25.0 — 2026-11-25
 
 The bench that starts the script.

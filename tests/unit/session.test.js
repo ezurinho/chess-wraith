@@ -195,6 +195,9 @@ test('a finished game with AFK on presses the button a person would press', asyn
     assert.deepEqual(pressed, ['Rematch'], 'the first choice, not a random button');
     assert.equal(api.state.gameOverSeen, true, 'the game over was seen');
     assert.equal(api.state.rematchAttempts, 1, 'pressed once, not in a loop');
+    const last = api.state.events[api.state.events.length - 1];
+    assert.match(last.text, /rematch/i, 'the press landed in the history');
+    assert.ok(api.state.events.length <= 5, 'and the history stays short');
   } finally {
     stop();
   }

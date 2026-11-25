@@ -104,6 +104,18 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## Eight hours of nothing to look at
+
+A tab left alone all night is a log with no reader: every decision was already
+made, and the state at dawn is one line. That is why the last five transitions
+are kept rather than the current warning — a warning is overwritten by the next
+one, and the interesting one is usually the oldest.
+
+The cap is five because the panel is 322 px wide: two lines fit under the foot,
+the rest live in the tooltip. Repeats are collapsed, because a retry loop can
+fire the same reason every four seconds and would otherwise erase its own
+history.
+
 ## The engine floor is a wall, not an opinion
 
 Stockfish's option table is explicit (`src/search.h`, current master):
