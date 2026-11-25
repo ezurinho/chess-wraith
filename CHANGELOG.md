@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 — 2026-11-25
+
+The interface is now the NITRO WRAITH system, and the session can run unattended.
+
+- **Panel rebuilt** on the same design language as nitro-wraith: one token block,
+  six themes (Carbon, Aurora, Sunset, Ice, Violet, RGB) behind a single
+  `data-theme`, an icon rail with Live / Tune / Info, cards with an accent spine,
+  a big eval-and-best hero, a session card and a footer line. Motion is limited
+  to state (boot, pulse, bump, scan) and dies under `prefers-reduced-motion`.
+- **AFK** (`Alt+Shift+F`, chip in the header): after a game ends it waits a
+  human pause (1.7–4.2 s, 12% of the time 5–9.5 s), presses Rematch or the
+  shortest new game it can find, and re-arms auto-play when the next board
+  appears. It stops and says so if no button is offered.
+- **Keep-alive**: optional near-silent AudioContext tone so Chrome treats the
+  tab as active; the panel shows `on`, `blocked` or `off` instead of pretending.
+- **Play while hidden**: the pause is now a switch, off by default.
+- 29 unit tests (was 22): rematch selection, disabled buttons, delay windows,
+  hostile configs and button text normalisation.
+
 ## 1.0.3 — 2026-11-25
 
 - The debug API is no longer a global by default. chess.com's own analysis of

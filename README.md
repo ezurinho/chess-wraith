@@ -32,7 +32,11 @@
 </p>
 
 <p align="center">
-  <img src="assets/panel.png" width="90%" alt="CHESS WRAITH panel beside a chess.com analysis board">
+  <img src="assets/panel-live.png" width="90%" alt="CHESS WRAITH live panel beside a chess.com analysis board">
+</p>
+
+<p align="center">
+  <img src="assets/panel-tune.png" width="70%" alt="CHESS WRAITH settings view">
 </p>
 
 > One tab, one account, no passwords. The engine, the board reader and the
@@ -57,6 +61,9 @@ cache serves it and the whole thing works offline.
 | Control | What it does |
 | --- | --- |
 | **Auto** / `Alt+Shift+A` | Turns auto-play on or off. The setting survives reloads. |
+| **AFK** / `Alt+Shift+F` | Rematch, keep-alive and play-while-hidden in one switch. |
+| Rail (left icons) | Live, Tune and Info views; drag the title to move the panel. |
+| Swatches in Tune | Six themes: Carbon, Aurora, Sunset, Ice, Violet, RGB. |
 | **Step** / `Alt+Shift+M` | Plays the current suggestion once, even with auto-play off. |
 | **Scan** | Re-reads the board and re-runs the engine now. |
 | **⚙** | Style, target Elo, depth, think time, delay window, slack, line count. |
@@ -75,6 +82,7 @@ cache serves it and the whole thing works offline.
 | **Deliberate misses** | Casual misses 12% of the time, Adaptive 5%, capped at 2.5× the style's slack. Never at the cost of a forced mate; Club and GM always play their best available line. |
 | **Pacing** | Delays inside your own window, plus the gap between the top two lines (±18–28%), checks (+12%), captures (−8%), a 3.5% chance of a rare second thought, and faster play on a low clock. |
 | **Variety** | Your first two plies are remembered locally; a first move repeated three times in six games drops to 28% weight, and a governor keeps it off move #1 every single turn. |
+| **AFK** | After a game ends it waits a human pause (1.7–4.2 s, 12% of the time 5–9.5 s), presses Rematch or the shortest new game on screen, and re-arms auto-play when the next board appears. If no button is offered it stops and says so. Optional keep-alive audio keeps the hidden tab awake, and the panel reports `on`, `blocked` or `off`. |
 | **Verification** | After playing, it re-reads the board. If the move did not land it retries once, then pauses auto-play and says why. |
 | **Pauses** | Game over, promotion dialog, premove on the board, low clock, hidden tab. |
 | **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. Shows live ACPL for your own moves, the opponent estimate and the Elo actually being targeted. |
@@ -119,7 +127,7 @@ npm ci
 npm run build        # src/*.js  ->  chess-wraith.user.js + .meta.js
 npm run build:check  # fails if the committed bundle is stale
 npm run lint
-npm test             # node --test tests/unit/*.test.js
+npm test             # node --test "tests/unit/*.test.js"
 npm run check        # all of the above, in CI order
 ```
 
@@ -132,6 +140,7 @@ npm run check        # all of the above, in CI order
 | `src/40-board.js` | chess.com board reader. |
 | `src/50-engine.js` | Stockfish worker, UCI lifecycle, WDL/MultiPV formatting. |
 | `src/60-analysis.js` | Move selection, style profiles, pacing. |
+| `src/65-afk.js` | Rematch decision, next-game timing, audio keep-alive. |
 | `src/70-input.js` | Synthetic pointer input (click and drag). |
 | `src/80-panel.js` | Shadow-DOM panel. |
 | `src/90-boot.js` | Orchestrator and `window.ChessWraith` debug API. |

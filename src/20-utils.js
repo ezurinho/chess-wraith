@@ -40,6 +40,12 @@ function loadSettings() {
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
     merged.panelCollapsed = Boolean(merged.panelCollapsed);
     merged.showLines = clampInt(merged.showLines, 1, 4, CONFIG.showLines);
+    merged.theme = pickEnum(merged.theme, ['carbon', 'aurora', 'sunset', 'ice', 'violet', 'rgb'], CONFIG.theme);
+    merged.autoRematch = Boolean(merged.autoRematch);
+    merged.afkKeepAlive = Boolean(merged.afkKeepAlive);
+    merged.newGameLongChance = Number.isFinite(merged.newGameLongChance)
+      ? clamp(merged.newGameLongChance, 0, 0.5)
+      : CONFIG.newGameLongChance;
     if (merged.maxThinkMs < merged.minThinkMs) merged.maxThinkMs = merged.minThinkMs;
     return merged;
   } catch {

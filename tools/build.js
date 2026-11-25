@@ -26,6 +26,7 @@ const MODULES = [
   '40-board.js',
   '50-engine.js',
   '60-analysis.js',
+  '65-afk.js',
   '70-input.js',
   '80-panel.js',
   '90-boot.js'

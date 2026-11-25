@@ -1,4 +1,4 @@
-const VERSION = '1.0.3';
+const VERSION = '1.1.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -25,7 +25,17 @@ const CONFIG = {
   sideOverride: 'auto', // 'auto' | 'w' | 'b'
   onlyMyTurn: true,
 
+  // AFK: play through the end of a game and into the next one without a human.
+  // Off by default; the panel says what it is doing and why it stopped.
+  autoRematch: false,
+  afkKeepAlive: false,
+  newGameDelayMs: [1700, 4200],
+  newGameLongChance: 0.12,
+  newGameLongMs: [5000, 9500],
+
   // Panel
+  theme: 'carbon', // 'carbon' | 'aurora' | 'sunset' | 'ice' | 'violet' | 'rgb'
+
   panelCollapsed: false,
   showLines: 3
 };

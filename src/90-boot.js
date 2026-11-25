@@ -27,7 +27,11 @@ const state = {
   effectiveElo: null,
   warn: '',
   clockSeconds: null,
-  opponentRating: null
+  opponentRating: null,
+  gameOverSeen: false,
+  rematchTried: false,
+  rematchTimer: null,
+  keepAlive: 'off'
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -119,6 +123,8 @@ function registerButler() {
     playNow,
     unload() {
       clearAutoTimer();
+      clearRematchTimer();
+      stopKeepAlive();
       engine.destroy();
       panel.unmount();
       if (boardObserver) boardObserver.disconnect();
@@ -139,6 +145,80 @@ function clearAutoTimer() {
   }
 }
 
+function clearRematchTimer() {
+  if (state.rematchTimer) {
+    clearTimeout(state.rematchTimer);
+    state.rematchTimer = null;
+  }
+}
+
+function syncKeepAlive() {
+  if (cfg.afkKeepAlive) state.keepAlive = startKeepAlive();
+  else state.keepAlive = stopKeepAlive();
+  return state.keepAlive;
+}
+
+// AFK, in the same shape as nitro-wraith: wait like a person, press the button
+// the site offers, and give up out loud instead of pretending to work.
+function queueRematch() {
+  if (!cfg.autoRematch || state.rematchTried || state.rematchTimer) return;
+  const delay = nextGameDelay(cfg);
+  state.rematchTimer = setTimeout(() => {
+    state.rematchTimer = null;
+    if (!cfg.autoRematch) return;
+    if (!hasGameOverModal()) {
+      state.rematchTried = true;
+      return;
+    }
+    const button = findRematchButton();
+    if (!button) {
+      state.rematchTried = true;
+      state.warn = 'no rematch button; AFK stopped';
+      cfg.autoRematch = false;
+      saveSettings(cfg);
+      refreshPanel();
+      return;
+    }
+    button.click();
+    state.rematchTried = true;
+    state.warn = '';
+    scheduleScan(900);
+    refreshPanel();
+  }, delay);
+  refreshPanel();
+}
+
+function onNewGame() {
+  state.gameOverSeen = false;
+  state.rematchTried = false;
+  state.myCpLosses = [];
+  state.myAcpl = 0;
+  state.lossRecordedFen = null;
+  state.top1Streak = 0;
+  if (cfg.autoRematch) state.autoPlay = true;
+}
+
+// The AFK chip is a single switch for "keep the session moving": rematch, and
+// the keep-alive audio that gives the hidden tab a reason to stay awake.
+function toggleAfk(next) {
+  if (next && typeof next === 'object') {
+    // Called from a Tune switch: settings are already mutated.
+  } else {
+    const on = !(cfg.autoRematch || cfg.afkKeepAlive);
+    cfg.autoRematch = on;
+    cfg.afkKeepAlive = on;
+    if (on) cfg.pauseWhenHidden = false;
+  }
+  if (!cfg.autoRematch) {
+    clearRematchTimer();
+    state.rematchTried = false;
+  }
+  if (!cfg.autoRematch && !cfg.afkKeepAlive) cfg.pauseWhenHidden = true;
+  syncKeepAlive();
+  saveSettings(cfg);
+  refreshPanel();
+}
+
 function statusView() {
   const snap = state.snapshot;
   const side = mySide(snap ? snap.flipped : false);
@@ -154,7 +234,11 @@ function statusView() {
     opponent: state.opponentRating,
     estimate: state.oppEloEstimate,
     acpl: state.myAcpl,
-    elo: state.effectiveElo
+    elo: state.effectiveElo,
+    ply: snap ? plyOf(snap) : 0,
+    styleLabel: (STYLES[cfg.style] || STYLES.adaptive).label,
+    keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
+    version: VERSION
   };
 }
 
@@ -405,12 +489,15 @@ function runScan() {
     state.analysis = null;
     state.autoMovedFen = null;
     if (scanned.gameOver) {
-      state.autoPlay = false;
-      state.warn = 'game over';
+      state.gameOverSeen = true;
+      state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
       clearAutoTimer();
+      if (cfg.autoRematch) queueRematch();
+      else state.autoPlay = false;
       refreshPanel();
       return;
     }
+    if (state.gameOverSeen) onNewGame();
     analyze(snapshot, false);
   } else {
     state.snapshot = snapshot;
@@ -449,6 +536,9 @@ function onKeyDown(event) {
   } else if (key === 'h') {
     event.preventDefault();
     panel.toggleHidden();
+  } else if (key === 'f') {
+    event.preventDefault();
+    toggleAfk();
   }
 }
 
@@ -478,6 +568,7 @@ function settingsChanged(next) {
 
 const panel = new WraithPanel(cfg, {
   toggleAuto,
+  toggleAfk,
   step: () => playNow(),
   scan: () => {
     state.analyzedFen = null;
@@ -510,6 +601,7 @@ function boot() {
   panel.mount();
   panel.render(statusView());
   refreshPanel();
+  syncKeepAlive();
   engine.boot();
   window.addEventListener('keydown', onKeyDown, true);
   window.addEventListener('resize', onGeometry, true);
