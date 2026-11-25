@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.3 — 2026-11-25
+
+Two things that only show up on a release day.
+
+- **A cold tag is not a broken engine.** The NNUE worker now gets a 6.5 s
+  handshake deadline and one silent retry before the script settles for the 2019
+  build. The first request for a just-published tag can 404 while jsDelivr warms
+  the edge, and the old code paid for that with the whole session.
+- **A slow answer is not a stuck panel.** Both update sources are asked at the
+  same time with a 10 s abort, and the higher version wins: `@latest` is fast but
+  stale for hours, the release API is exact but rate-limited.
+- 76 tests, unchanged.
+
 ## 1.5.2 — 2026-11-25
 
 The pill said `UPDATE 1.5.1` and ate the header: the title rendered as

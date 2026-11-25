@@ -40,6 +40,7 @@ class WraithEngine {
     // Not derived from the mode string: "Stockfish 2019 JS" contains "19" too,
     // and that made the fallback take the NNUE-only option path.
     this.nnue = false;
+    this.nnueRetried = false;
   }
 
   async boot() {
@@ -123,16 +124,30 @@ class WraithEngine {
     this.uciRetryTimer = setTimeout(() => {
       if (!this.ready && this.worker === worker) this.#send('uci');
     }, 1200);
+    // 1.2 MB of wasm on a cold CDN edge compiles slower than the 2019 build,
+    // so NNUE gets a longer deadline — and one silent second chance, because
+    // the first request for a brand-new tag can 404 before jsDelivr warms it.
     this.handshakeTimer = setTimeout(() => {
       if (this.ready || this.worker !== worker) return;
       if (preferNnue) {
+        if (!this.nnueRetried) {
+          this.nnueRetried = true;
+          try {
+            worker.terminate();
+          } catch {
+            /* already gone */
+          }
+          this.worker = null;
+          this.#spawn(true).catch(() => this.#spawn(false).catch(() => {}));
+          return;
+        }
         rememberNnueSkip();
         this.onError && this.onError('NNUE engine did not start; using the JS engine');
         this.#spawn(false).catch(() => {});
       } else {
         this.onError && this.onError('engine did not answer uci');
       }
-    }, 4000);
+    }, preferNnue ? 6500 : 4000);
   }
 
   async #fetchText(url) {
@@ -313,6 +328,7 @@ class WraithEngine {
   // Drop the remembered NNUE verdict and try the full engine once more.
   async retryNnue() {
     forgetNnueSkip();
+    this.nnueRetried = false;
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = null;
     try {

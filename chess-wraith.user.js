@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.5.2
+// @version      1.5.3
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.5.2';
+const VERSION = '1.5.3';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -105,7 +105,7 @@ const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.3/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -1824,6 +1824,7 @@ class WraithEngine {
     // Not derived from the mode string: "Stockfish 2019 JS" contains "19" too,
     // and that made the fallback take the NNUE-only option path.
     this.nnue = false;
+    this.nnueRetried = false;
   }
 
   async boot() {
@@ -1907,16 +1908,30 @@ class WraithEngine {
     this.uciRetryTimer = setTimeout(() => {
       if (!this.ready && this.worker === worker) this.#send('uci');
     }, 1200);
+    // 1.2 MB of wasm on a cold CDN edge compiles slower than the 2019 build,
+    // so NNUE gets a longer deadline — and one silent second chance, because
+    // the first request for a brand-new tag can 404 before jsDelivr warms it.
     this.handshakeTimer = setTimeout(() => {
       if (this.ready || this.worker !== worker) return;
       if (preferNnue) {
+        if (!this.nnueRetried) {
+          this.nnueRetried = true;
+          try {
+            worker.terminate();
+          } catch {
+            /* already gone */
+          }
+          this.worker = null;
+          this.#spawn(true).catch(() => this.#spawn(false).catch(() => {}));
+          return;
+        }
         rememberNnueSkip();
         this.onError && this.onError('NNUE engine did not start; using the JS engine');
         this.#spawn(false).catch(() => {});
       } else {
         this.onError && this.onError('engine did not answer uci');
       }
-    }, 4000);
+    }, preferNnue ? 6500 : 4000);
   }
 
   async #fetchText(url) {
@@ -2097,6 +2112,7 @@ class WraithEngine {
   // Drop the remembered NNUE verdict and try the full engine once more.
   async retryNnue() {
     forgetNnueSkip();
+    this.nnueRetried = false;
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = null;
     try {
@@ -3482,11 +3498,13 @@ function debugEnabled() {
   }
 }
 
-// Two public static files answer this, and neither knows who is asking. The
-// API goes first because it is immediate: jsDelivr's @latest can keep answering
-// with the previous tag for hours after a release.
+// Two public static files answer this, and neither knows who is asking. They
+// are asked at the same time and the higher answer wins: jsDelivr's @latest is
+// fast but can keep serving the previous tag for hours, while the release API
+// is immediate but rate-limited. Either one alone would be wrong or slow.
 async function readVersion(url) {
-  const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+  const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
+  const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal });
   if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
   const text = await response.text();
   const tagged = text.match(/@version\s+v?([\d.]+)/i);
@@ -3500,14 +3518,16 @@ async function checkUpdate() {
   state.updateChecking = true;
   refreshPanel();
   try {
+    const answers = await Promise.all([
+      readVersion(UPDATE_API_URL).catch(() => ''),
+      readVersion(UPDATE_META_URL).catch(() => '')
+    ]);
     let latest = '';
-    try {
-      latest = await readVersion(UPDATE_API_URL);
-    } catch {
-      latest = '';
+    for (const answer of answers) {
+      if (!versionParts(answer)) continue;
+      if (!latest || versionNewer(answer, latest)) latest = answer;
     }
-    if (!versionParts(latest)) latest = await readVersion(UPDATE_META_URL);
-    if (!versionParts(latest)) throw new Error('no version');
+    if (!latest) throw new Error('no version');
     state.updateLatest = latest;
     state.updateError = '';
   } catch (error) {

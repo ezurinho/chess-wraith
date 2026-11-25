@@ -164,11 +164,13 @@ function debugEnabled() {
   }
 }
 
-// Two public static files answer this, and neither knows who is asking. The
-// API goes first because it is immediate: jsDelivr's @latest can keep answering
-// with the previous tag for hours after a release.
+// Two public static files answer this, and neither knows who is asking. They
+// are asked at the same time and the higher answer wins: jsDelivr's @latest is
+// fast but can keep serving the previous tag for hours, while the release API
+// is immediate but rate-limited. Either one alone would be wrong or slow.
 async function readVersion(url) {
-  const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' });
+  const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
+  const response = await fetch(url, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal });
   if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
   const text = await response.text();
   const tagged = text.match(/@version\s+v?([\d.]+)/i);
@@ -182,14 +184,16 @@ async function checkUpdate() {
   state.updateChecking = true;
   refreshPanel();
   try {
+    const answers = await Promise.all([
+      readVersion(UPDATE_API_URL).catch(() => ''),
+      readVersion(UPDATE_META_URL).catch(() => '')
+    ]);
     let latest = '';
-    try {
-      latest = await readVersion(UPDATE_API_URL);
-    } catch {
-      latest = '';
+    for (const answer of answers) {
+      if (!versionParts(answer)) continue;
+      if (!latest || versionNewer(answer, latest)) latest = answer;
     }
-    if (!versionParts(latest)) latest = await readVersion(UPDATE_META_URL);
-    if (!versionParts(latest)) throw new Error('no version');
+    if (!latest) throw new Error('no version');
     state.updateLatest = latest;
     state.updateError = '';
   } catch (error) {
