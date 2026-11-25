@@ -104,6 +104,16 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## Most games end without moving a piece
+
+661 games from the October 2026 rapid leaderboard, sorted by how they ended:
+318 resignations, 195 flags, 5 agreed draws, 3 abandonments — **521 of 661, 79%**,
+end on a board that does not move. The last ply is the opponent's: they resign,
+their clock runs out, and the pieces stay exactly where they are. Any code that
+only notices a game over when the position changes misses four endings in five,
+which is what `runScan` did until 1.18.1: the modal was read inside the
+`if (changed)` branch, so those games never armed a rematch.
+
 ## The archive API has no free lunch, but it does have a serial lane
 
 The PubAPI documentation is explicit: *"Your serial access rate is unlimited. If

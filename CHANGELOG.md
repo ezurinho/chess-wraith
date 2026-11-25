@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.18.2 — 2026-11-25
+
+The measurement behind 1.18.1, recorded so the claim does not rest on a hunch:
+661 rapid games from the October leaderboard, 521 of them (79%) ended with the
+board untouched — 318 resignations, 195 flags, 5 agreed draws, 3 abandonments.
+`docs/research.md` now says so, next to the reason it mattered.
+
 ## 1.18.1 — 2026-11-25
 
 The rematch never fired after a game that ended on the clock, which is the
