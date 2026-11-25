@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js'],
-  `{ timeClassFromSeconds, normalizeRatings, pickRating, normalizeGameCounts, ratingWeight, settledRating, RATING_CLASSES }`
+  `{ timeClassFromSeconds, normalizeRatings, pickRating, normalizeGameCounts, ratingWeight, settledRating, strengthFloor, floorSlack, ELO_FLOOR, RATING_CLASSES }`
 );
 
 test('the clock decides which published rating applies', () => {
@@ -70,6 +70,20 @@ test('a missing class falls back to the nearest one the account plays', () => {
   assert.equal(api.settledRating(0, 10), null);
   assert.equal(api.settledRating('x', 10), null);
   assert.equal(api.settledRating(2100, 0, 1200), 1200, 'no games is all prior');
+
+  // Stockfish cannot be asked for less than 1320, and the panel has to say so.
+  const low = api.strengthFloor(900);
+  assert.equal(low.requested, 900);
+  assert.equal(low.floor, api.ELO_FLOOR);
+  assert.equal(low.gap, api.ELO_FLOOR - 900);
+  assert.equal(api.strengthFloor(1800).gap, 0, 'above the floor nothing is lost');
+  assert.equal(api.strengthFloor(4000).floor, 3190, 'top end clamps too');
+  assert.equal(api.strengthFloor(NaN).gap, 0);
+
+  assert.equal(api.floorSlack(1800), 0, 'no slack above the floor');
+  assert.equal(api.floorSlack(900), 84, '420 points under the floor');
+  assert.equal(api.floorSlack(600), 120, 'capped');
+  assert.ok(api.floorSlack(700) >= api.floorSlack(900), 'lower rating, more slack');
 });
 
 test('the published classes map to the public endpoint keys', () => {

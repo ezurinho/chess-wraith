@@ -53,9 +53,12 @@ function acplGuard(opts) {
 }
 
 function styleProfile(cfg, opts = {}) {
+  const elo = effectiveElo(cfg, opts);
   return {
-    elo: effectiveElo(cfg, opts),
-    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack),
+    elo,
+    // Under Stockfish's 1320 floor the engine cannot be asked to play weaker,
+    // so the window of moves it may pick from widens instead.
+    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack) + floorSlack(opts.accountElo || elo),
     miss: LEGIT.miss,
     label: LEGIT.label
   };

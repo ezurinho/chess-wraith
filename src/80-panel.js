@@ -605,12 +605,14 @@ class WraithPanel {
       ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
       : 'the public rating of the signed-in account';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
-    this.el.target.title = v.eloSource === 'account'
-      ? v.provisional
-        ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
-        : 'anchored to your own published rating'
-      : 'anchored to the manual Target Elo';
+    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : v.eloGap ? ' · floor' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+    this.el.target.title = v.eloGap
+      ? `your ${v.accountRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
+      : v.eloSource === 'account'
+        ? v.provisional
+          ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
+          : 'anchored to your own published rating'
+        : 'anchored to the manual Target Elo';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);

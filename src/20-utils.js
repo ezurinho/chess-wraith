@@ -212,6 +212,24 @@ function eloToSkill(elo) {
   return Math.round(((clamped - 1320) / (3190 - 1320)) * 20);
 }
 
+// Stockfish's UCI_Elo stops at 1320: a 900-rated account cannot be asked for.
+// The engine plays at the floor and nothing said so, so the panel does now, and
+// the move chooser compensates with slack instead of pretending the number took.
+const ELO_FLOOR = 1320;
+
+function strengthFloor(elo) {
+  const e = Number(elo);
+  if (!Number.isFinite(e) || e <= 0) return { requested: 1500, floor: 1500, gap: 0 };
+  const floor = Math.round(clamp(e, ELO_FLOOR, 3190));
+  return { requested: Math.round(e), floor, gap: Math.max(0, Math.round(ELO_FLOOR - e)) };
+}
+
+// A rating 400 under the floor is not playable by strength at all, so it is
+// played by looseness: a wider window of acceptable moves, capped like the rest.
+function floorSlack(elo) {
+  return clampInt(Math.round(strengthFloor(elo).gap / 5), 0, 120, 0);
+}
+
 function pickEnum(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }

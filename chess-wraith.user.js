@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.22.0
+// @version      1.23.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.22.0';
+const VERSION = '1.23.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.22.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.23.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -330,6 +330,24 @@ function eloToSkill(elo) {
   if (!Number.isFinite(value) || value <= 0) return 20;
   const clamped = clamp(value, 1320, 3190);
   return Math.round(((clamped - 1320) / (3190 - 1320)) * 20);
+}
+
+// Stockfish's UCI_Elo stops at 1320: a 900-rated account cannot be asked for.
+// The engine plays at the floor and nothing said so, so the panel does now, and
+// the move chooser compensates with slack instead of pretending the number took.
+const ELO_FLOOR = 1320;
+
+function strengthFloor(elo) {
+  const e = Number(elo);
+  if (!Number.isFinite(e) || e <= 0) return { requested: 1500, floor: 1500, gap: 0 };
+  const floor = Math.round(clamp(e, ELO_FLOOR, 3190));
+  return { requested: Math.round(e), floor, gap: Math.max(0, Math.round(ELO_FLOOR - e)) };
+}
+
+// A rating 400 under the floor is not playable by strength at all, so it is
+// played by looseness: a wider window of acceptable moves, capped like the rest.
+function floorSlack(elo) {
+  return clampInt(Math.round(strengthFloor(elo).gap / 5), 0, 120, 0);
 }
 
 function pickEnum(value, allowed, fallback) {
@@ -2722,9 +2740,12 @@ function acplGuard(opts) {
 }
 
 function styleProfile(cfg, opts = {}) {
+  const elo = effectiveElo(cfg, opts);
   return {
-    elo: effectiveElo(cfg, opts),
-    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack),
+    elo,
+    // Under Stockfish's 1320 floor the engine cannot be asked to play weaker,
+    // so the window of moves it may pick from widens instead.
+    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack) + floorSlack(opts.accountElo || elo),
     miss: LEGIT.miss,
     label: LEGIT.label
   };
@@ -3854,12 +3875,14 @@ class WraithPanel {
       ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
       : 'the public rating of the signed-in account';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
-    this.el.target.title = v.eloSource === 'account'
-      ? v.provisional
-        ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
-        : 'anchored to your own published rating'
-      : 'anchored to the manual Target Elo';
+    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : v.eloGap ? ' · floor' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+    this.el.target.title = v.eloGap
+      ? `your ${v.accountRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
+      : v.eloSource === 'account'
+        ? v.provisional
+          ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
+          : 'anchored to your own published rating'
+        : 'anchored to the manual Target Elo';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);
@@ -4654,6 +4677,7 @@ function statusView() {
     eloSource: state.eloSource,
     accountRating: accountRatingNow(),
     provisional: provisionalRating(),
+    eloGap: strengthFloor(accountRatingNow() || 0).gap,
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,
@@ -5189,7 +5213,7 @@ function reportText() {
     snap
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
-    `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
+    `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',

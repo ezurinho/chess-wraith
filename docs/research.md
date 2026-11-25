@@ -104,6 +104,26 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## The engine floor is a wall, not an opinion
+
+Stockfish's option table is explicit (`src/search.h`, current master):
+
+```
+constexpr static int LowestElo  = 1320;
+constexpr static int HighestElo = 3190;
+```
+
+`UCI_Elo` is registered with those bounds in `src/engine.cpp`, so `setoption name
+UCI_Elo value 900` is clamped by the engine itself. Anything under 1320 is played
+at 1320 whatever the panel says. The script used to clamp silently: a 900-rated
+account was told the engine was aimed at 900.
+
+A live probe of the bundled lite build did not answer a plain `uci` in a bare
+worker (twenty seconds, zero messages: the build wants its own boot handshake),
+so the 1320 here rests on upstream source, not on a measurement of this artifact.
+The clamp is conservative either way: if the shipped build had a higher floor, the
+panel would still be telling the truth about a number it cannot request.
+
 ## A rating with two games behind it
 
 `/pub/player/{u}/stats` returns `record { win, loss, draw }` next to each

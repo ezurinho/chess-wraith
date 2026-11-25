@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.23.0 — 2026-11-25
+
+Say when the engine cannot be as weak as the account.
+
+- `UCI_Elo` bottoms out at 1320 upstream (`LowestElo` in `src/search.h`). Every
+  account under that was aimed at a number the engine silently ignored: a
+  900-rated player was told `900` and got 1320.
+- The panel now marks the clamp: `1320 · floor`, and the tooltip says how far
+  under the floor the account is. The report text carries it too.
+- Compensation instead of pretence: `floorSlack(elo)` widens the accepted move
+  window by a fifth of the gap (capped at 120 cp), so a 900 account picks from
+  looser candidates rather than playing 1320 chess with the panel lying about it.
+- 140 tests: the clamp at both ends, no slack above the floor, 84 cp at 900,
+  the cap at 600, monotone in the gap.
+
 ## 1.22.0 — 2026-11-25
 
 Strength anchored to a rating that has games behind it.
