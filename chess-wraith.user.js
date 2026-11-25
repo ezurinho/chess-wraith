@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.16.0
+// @version      1.16.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.16.0';
+const VERSION = '1.16.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.16.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.16.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2353,11 +2353,11 @@ const SELFTEST_PGN = '1. e4 {[%clk 0:05:00]} 1... e5 {[%clk 0:05:00]} 2. Nf3 {[%
 const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
 const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
 
-// A tab with no history yet has to start somewhere. These are the medians
-// measured on chess.com itself (328 games from the public archive), not the
-// generic 700-1600 ms window: a rapid player who answers in a second is a much
-// louder signal than one who takes five, and the window was three times too
-// fast for that class.
+// A tab with no history yet has to start somewhere. Bullet and blitz are the
+// medians measured on chess.com itself (328 games from the public archive);
+// rapid is the Lichess cross-check, because the sample had no rapid games.
+// Either beats the generic 700-1600 ms window: a rapid player who answers in a
+// second is a much louder signal than one who takes five.
 const PACE_CLASS_MS = { bullet: 700, blitz: 1600, rapid: 5500 };
 
 function classMedianMs(cls) {

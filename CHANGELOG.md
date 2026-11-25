@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.16.1 — 2026-11-25
+
+Wording, not behaviour: 1.16.0 said the three class medians were measured on
+chess.com. Bullet and blitz were (328 games from the public archive); rapid was
+the Lichess cross-check, because that sample contained no rapid games. The
+comment, the README row and the note under 1.16.0 now say which is which.
+
+Also unwrapped the `AGENTS.md` line that had run past the column.
+
 ## 1.16.0 — 2026-11-25
 
 Pacing: the account's own rhythm was being scaled twice, and a fresh profile had
@@ -14,9 +23,9 @@ no class to stand on.
   sample, which is class-agnostic, still scales.
 - **A fresh profile opened rapid games at blitz speed.** With no published and
   no learned baseline, a 10-minute game used the generic 700–1600 ms window, so
-  the first moves came in around 1.4 s. Now the fallback is the median measured
-  on chess.com for that class — bullet 0.7 s, blitz 1.6 s, rapid 5.5 s — and the
-  band sits on it. Daily and unknown classes keep the generic window.
+  the first moves came in around 1.4 s. Now the fallback is the class median —
+  bullet 0.7 s and blitz 1.6 s measured on chess.com, rapid 5.5 s from the
+  Lichess cross-check — and the band sits on it. Daily and unknown classes keep the generic window.
 - Six tests: the skipped multiplier, the scaled learned sample, the unchanged
   class scale, the class table and the rapid default. 128 tests.
 
