@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.6.1
+// @version      1.6.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.6.1';
+const VERSION = '1.6.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3421,6 +3421,7 @@ const PACE_KEY = 'chess-wraith-pace-v1';
 const RATING_KEY = 'chess-wraith-rating-v1';
 const GUARD_KEY = 'chess-wraith-guard-v1';
 const RATING_TTL_MS = 6 * 60 * 60 * 1000;
+const RATING_RETRY_MS = 15 * 60 * 1000;
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -3542,14 +3543,26 @@ function resolveElo() {
 }
 
 // The public ratings endpoint is static data about a public profile; nothing
-// about the game leaves the tab. Cached for six hours, per account.
-async function syncAccountRatings() {
+// about the game leaves the tab. Cached for six hours, per account. chess.com's
+// own docs say serial requests are never rate limited but a blocked or throttled
+// answer is possible (429), so a failure also stores a retry time: reloading the
+// tab must not turn one bad minute into a request per page load.
+async function syncAccountRatings(force) {
   const user = currentAccount();
   try {
     const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
-    if (cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS) {
+    const fresh = cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS;
+    if (cached && cached.ratings && !fresh) state.accountRatings = cached.ratings;
+    if (fresh) {
       state.accountRatings = cached.ratings;
       state.ratingAt = Number(cached.at) || 0;
+      state.ratingError = '';
+      resolveElo();
+      refreshPanel();
+      return state.accountRatings;
+    }
+    if (cached && cached.retryAt && Number(cached.retryAt) > Date.now() && !force) {
+      state.ratingError = String(cached.error || 'throttled');
       resolveElo();
       refreshPanel();
       return state.accountRatings;
@@ -3572,17 +3585,24 @@ async function syncAccountRatings() {
     state.accountRatings = ratings;
     state.ratingAt = Date.now();
     state.ratingError = '';
-    try {
-      localStorage.setItem(ratingKey(), JSON.stringify({ at: state.ratingAt, ratings }));
-    } catch {
-      /* private mode: the session keeps the value */
-    }
+    persistRating({ at: state.ratingAt, ratings });
   } catch (error) {
     state.ratingError = String((error && error.message) || error).slice(0, 40);
+    // Fifteen minutes is long enough to stop a reload loop and short enough
+    // that a warm start the same evening still gets the real number.
+    persistRating({ retryAt: Date.now() + RATING_RETRY_MS, error: state.ratingError });
   }
   resolveElo();
   refreshPanel();
   return state.accountRatings;
+}
+
+function persistRating(value) {
+  try {
+    localStorage.setItem(ratingKey(), JSON.stringify(value));
+  } catch {
+    /* private mode: the session keeps the value */
+  }
 }
 
 function readGuard() {

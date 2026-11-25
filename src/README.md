@@ -15,7 +15,7 @@ One IIFE, eleven fragments, concatenated in this order by `tools/build.js`.
 | `65-afk.js` | Rematch choice, next-game delay, keep-alive audio. | Know the game state. |
 | `70-input.js` | Synthetic pointer input (click and drag) and the landed-move check. | Decide legal moves. |
 | `80-panel.js` | Closed Shadow DOM panel, CSS, views, settings handlers. | Read the board. |
-| `90-boot.js` | Orchestrator: scan → tracker → engine → delay → play → verify, AFK, hotkeys, debug API. | Contain business rules. |
+| `90-boot.js` | Orchestrator: scan → tracker → engine → delay → play → verify, AFK, hotkeys, account rating, debug API. | Contain business rules. |
 
 The rules engine is the only fragment with no DOM dependency and the only one
 with a `module.exports` guard, which is why the tests can `require` it directly.

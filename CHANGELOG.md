@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.6.2 — 2026-11-25
+
+- **A failed rating request no longer retries on every reload.** chess.com's
+  PubAPI docs say serial access is unlimited but a throttled answer is possible
+  (`429`), so a failed fetch now stores a retry time fifteen minutes out. The
+  last good ratings stay in use meanwhile.
+- **`npm run ship <x.y.z> "<title>"`.** One command: prepare, full check, commit,
+  tag, push, `gh release create`, then poll jsDelivr until both engine files are
+  served. It never tags when a check fails; the working tree and GitHub stop
+  drifting apart.
+- 83 tests, unchanged.
+
 ## 1.6.1 — 2026-11-25
 
 People get slower as a session goes on; the delay now does too, 2% an hour

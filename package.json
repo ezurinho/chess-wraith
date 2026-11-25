@@ -1,6 +1,6 @@
 {
   "name": "chess-wraith",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "private": true,
   "description": "CHESS WRAITH — human-paced Chess.com userscript with local Stockfish",
   "scripts": {
@@ -8,7 +8,8 @@
     "build:check": "node tools/build.js --check",
     "lint": "eslint chess-wraith.user.js tools tests",
     "test": "node --test \"tests/unit/*.test.js\"",
-    "check": "npm run build:check && npm run lint && npm test"
+    "check": "npm run build:check && npm run lint && npm test",
+    "ship": "node tools/ship.js"
   },
   "engines": {
     "node": ">=22"

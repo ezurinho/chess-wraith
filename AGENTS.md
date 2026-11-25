@@ -13,7 +13,17 @@ npm run lint         # eslint: no-undef and no-unused-vars are the point
 npm test             # node --test "tests/unit/*.test.js"
 npm run check        # all of the above, in CI order
 node tools/release.js check    # package/header/README badge/CHANGELOG agree
+npm run ship 1.6.2 "title"     # prepare + check + commit + tag + publish + CDN wait
 ```
+
+## Every change ships
+
+Work is not finished in a working tree. After any user-visible change, publish
+it: `npm run ship <x.y.z> "<title>"` runs `release.js prepare`, the full check,
+the commit, the tag, the push, `gh release create` and then waits for jsDelivr to
+serve the new tag before it exits. It refuses to tag when a check fails. Do not
+hand-roll the steps and do not leave a change uncommitted: the release is the
+only version anyone installs.
 
 ## Invariants
 
@@ -43,7 +53,7 @@ node tools/release.js check    # package/header/README badge/CHANGELOG agree
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic (82 tests). There is no DOM test harness: the board
+- `tests/unit/` — pure logic (83 tests). There is no DOM test harness: the board
   reader and the worker boot are verified by hand against the live site, which is
   the known weak point.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,
