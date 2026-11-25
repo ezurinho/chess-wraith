@@ -135,6 +135,21 @@ test('a search sends position and go, then resolves the formatted best move', as
   engine.destroy();
 });
 
+test('a destroyed engine does not claim to be ready', async () => {
+  const { api, workers } = harness();
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  workers[workers.length - 1].reply('uciok');
+  workers[workers.length - 1].reply('readyok');
+  await booting;
+  assert.equal(engine.ready, true);
+  engine.destroy();
+  assert.equal(engine.ready, false, 'nothing is ready after destroy');
+  assert.equal(engine.worker, null);
+  assert.equal(Object.keys(engine.lastOptions).length, 0, 'a fresh worker has default options');
+});
+
 test('a worker that dies after booting is replaced instead of timing out', async () => {
   // Plain engine on purpose: the NNUE spawn already falls back to the JS build
   // when its worker fails, so the case that had no answer is a dead JS worker.

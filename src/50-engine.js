@@ -421,6 +421,11 @@ class WraithEngine {
     this.worker = null;
     this.search = null;
     this.searching = false;
+    // A destroyed engine that still reports ready is a trap: the next search
+    // posts into nothing and the watchdog pays the whole budget to find out.
+    this.ready = false;
+    this.booted = null;
+    this.lastOptions = {};
   }
 }
 

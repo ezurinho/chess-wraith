@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.19.1 — 2026-11-25
+
+`destroy()` left `ready: true` behind. The next search posted into a null worker
+and waited out the whole budget for an answer that could not come — the same
+failure the 1.19.0 recovery exists to catch, arriving through the front door.
+Found while measuring a rebuild in the browser: `boot()` reported ready in 3 ms,
+which is not a wasm compile, it is a lie. Destroy now clears `ready`, `booted`
+and the option cache, and a test pins it so a destroyed engine cannot pretend.
+136 tests.
+
 ## 1.19.0 — 2026-11-25
 
 The engine can now lose a worker and come back inside the same move.
