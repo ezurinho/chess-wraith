@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.8 — 2026-11-25
+
+`copy report` printed `slack undefined cp`.
+
+- The report read `cfg.slackCp`, a setting that never existed; the panel calls it
+  `humanSlackCp`. It now prints the real number and the guard's session boost
+  (`slack 40+15 cp`), so the one line that explains the move choice is true.
+
 ## 1.6.7 — 2026-11-25
 
 The engine stops being the untested part, and a bug report becomes one click.

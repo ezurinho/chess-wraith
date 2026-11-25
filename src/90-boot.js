@@ -965,7 +965,7 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
-    `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.slackCp} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.warn ? `warn ${state.warn}` : ''
   ];
   return lines.filter(Boolean).join('\n');
