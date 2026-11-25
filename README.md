@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.0.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -75,7 +75,8 @@ cache serves it and the whole thing works offline.
 
 | Area | Behaviour |
 | --- | --- |
-| **Board reading** | Grid, orientation, ply/SAN move list, last-move highlights, clocks, opponent rating and the game-over modal, straight from the DOM. |
+| **Board reading** | Grid, orientation, move list (`data-ply` or `.node` rows), last-move highlights, clocks, opponent rating and the game-over modal, straight from the DOM. |
+| **Turn detection** | The turn is taken from the move list, the running clock or the last-move highlight, and the source is recorded. When none of the three is readable the panel says `turn not readable; not playing` and nothing is played on a guess. |
 | **Engine** | Stockfish in a blob worker. It tries Stockfish 19 NNUE (Lite, single thread, WASM, WDL + MultiPV) first and falls back to the bundled Stockfish 2019 JS build when the NNUE build cannot resolve its `.wasm` from a blob worker. The panel always shows which one is running. |
 | **Analysis** | Evaluation from White's point of view, best move in SAN, candidate lines with depth, and the engine's own strength limiter (`UCI_Elo`) when a style asks for it. |
 | **Styles** | `adaptive` (measures the opponent's centipawn loss, then sits ~130 Elo above them), `gm`, `club`, `casual` and `full engine`. The target Elo is applied to the engine itself through `Skill Level`, so a preset changes how well it plays, not only how randomly it picks. |
@@ -107,18 +108,30 @@ cache serves it and the whole thing works offline.
   worker it never answers `uci`, so the script gives it four seconds and then
   falls back. That build is weaker and has no WDL bar. A same-origin copy of the
   engine (a small local server, or a future inlined build) would restore NNUE.
-- **Not tested on a live rated game.** Verified on the live analysis board:
-  board reading in both orientations, clocks, highlights, SAN list, synthetic
-  click and drag moves, engine boot and a full auto-play turn.
+- **Not tested on a live rated game.** Verified on the live analysis board and
+  in a headless browser against today's markup: board reading in both
+  orientations, start position and mid-game grids, engine boot with the JS
+  fallback, analysis and panel rendering. The clock path, the premove check and
+  the promotion dialog are code-reviewed, not reproduced: there are no clocks on
+  the analysis board, and a rated game needs the account.
+- **A mid-game analysis board is not playable.** Chess.com's board has no clock
+  and (until you load a game) no move list there, so the turn cannot be known.
+  The panel says so instead of guessing.
 
 ## How the engine is loaded
 
 The userscript is a single file; the 1.8 MB engine is not embedded. On boot it
-fetches `vendor/stockfish-19-lite-single.js` from this repo through jsDelivr,
-prefixes it with a small shim that points the `.wasm` request at the matching
-mirror URL, and starts it as a blob worker. If the worker has not answered `uci`
-within four seconds it falls back to `vendor/stockfish.js` (Stockfish 2019, no
-WASM) from the same mirror. Nothing is fetched from anywhere else.
+fetches `vendor/stockfish-19-lite-single.js` through jsDelivr, prefixes it with a
+small shim that points the `.wasm` request at the matching mirror URL, and starts
+it as a blob worker. If the worker has not answered `uci` within four seconds it
+falls back to `vendor/stockfish.js` (Stockfish 2019, no WASM) from the same
+mirror. Nothing is fetched from anywhere else.
+
+The mirror URL is pinned to a release tag and never to `@main`: the engine runs
+with chess.com's origin, so the bytes behind it must not change without a tag.
+The NNUE verdict is cached for seven days per mirror — the four second handshake
+can only fail today, and paying it on every page load was pointless.
+`ChessWraith.retryEngine()` (debug API) clears the verdict and tries again.
 
 ## Development
 
@@ -129,6 +142,7 @@ npm run build:check  # fails if the committed bundle is stale
 npm run lint
 npm test             # node --test "tests/unit/*.test.js"
 npm run check        # all of the above, in CI order
+node tools/release.js check   # package, header, README badge and CHANGELOG agree
 ```
 
 | Path | Purpose |
@@ -145,14 +159,15 @@ npm run check        # all of the above, in CI order
 | `src/80-panel.js` | Shadow-DOM panel. |
 | `src/90-boot.js` | Orchestrator and `window.ChessWraith` debug API. |
 | `tools/build.js` | Concatenator and `--check` guard. |
-| `tests/unit/` | Perft, SAN replay, UCI parsing, selection, pacing, bundle integrity. |
+| `tools/release.js` | Version bookkeeping: `check`, `prepare <version>`, `notes <version>`. |
+| `tests/unit/` | Perft, SAN replay, UCI parsing, turn certainty, selection, pacing, bundle integrity, version drift. |
 
 The rules engine is checked with real perft counts: `20 / 400 / 8902` from the
 start position, `48 / 2039` on Kiwipete and `14 / 191 / 2812` on the en-passant
 position. Move selection and pacing are property-tested over hundreds of draws.
 
 For debugging, `window.ChessWraith` (`state`, `board()`, `analyzeNow()`,
-`playNow()`, `unload()`) is opt-in: open the page with `?cw=1` or set
+`playNow()`, `retryEngine()`, `unload()`) is opt-in: open the page with `?cw=1` or set
 `localStorage['chess-wraith-debug'] = '1'`. Without it nothing is added to the
 page's global scope.
 

@@ -64,9 +64,30 @@ function isElementVisible(el) {
   return true;
 }
 
+// The rematch search used to run over the whole document, where "new game" also
+// matches the site navigation. Scope it to the dialog that ends the game and
+// fall back to the document only when no such dialog is on screen.
+const GAME_OVER_SELECTORS = [
+  '.game-over-modal',
+  '.game-review-buttons',
+  '.board-modal',
+  '[data-cy="game-over-modal"]',
+  '.modal-content'
+];
+
+function gameOverRoot() {
+  for (const sel of GAME_OVER_SELECTORS) {
+    for (const node of document.querySelectorAll(sel)) {
+      if (isElementVisible(node)) return node;
+    }
+  }
+  return null;
+}
+
 function visibleButtons() {
   const out = [];
-  for (const el of document.querySelectorAll('button, a[role="button"], [role="button"], .cc-button-component')) {
+  const scope = gameOverRoot() || document;
+  for (const el of scope.querySelectorAll('button, a[role="button"], [role="button"], .cc-button-component')) {
     if (!isElementVisible(el)) continue;
     out.push(el);
   }

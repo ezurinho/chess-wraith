@@ -31,6 +31,15 @@ test('header, version and metadata agree', () => {
   assert.ok(!bundle.includes('@require'), 'no external requires: the bundle is self-contained');
 });
 
+test('the README version badge matches package.json', () => {
+  const pkg = JSON.parse(read('package.json'));
+  const readme = read('README.md');
+  assert.ok(
+    readme.includes(`version-${pkg.version}-`),
+    'the README badge drifted from package.json; bump both together'
+  );
+});
+
 test('bundle parses as one script and has no leftover markers', () => {
   const bundle = read('chess-wraith.user.js');
   assert.doesNotThrow(() => new vm.Script(bundle, { filename: 'chess-wraith.user.js' }));

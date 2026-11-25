@@ -3,7 +3,7 @@
 // opponent rating all come from the same DOM shapes the extension used.
 
 const BOARD_SELECTORS = ['wc-chess-board', 'chess-board', '#board-single', '.board'];
-const MOVE_LIST_SELECTOR = 'wc-simple-move-list, .vertical-move-list, vertical-move-list, .move-list';
+const MOVE_LIST_SELECTOR = 'wc-simple-move-list, wc-vertical-move-list, wc-move-list, .vertical-move-list, vertical-move-list, .move-list, .move-list-component';
 
 function findBoardElement() {
   for (const sel of BOARD_SELECTORS) {
@@ -118,48 +118,65 @@ function extractSanFromNode(node) {
       else if (cls.includes('king')) figurine = 'K';
     }
   }
-  const text = (node.textContent || '').trim().replace(/\s+/g, '');
+  const text = (node.textContent || '').trim().replace(/\s+/g, '').replace(/^\d+\.+/, '');
   if (!text) return '';
   if (figurine && !/^[KQRBNO0]/.test(text)) return `${figurine}${text}`;
   return text;
 }
 
-function readSanMoveList() {
-  const nodes = document.querySelectorAll('[data-ply]');
-  if (nodes.length === 0) return [];
-  const byPly = new Map();
-  for (const node of nodes) {
-    const ply = Number.parseInt(node.getAttribute('data-ply'), 10);
-    if (Number.isNaN(ply) || ply <= 0) continue;
-    const san = extractSanFromNode(node);
-    if (san && !byPly.has(ply)) byPly.set(ply, san);
+// Move lists show up in two shapes: nodes tagged with data-ply (analysis boards
+// and older layouts) and plain .node rows inside a move-list component. The
+// second shape carries no reliable ply attribute, so DOM order is the ply.
+// Both are read here once per scan; callers pass the result to the helpers.
+function readMoveNodes() {
+  const tagged = Array.from(document.querySelectorAll('[data-ply]'));
+  if (tagged.length > 0) {
+    return tagged.map((node) => {
+      const ply = Number.parseInt(node.getAttribute('data-ply'), 10);
+      return {
+        node,
+        ply: Number.isNaN(ply) ? null : ply,
+        selected: node.matches('.selected') || Boolean(node.querySelector('.selected'))
+      };
+    });
   }
-  const maxPly = Math.max(0, ...byPly.keys());
+  const rows = [];
+  for (const list of document.querySelectorAll(MOVE_LIST_SELECTOR)) {
+    for (const node of list.querySelectorAll('.node')) rows.push(node);
+  }
+  if (rows.length === 0) return [];
+  return rows.map((node, index) => ({
+    node,
+    ply: index + 1,
+    selected: node.classList.contains('selected') || node.classList.contains('current')
+  }));
+}
+
+function readSanMoveList(entries = readMoveNodes()) {
+  const moves = entries.filter((entry) => entry.ply && entry.ply > 0);
+  if (moves.length === 0) return [];
+  const byPly = new Map();
+  let maxPly = 0;
+  for (const entry of moves) {
+    const san = extractSanFromNode(entry.node);
+    if (san && !byPly.has(entry.ply)) byPly.set(entry.ply, san);
+    if (entry.ply > maxPly) maxPly = entry.ply;
+  }
   if (maxPly === 0 || byPly.size < maxPly) return [];
   const list = [];
   for (let i = 1; i <= maxPly; i++) list.push(byPly.get(i));
   return list;
 }
 
-function readPlyCount() {
-  const selected = document.querySelector('[data-ply].selected, [data-ply] .selected');
-  if (selected) {
-    const host = selected.hasAttribute('data-ply') ? selected : selected.closest('[data-ply]');
-    if (host) {
-      const ply = Number.parseInt(host.getAttribute('data-ply'), 10);
-      if (!Number.isNaN(ply) && ply >= 0) return ply;
-    }
+function readPlyCount(entries = readMoveNodes()) {
+  if (entries.length === 0) return null;
+  const selected = entries.find((entry) => entry.selected && entry.ply);
+  if (selected) return selected.ply;
+  let maxPly = 0;
+  for (const entry of entries) {
+    if (entry.ply && entry.ply > maxPly) maxPly = entry.ply;
   }
-  const nodes = document.querySelectorAll('[data-ply]');
-  if (nodes.length > 0) {
-    let maxPly = 0;
-    for (const node of nodes) {
-      const ply = Number.parseInt(node.getAttribute('data-ply'), 10);
-      if (!Number.isNaN(ply) && ply > maxPly) maxPly = ply;
-    }
-    return maxPly;
-  }
-  return null;
+  return maxPly || null;
 }
 
 function readActiveClockTurn(flipped) {
@@ -263,14 +280,15 @@ function scanBoard(mySide) {
     return { boardEl, flipped, valid: false, isDragging: Boolean(read && read.isDragging) };
   }
 
+  const moveNodes = readMoveNodes();
   return {
     boardEl,
     rect: boardEl.getBoundingClientRect(),
     flipped,
     valid: true,
     grid: read.grid,
-    plyCount: readPlyCount(),
-    sanMoves: readSanMoveList(),
+    plyCount: readPlyCount(moveNodes),
+    sanMoves: readSanMoveList(moveNodes),
     lastHighlightSquares: readLastHighlightSquares(boardEl),
     activeClockTurn: readActiveClockTurn(flipped),
     clockSeconds: readClockSeconds(mySide, flipped),

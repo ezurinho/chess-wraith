@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.1.0
+// @version      1.2.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -94,13 +94,63 @@ const STYLES = {
   engine: { elo: null, skill: 20, slack: 0, miss: 0, label: 'Full engine' }
 };
 
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@main/vendor';
+// Pinned to the release tag, not @main: this file is executed inside chess.com,
+// so the bytes behind it must not change without a tag and a version bump.
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.2.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
   fallbackJs: `${ENGINE_MIRROR}/stockfish.js`
 };
 
+
+// Bump the engine pin and the NNUE verdict is re-earned: a new build may fix
+// what the shim cannot do today. Keys are scoped to the mirror URL.
+const NNUE_SKIP_KEY = 'chess-wraith-nnue-skip-v1';
+const NNUE_SKIP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function nnueSkipActive(raw, mirror, nowMs) {
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.mirror !== mirror) return false;
+    const age = nowMs - Number(parsed.at || 0);
+    return Number.isFinite(age) && age >= 0 && age < NNUE_SKIP_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function readNnueSkip() {
+  try {
+    return nnueSkipActive(localStorage.getItem(NNUE_SKIP_KEY), ENGINE_MIRROR, Date.now());
+  } catch {
+    return false;
+  }
+}
+
+function rememberNnueSkip() {
+  try {
+    localStorage.setItem(NNUE_SKIP_KEY, JSON.stringify({ mirror: ENGINE_MIRROR, at: Date.now() }));
+  } catch {
+    /* storage can be blocked; the four seconds are the whole cost */
+  }
+}
+
+function forgetNnueSkip() {
+  try {
+    localStorage.removeItem(NNUE_SKIP_KEY);
+  } catch {
+    /* nothing to forget */
+  }
+}
+
+// A search that never answers must not wedge the panel forever. The budget is
+// generous relative to the request so a slow-but-working search still finishes.
+function searchBudgetMs(job) {
+  const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
+  return movetime * 6 + 6000;
+}
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clampInt = (v, lo, hi, fallback) => {
@@ -775,11 +825,16 @@ function saveSettings(cfg) {
     const placement = gridToPlacement(grid);
     let turn = 'w';
     let ep = '-';
+    // Where the turn came from. Anything but 'assumed' is evidence; 'assumed'
+    // is the fallback and the caller must not play on it.
+    let turnSource = 'assumed';
 
     if (hints.turnOverride === 'w' || hints.turnOverride === 'b') {
       turn = hints.turnOverride;
+      turnSource = 'override';
     } else if (typeof hints.plyCount === 'number' && hints.plyCount >= 0) {
       turn = hints.plyCount % 2 === 0 ? 'w' : 'b';
+      turnSource = 'ply';
     } else if (Array.isArray(hints.lastHighlightSquares) && hints.lastHighlightSquares.length === 2) {
       const sqA = parseSquare(hints.lastHighlightSquares[0]);
       const sqB = parseSquare(hints.lastHighlightSquares[1]);
@@ -798,6 +853,7 @@ function saveSettings(cfg) {
         if (dest) {
           const movedColor = pieceColor(dest.piece);
           turn = movedColor === 'w' ? 'b' : 'w';
+          turnSource = 'highlight';
           if (dest.piece.toLowerCase() === 'p' && orig.file === dest.file && Math.abs(dest.rank - orig.rank) === 2) {
             ep = squareName(dest.file, (orig.rank + dest.rank) / 2);
           }
@@ -805,6 +861,7 @@ function saveSettings(cfg) {
       }
     } else if (hints.activeClockTurn === 'w' || hints.activeClockTurn === 'b') {
       turn = hints.activeClockTurn;
+      turnSource = 'clock';
     }
 
     const castling = {
@@ -825,7 +882,8 @@ function saveSettings(cfg) {
       castling,
       ep,
       halfmove: 0,
-      fullmove
+      fullmove,
+      turnSource
     };
   }
 
@@ -837,6 +895,7 @@ function saveSettings(cfg) {
     reset() {
       this.currentState = null;
       this.uciMoves = null; // null when attached mid-game without full history from startpos
+      this.turnSource = 'assumed';
       this.history = [];
     }
 
@@ -849,6 +908,7 @@ function saveSettings(cfg) {
         halfmove: state.halfmove,
         fullmove: state.fullmove,
         plyCount: typeof plyCount === 'number' ? plyCount : null,
+        turnSource: this.turnSource,
         uciMoves: Array.isArray(uciMoves) ? uciMoves.slice() : null
       });
       if (this.history.length > 250) {
@@ -864,6 +924,7 @@ function saveSettings(cfg) {
         ep: '-'
       };
       this.uciMoves = null;
+      this.turnSource = 'override';
       return this.getSnapshot(false, null);
     }
 
@@ -872,6 +933,9 @@ function saveSettings(cfg) {
         ...this.currentState,
         fen: buildFen(this.currentState),
         uciMoves: Array.isArray(this.uciMoves) ? this.uciMoves.slice() : null,
+        turnSource: this.turnSource,
+        // A guess is not evidence: display it, never act on it.
+        turnCertain: this.turnSource !== 'assumed',
         changed,
         lastMoveUci
       };
@@ -891,6 +955,7 @@ function saveSettings(cfg) {
         const changed = prevFen !== buildFen(start);
         this.currentState = start;
         this.uciMoves = [];
+        this.turnSource = hints.turnOverride === 'w' || hints.turnOverride === 'b' ? 'override' : 'start';
         if (changed) {
           this.history = [];
           this.recordHistory(start, 0, []);
@@ -909,6 +974,7 @@ function saveSettings(cfg) {
           const prevMovesLen = Array.isArray(this.uciMoves) ? this.uciMoves.length : -1;
           this.currentState = replayed.state;
           this.uciMoves = replayed.uciMoves;
+          this.turnSource = 'moves';
           const nextFen = buildFen(this.currentState);
           const changed = prevFen !== nextFen || prevMovesLen !== replayed.uciMoves.length;
           if (changed) {
@@ -924,6 +990,7 @@ function saveSettings(cfg) {
         if ((hints.turnOverride === 'w' || hints.turnOverride === 'b') && this.currentState.turn !== hints.turnOverride) {
           this.currentState = { ...this.currentState, turn: hints.turnOverride };
           this.uciMoves = null;
+          this.turnSource = 'override';
           changed = true;
         }
         return this.getSnapshot(changed, null);
@@ -939,6 +1006,7 @@ function saveSettings(cfg) {
           if (hints.turnOverride === 'w' || hints.turnOverride === 'b') {
             this.currentState.turn = hints.turnOverride;
             this.uciMoves = null;
+            this.turnSource = 'override';
           } else if (Array.isArray(this.uciMoves)) {
             this.uciMoves = [...this.uciMoves, uci];
           }
@@ -963,6 +1031,9 @@ function saveSettings(cfg) {
             fullmove: entry.fullmove
           };
           this.uciMoves = Array.isArray(entry.uciMoves) ? entry.uciMoves.slice() : null;
+          this.turnSource = hints.turnOverride === 'w' || hints.turnOverride === 'b'
+            ? 'override'
+            : (entry.turnSource || 'history');
           return this.getSnapshot(true, null);
         }
       }
@@ -970,6 +1041,7 @@ function saveSettings(cfg) {
       // Mid-game attach or board jump fallback
       this.currentState = inferMidgameState(grid, hints);
       this.uciMoves = null;
+      this.turnSource = this.currentState.turnSource || 'assumed';
       this.recordHistory(this.currentState, hints.plyCount, null);
       return this.getSnapshot(true, null);
     }
@@ -1323,7 +1395,7 @@ try {
 // opponent rating all come from the same DOM shapes the extension used.
 
 const BOARD_SELECTORS = ['wc-chess-board', 'chess-board', '#board-single', '.board'];
-const MOVE_LIST_SELECTOR = 'wc-simple-move-list, .vertical-move-list, vertical-move-list, .move-list';
+const MOVE_LIST_SELECTOR = 'wc-simple-move-list, wc-vertical-move-list, wc-move-list, .vertical-move-list, vertical-move-list, .move-list, .move-list-component';
 
 function findBoardElement() {
   for (const sel of BOARD_SELECTORS) {
@@ -1438,48 +1510,65 @@ function extractSanFromNode(node) {
       else if (cls.includes('king')) figurine = 'K';
     }
   }
-  const text = (node.textContent || '').trim().replace(/\s+/g, '');
+  const text = (node.textContent || '').trim().replace(/\s+/g, '').replace(/^\d+\.+/, '');
   if (!text) return '';
   if (figurine && !/^[KQRBNO0]/.test(text)) return `${figurine}${text}`;
   return text;
 }
 
-function readSanMoveList() {
-  const nodes = document.querySelectorAll('[data-ply]');
-  if (nodes.length === 0) return [];
-  const byPly = new Map();
-  for (const node of nodes) {
-    const ply = Number.parseInt(node.getAttribute('data-ply'), 10);
-    if (Number.isNaN(ply) || ply <= 0) continue;
-    const san = extractSanFromNode(node);
-    if (san && !byPly.has(ply)) byPly.set(ply, san);
+// Move lists show up in two shapes: nodes tagged with data-ply (analysis boards
+// and older layouts) and plain .node rows inside a move-list component. The
+// second shape carries no reliable ply attribute, so DOM order is the ply.
+// Both are read here once per scan; callers pass the result to the helpers.
+function readMoveNodes() {
+  const tagged = Array.from(document.querySelectorAll('[data-ply]'));
+  if (tagged.length > 0) {
+    return tagged.map((node) => {
+      const ply = Number.parseInt(node.getAttribute('data-ply'), 10);
+      return {
+        node,
+        ply: Number.isNaN(ply) ? null : ply,
+        selected: node.matches('.selected') || Boolean(node.querySelector('.selected'))
+      };
+    });
   }
-  const maxPly = Math.max(0, ...byPly.keys());
+  const rows = [];
+  for (const list of document.querySelectorAll(MOVE_LIST_SELECTOR)) {
+    for (const node of list.querySelectorAll('.node')) rows.push(node);
+  }
+  if (rows.length === 0) return [];
+  return rows.map((node, index) => ({
+    node,
+    ply: index + 1,
+    selected: node.classList.contains('selected') || node.classList.contains('current')
+  }));
+}
+
+function readSanMoveList(entries = readMoveNodes()) {
+  const moves = entries.filter((entry) => entry.ply && entry.ply > 0);
+  if (moves.length === 0) return [];
+  const byPly = new Map();
+  let maxPly = 0;
+  for (const entry of moves) {
+    const san = extractSanFromNode(entry.node);
+    if (san && !byPly.has(entry.ply)) byPly.set(entry.ply, san);
+    if (entry.ply > maxPly) maxPly = entry.ply;
+  }
   if (maxPly === 0 || byPly.size < maxPly) return [];
   const list = [];
   for (let i = 1; i <= maxPly; i++) list.push(byPly.get(i));
   return list;
 }
 
-function readPlyCount() {
-  const selected = document.querySelector('[data-ply].selected, [data-ply] .selected');
-  if (selected) {
-    const host = selected.hasAttribute('data-ply') ? selected : selected.closest('[data-ply]');
-    if (host) {
-      const ply = Number.parseInt(host.getAttribute('data-ply'), 10);
-      if (!Number.isNaN(ply) && ply >= 0) return ply;
-    }
+function readPlyCount(entries = readMoveNodes()) {
+  if (entries.length === 0) return null;
+  const selected = entries.find((entry) => entry.selected && entry.ply);
+  if (selected) return selected.ply;
+  let maxPly = 0;
+  for (const entry of entries) {
+    if (entry.ply && entry.ply > maxPly) maxPly = entry.ply;
   }
-  const nodes = document.querySelectorAll('[data-ply]');
-  if (nodes.length > 0) {
-    let maxPly = 0;
-    for (const node of nodes) {
-      const ply = Number.parseInt(node.getAttribute('data-ply'), 10);
-      if (!Number.isNaN(ply) && ply > maxPly) maxPly = ply;
-    }
-    return maxPly;
-  }
-  return null;
+  return maxPly || null;
 }
 
 function readActiveClockTurn(flipped) {
@@ -1583,14 +1672,15 @@ function scanBoard(mySide) {
     return { boardEl, flipped, valid: false, isDragging: Boolean(read && read.isDragging) };
   }
 
+  const moveNodes = readMoveNodes();
   return {
     boardEl,
     rect: boardEl.getBoundingClientRect(),
     flipped,
     valid: true,
     grid: read.grid,
-    plyCount: readPlyCount(),
-    sanMoves: readSanMoveList(),
+    plyCount: readPlyCount(moveNodes),
+    sanMoves: readSanMoveList(moveNodes),
     lastHighlightSquares: readLastHighlightSquares(boardEl),
     activeClockTurn: readActiveClockTurn(flipped),
     clockSeconds: readClockSeconds(mySide, flipped),
@@ -1618,6 +1708,7 @@ class WraithEngine {
     this.onError = null;
     this.lastOptions = {};
     this.booted = null;
+    this.watchdogTimer = null;
     // Not derived from the mode string: "Stockfish 2019 JS" contains "19" too,
     // and that made the fallback take the NNUE-only option path.
     this.nnue = false;
@@ -1647,9 +1738,17 @@ class WraithEngine {
   }
 
   async #bootInner() {
+    // The NNUE build cannot find its .wasm from a blob worker, so after the
+    // first failure the four second handshake is pure delay. Remember the
+    // verdict for a week instead of paying it on every page load.
+    if (readNnueSkip()) {
+      await this.#spawn(false);
+      return;
+    }
     try {
       await this.#spawn(true);
     } catch (err) {
+      rememberNnueSkip();
       this.onError && this.onError(`NNUE engine unavailable (${err.message}); using the JS engine`);
       await this.#spawn(false);
     }
@@ -1665,6 +1764,8 @@ class WraithEngine {
     }
     if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
     if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
     this.worker = null;
     this.ready = false;
     this.searching = false;
@@ -1680,6 +1781,7 @@ class WraithEngine {
     worker.onmessage = (event) => this.#onLine(event.data);
     worker.onerror = (event) => {
       if (preferNnue) {
+        rememberNnueSkip();
         this.onError && this.onError('NNUE worker failed to start; using the JS engine');
         this.#spawn(false).catch(() => {});
         return;
@@ -1696,6 +1798,7 @@ class WraithEngine {
     this.handshakeTimer = setTimeout(() => {
       if (this.ready || this.worker !== worker) return;
       if (preferNnue) {
+        rememberNnueSkip();
         this.onError && this.onError('NNUE engine did not start; using the JS engine');
         this.#spawn(false).catch(() => {});
       } else {
@@ -1804,6 +1907,10 @@ class WraithEngine {
   }
 
   #finish(line) {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
     const parts = line.split(/\s+/);
     const bestmove = parts[1] && parts[1] !== '(none)' ? parts[1] : null;
     const search = this.search;
@@ -1837,6 +1944,64 @@ class WraithEngine {
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
     this.#send(`go depth ${depth} movetime ${movetime}`);
+    this.#armWatchdog(job);
+  }
+
+  // A worker can accept `go` and never answer. Without this the panel keeps
+  // saying "thinking" and the scan loop waits on a search that ended nowhere.
+  #armWatchdog(job) {
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = setTimeout(() => {
+      this.watchdogTimer = null;
+      if (!this.search || this.search !== job) return;
+      this.onError && this.onError('engine stopped answering; retrying');
+      this.#send('stop');
+      this.watchdogTimer = setTimeout(() => {
+        this.watchdogTimer = null;
+        if (this.search !== job) return;
+        this.search = null;
+        this.searching = false;
+        this.lines = new Map();
+        try {
+          this.worker && this.worker.terminate();
+        } catch {
+          /* already gone */
+        }
+        this.worker = null;
+        this.ready = false;
+        this.booted = null;
+        this.onFinal && this.onFinal({
+          fen: job.fen,
+          turn: job.turn,
+          flipped: job.flipped,
+          lines: [],
+          bestmove: null,
+          depth: 0,
+          final: true,
+          engine: this.mode
+        });
+        if (job.resolve) job.resolve([]);
+      }, 2500);
+    }, searchBudgetMs(job));
+  }
+
+  // Drop the remembered NNUE verdict and try the full engine once more.
+  async retryNnue() {
+    forgetNnueSkip();
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
+    try {
+      this.worker && this.worker.terminate();
+    } catch {
+      /* already gone */
+    }
+    this.worker = null;
+    this.ready = false;
+    this.booted = null;
+    this.searching = false;
+    this.search = null;
+    await this.boot();
+    return this.mode;
   }
 
   #applyOptions(job) {
@@ -1867,6 +2032,8 @@ class WraithEngine {
   }
 
   destroy() {
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
     try {
       this.#send('quit');
       this.worker && this.worker.terminate();
@@ -2085,9 +2252,30 @@ function isElementVisible(el) {
   return true;
 }
 
+// The rematch search used to run over the whole document, where "new game" also
+// matches the site navigation. Scope it to the dialog that ends the game and
+// fall back to the document only when no such dialog is on screen.
+const GAME_OVER_SELECTORS = [
+  '.game-over-modal',
+  '.game-review-buttons',
+  '.board-modal',
+  '[data-cy="game-over-modal"]',
+  '.modal-content'
+];
+
+function gameOverRoot() {
+  for (const sel of GAME_OVER_SELECTORS) {
+    for (const node of document.querySelectorAll(sel)) {
+      if (isElementVisible(node)) return node;
+    }
+  }
+  return null;
+}
+
 function visibleButtons() {
   const out = [];
-  for (const el of document.querySelectorAll('button, a[role="button"], [role="button"], .cc-button-component')) {
+  const scope = gameOverRoot() || document;
+  for (const el of scope.querySelectorAll('button, a[role="button"], [role="button"], .cc-button-component')) {
     if (!isElementVisible(el)) continue;
     out.push(el);
   }
@@ -2670,6 +2858,7 @@ class WraithPanel {
     this.#wire();
     this.setTab('live');
     this.setTheme(cfg.theme || 'carbon');
+    this.panel.dataset.collapsed = String(Boolean(cfg.panelCollapsed));
     this.render();
   }
 
@@ -2703,7 +2892,7 @@ class WraithPanel {
         }
         this.cfg.style = style;
         this.handlers.settingsChanged(this.cfg);
-        this.render({});
+        this.handlers.refresh();
       });
     }
 
@@ -2711,7 +2900,7 @@ class WraithPanel {
       on(btn, 'click', () => {
         this.cfg.theme = btn.dataset.themeBtn;
         this.setTheme(this.cfg.theme);
-        this.handlers.settingsChanged(this.cfg);
+        this.handlers.settingsApplied(this.cfg);
       });
     }
 
@@ -2725,27 +2914,29 @@ class WraithPanel {
           this.cfg[key] = !this.cfg[key];
           sw.setAttribute('aria-checked', String(Boolean(this.cfg[key])));
         }
-        this.handlers.settingsChanged(this.cfg);
+        this.handlers.settingsApplied(this.cfg);
         if (key === 'afkKeepAlive' || key === 'autoRematch') this.handlers.toggleAfk(this.cfg);
       });
     }
 
-    const bindNumber = (el, key) => {
+    const bindNumber = (el, key, affectsSearch) => {
       if (!el) return;
       el.value = String(this.cfg[key]);
       on(el, 'change', () => {
         this.cfg[key] = clampInt(el.value, Number(el.min), Number(el.max), this.cfg[key]);
         el.value = String(this.cfg[key]);
-        this.handlers.settingsChanged(this.cfg);
+        if (affectsSearch) this.handlers.settingsChanged(this.cfg);
+        else this.handlers.settingsApplied(this.cfg);
       });
     };
-    bindNumber(this.el.elo, 'targetElo');
-    bindNumber(this.el.depth, 'maxDepth');
-    bindNumber(this.el.movetime, 'moveTimeMs');
-    bindNumber(this.el.mint, 'minThinkMs');
-    bindNumber(this.el.maxt, 'maxThinkMs');
-    bindNumber(this.el.slack, 'humanSlackCp');
-    bindNumber(this.el.showLines, 'showLines');
+    // Only the four knobs that change the search restart it; the rest are
+    // display or pacing and must not throw away the running analysis.
+    for (const key of ['targetElo', 'maxDepth', 'moveTimeMs']) {
+      bindNumber(this.el[{ targetElo: 'elo', maxDepth: 'depth', moveTimeMs: 'movetime' }[key]], key, true);
+    }
+    for (const [el, key] of [[this.el.mint, 'minThinkMs'], [this.el.maxt, 'maxThinkMs'], [this.el.slack, 'humanSlackCp'], [this.el.showLines, 'showLines']]) {
+      bindNumber(el, key, false);
+    }
 
     this.#drag();
   }
@@ -2799,7 +2990,7 @@ class WraithPanel {
     const next = this.panel.dataset.collapsed !== 'true';
     this.panel.dataset.collapsed = String(next);
     this.cfg.panelCollapsed = next;
-    this.handlers.settingsChanged(this.cfg);
+    this.handlers.settingsApplied(this.cfg);
   }
 
   toggleHidden() {
@@ -2906,8 +3097,6 @@ const state = {
   analysis: null,
   autoPlay: Boolean(cfg.autoPlayOnLoad),
   thinking: false,
-  searchSeq: 0,
-  latestSearch: 0,
   analyzedFen: null,
   autoMovedFen: null,
   autoTimer: null,
@@ -3012,6 +3201,7 @@ function registerButler() {
       return { valid: true, flipped: scan.flipped, placement: Chess.gridToPlacement(scan.grid), fen: buildSnapshotFen(scan) };
     },
     ready: () => engine.ready,
+    retryEngine: () => engine.retryNnue(),
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
     unload() {
@@ -3023,7 +3213,6 @@ function registerButler() {
       if (boardObserver) boardObserver.disconnect();
       if (docObserver) docObserver.disconnect();
       window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('resize', onGeometry, true);
       if (scanTimer) clearInterval(scanTimer);
       delete globalThis.ChessWraith;
     }
@@ -3121,8 +3310,9 @@ function statusView() {
     autoPlay: state.autoPlay,
     turn: snap ? snap.turn : null,
     myTurn: Boolean(snap && snap.turn === side),
+    turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
-    warn: state.warn,
+    warn: state.warn || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
     clock: state.clockSeconds,
     opponent: state.opponentRating,
     estimate: state.oppEloEstimate,
@@ -3180,9 +3370,17 @@ function analyze(snapshot, force) {
     return;
   }
 
+  // A guessed turn means the eval and the move belong to somebody else.
+  if (snapshot.turnCertain === false) {
+    state.thinking = false;
+    state.analysis = null;
+    state.analyzedFen = null;
+    clearAutoTimer();
+    refreshPanel();
+    return;
+  }
+
   clearAutoTimer();
-  state.searchSeq += 1;
-  state.latestSearch = state.searchSeq;
   state.analyzedFen = snapshot.fen;
   state.thinking = true;
   refreshPanel();
@@ -3198,10 +3396,13 @@ function analyze(snapshot, force) {
     elo: resolveElo(),
     skill: 20
   };
-  engine.analyze(request).then(() => {
-    state.thinking = false;
-    refreshPanel();
-  });
+  engine
+    .analyze(request)
+    .catch(() => [])
+    .then(() => {
+      state.thinking = false;
+      refreshPanel();
+    });
 }
 
 function onFinal(result) {
@@ -3218,8 +3419,10 @@ function scheduleAutoMove(result) {
   const snap = state.snapshot;
   if (!snap || !state.boardEl || !result || !result.lines || result.lines.length === 0) return;
   if (snap.gameOver) return;
+  if (snap.turnCertain === false) return;
   if (state.autoMovedFen === result.fen) return;
-  if (mySide(snap.flipped) !== snap.turn) return;
+  // onlyMyTurn keeps the script on its own side; off, it plays both seats.
+  if (cfg.onlyMyTurn && mySide(snap.flipped) !== snap.turn) return;
   if (cfg.pauseWhenHidden && document.hidden) return;
   if (cfg.pauseOnLowClock && Number.isFinite(state.clockSeconds) && state.clockSeconds <= 5) return;
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
@@ -3312,6 +3515,7 @@ async function playNow() {
   const snap = state.snapshot;
   const result = state.analysis;
   if (!snap || !state.boardEl || !result) return false;
+  if (snap.turnCertain === false) return false;
   if (result.fen !== snap.fen) return false;
   const ply = plyOf(snap);
   const choice = chooseMove(result.lines, cfg, {
@@ -3435,10 +3639,6 @@ function onKeyDown(event) {
   }
 }
 
-function onGeometry() {
-  /* the panel is fixed; nothing to recompute */
-}
-
 function toggleAuto() {
   state.autoPlay = !state.autoPlay;
   cfg.autoPlayOnLoad = state.autoPlay;
@@ -3450,12 +3650,22 @@ function toggleAuto() {
   refreshPanel();
 }
 
+// Settings that change the question we ask the engine: the running search is
+// now wrong, so drop it and rescan.
 function settingsChanged(next) {
   Object.assign(cfg, next);
   saveSettings(cfg);
   state.analyzedFen = null;
   engine.stop();
   scheduleScan(60);
+  refreshPanel();
+}
+
+// Settings that only change how we present or pace the answer. The analysis
+// already in flight is still valid; killing it on a theme click was a bug.
+function settingsApplied(next) {
+  Object.assign(cfg, next);
+  saveSettings(cfg);
   refreshPanel();
 }
 
@@ -3469,7 +3679,9 @@ const panel = new WraithPanel(cfg, {
     analyze(state.snapshot, true);
   },
   hide: () => panel.toggleHidden(),
-  settingsChanged
+  refresh: () => refreshPanel(),
+  settingsChanged,
+  settingsApplied
 });
 
 engine.onReady = (mode) => {
@@ -3497,7 +3709,6 @@ function boot() {
   syncKeepAlive();
   engine.boot();
   window.addEventListener('keydown', onKeyDown, true);
-  window.addEventListener('resize', onGeometry, true);
 
   docObserver = new MutationObserver(() => {
     if (!state.boardEl || !state.boardEl.isConnected) scheduleScan(140);

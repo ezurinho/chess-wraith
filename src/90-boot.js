@@ -13,8 +13,6 @@ const state = {
   analysis: null,
   autoPlay: Boolean(cfg.autoPlayOnLoad),
   thinking: false,
-  searchSeq: 0,
-  latestSearch: 0,
   analyzedFen: null,
   autoMovedFen: null,
   autoTimer: null,
@@ -119,6 +117,7 @@ function registerButler() {
       return { valid: true, flipped: scan.flipped, placement: Chess.gridToPlacement(scan.grid), fen: buildSnapshotFen(scan) };
     },
     ready: () => engine.ready,
+    retryEngine: () => engine.retryNnue(),
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
     unload() {
@@ -130,7 +129,6 @@ function registerButler() {
       if (boardObserver) boardObserver.disconnect();
       if (docObserver) docObserver.disconnect();
       window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('resize', onGeometry, true);
       if (scanTimer) clearInterval(scanTimer);
       delete globalThis.ChessWraith;
     }
@@ -228,8 +226,9 @@ function statusView() {
     autoPlay: state.autoPlay,
     turn: snap ? snap.turn : null,
     myTurn: Boolean(snap && snap.turn === side),
+    turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
-    warn: state.warn,
+    warn: state.warn || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
     clock: state.clockSeconds,
     opponent: state.opponentRating,
     estimate: state.oppEloEstimate,
@@ -287,9 +286,17 @@ function analyze(snapshot, force) {
     return;
   }
 
+  // A guessed turn means the eval and the move belong to somebody else.
+  if (snapshot.turnCertain === false) {
+    state.thinking = false;
+    state.analysis = null;
+    state.analyzedFen = null;
+    clearAutoTimer();
+    refreshPanel();
+    return;
+  }
+
   clearAutoTimer();
-  state.searchSeq += 1;
-  state.latestSearch = state.searchSeq;
   state.analyzedFen = snapshot.fen;
   state.thinking = true;
   refreshPanel();
@@ -305,10 +312,13 @@ function analyze(snapshot, force) {
     elo: resolveElo(),
     skill: 20
   };
-  engine.analyze(request).then(() => {
-    state.thinking = false;
-    refreshPanel();
-  });
+  engine
+    .analyze(request)
+    .catch(() => [])
+    .then(() => {
+      state.thinking = false;
+      refreshPanel();
+    });
 }
 
 function onFinal(result) {
@@ -325,8 +335,10 @@ function scheduleAutoMove(result) {
   const snap = state.snapshot;
   if (!snap || !state.boardEl || !result || !result.lines || result.lines.length === 0) return;
   if (snap.gameOver) return;
+  if (snap.turnCertain === false) return;
   if (state.autoMovedFen === result.fen) return;
-  if (mySide(snap.flipped) !== snap.turn) return;
+  // onlyMyTurn keeps the script on its own side; off, it plays both seats.
+  if (cfg.onlyMyTurn && mySide(snap.flipped) !== snap.turn) return;
   if (cfg.pauseWhenHidden && document.hidden) return;
   if (cfg.pauseOnLowClock && Number.isFinite(state.clockSeconds) && state.clockSeconds <= 5) return;
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
@@ -419,6 +431,7 @@ async function playNow() {
   const snap = state.snapshot;
   const result = state.analysis;
   if (!snap || !state.boardEl || !result) return false;
+  if (snap.turnCertain === false) return false;
   if (result.fen !== snap.fen) return false;
   const ply = plyOf(snap);
   const choice = chooseMove(result.lines, cfg, {
@@ -542,10 +555,6 @@ function onKeyDown(event) {
   }
 }
 
-function onGeometry() {
-  /* the panel is fixed; nothing to recompute */
-}
-
 function toggleAuto() {
   state.autoPlay = !state.autoPlay;
   cfg.autoPlayOnLoad = state.autoPlay;
@@ -557,12 +566,22 @@ function toggleAuto() {
   refreshPanel();
 }
 
+// Settings that change the question we ask the engine: the running search is
+// now wrong, so drop it and rescan.
 function settingsChanged(next) {
   Object.assign(cfg, next);
   saveSettings(cfg);
   state.analyzedFen = null;
   engine.stop();
   scheduleScan(60);
+  refreshPanel();
+}
+
+// Settings that only change how we present or pace the answer. The analysis
+// already in flight is still valid; killing it on a theme click was a bug.
+function settingsApplied(next) {
+  Object.assign(cfg, next);
+  saveSettings(cfg);
   refreshPanel();
 }
 
@@ -576,7 +595,9 @@ const panel = new WraithPanel(cfg, {
     analyze(state.snapshot, true);
   },
   hide: () => panel.toggleHidden(),
-  settingsChanged
+  refresh: () => refreshPanel(),
+  settingsChanged,
+  settingsApplied
 });
 
 engine.onReady = (mode) => {
@@ -604,7 +625,6 @@ function boot() {
   syncKeepAlive();
   engine.boot();
   window.addEventListener('keydown', onKeyDown, true);
-  window.addEventListener('resize', onGeometry, true);
 
   docObserver = new MutationObserver(() => {
     if (!state.boardEl || !state.boardEl.isConnected) scheduleScan(140);

@@ -17,6 +17,7 @@ class WraithEngine {
     this.onError = null;
     this.lastOptions = {};
     this.booted = null;
+    this.watchdogTimer = null;
     // Not derived from the mode string: "Stockfish 2019 JS" contains "19" too,
     // and that made the fallback take the NNUE-only option path.
     this.nnue = false;
@@ -46,9 +47,17 @@ class WraithEngine {
   }
 
   async #bootInner() {
+    // The NNUE build cannot find its .wasm from a blob worker, so after the
+    // first failure the four second handshake is pure delay. Remember the
+    // verdict for a week instead of paying it on every page load.
+    if (readNnueSkip()) {
+      await this.#spawn(false);
+      return;
+    }
     try {
       await this.#spawn(true);
     } catch (err) {
+      rememberNnueSkip();
       this.onError && this.onError(`NNUE engine unavailable (${err.message}); using the JS engine`);
       await this.#spawn(false);
     }
@@ -64,6 +73,8 @@ class WraithEngine {
     }
     if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
     if (this.uciRetryTimer) clearTimeout(this.uciRetryTimer);
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
     this.worker = null;
     this.ready = false;
     this.searching = false;
@@ -79,6 +90,7 @@ class WraithEngine {
     worker.onmessage = (event) => this.#onLine(event.data);
     worker.onerror = (event) => {
       if (preferNnue) {
+        rememberNnueSkip();
         this.onError && this.onError('NNUE worker failed to start; using the JS engine');
         this.#spawn(false).catch(() => {});
         return;
@@ -95,6 +107,7 @@ class WraithEngine {
     this.handshakeTimer = setTimeout(() => {
       if (this.ready || this.worker !== worker) return;
       if (preferNnue) {
+        rememberNnueSkip();
         this.onError && this.onError('NNUE engine did not start; using the JS engine');
         this.#spawn(false).catch(() => {});
       } else {
@@ -203,6 +216,10 @@ class WraithEngine {
   }
 
   #finish(line) {
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
     const parts = line.split(/\s+/);
     const bestmove = parts[1] && parts[1] !== '(none)' ? parts[1] : null;
     const search = this.search;
@@ -236,6 +253,64 @@ class WraithEngine {
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
     this.#send(`go depth ${depth} movetime ${movetime}`);
+    this.#armWatchdog(job);
+  }
+
+  // A worker can accept `go` and never answer. Without this the panel keeps
+  // saying "thinking" and the scan loop waits on a search that ended nowhere.
+  #armWatchdog(job) {
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = setTimeout(() => {
+      this.watchdogTimer = null;
+      if (!this.search || this.search !== job) return;
+      this.onError && this.onError('engine stopped answering; retrying');
+      this.#send('stop');
+      this.watchdogTimer = setTimeout(() => {
+        this.watchdogTimer = null;
+        if (this.search !== job) return;
+        this.search = null;
+        this.searching = false;
+        this.lines = new Map();
+        try {
+          this.worker && this.worker.terminate();
+        } catch {
+          /* already gone */
+        }
+        this.worker = null;
+        this.ready = false;
+        this.booted = null;
+        this.onFinal && this.onFinal({
+          fen: job.fen,
+          turn: job.turn,
+          flipped: job.flipped,
+          lines: [],
+          bestmove: null,
+          depth: 0,
+          final: true,
+          engine: this.mode
+        });
+        if (job.resolve) job.resolve([]);
+      }, 2500);
+    }, searchBudgetMs(job));
+  }
+
+  // Drop the remembered NNUE verdict and try the full engine once more.
+  async retryNnue() {
+    forgetNnueSkip();
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
+    try {
+      this.worker && this.worker.terminate();
+    } catch {
+      /* already gone */
+    }
+    this.worker = null;
+    this.ready = false;
+    this.booted = null;
+    this.searching = false;
+    this.search = null;
+    await this.boot();
+    return this.mode;
   }
 
   #applyOptions(job) {
@@ -266,6 +341,8 @@ class WraithEngine {
   }
 
   destroy() {
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
     try {
       this.#send('quit');
       this.worker && this.worker.terminate();

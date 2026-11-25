@@ -608,11 +608,16 @@
     const placement = gridToPlacement(grid);
     let turn = 'w';
     let ep = '-';
+    // Where the turn came from. Anything but 'assumed' is evidence; 'assumed'
+    // is the fallback and the caller must not play on it.
+    let turnSource = 'assumed';
 
     if (hints.turnOverride === 'w' || hints.turnOverride === 'b') {
       turn = hints.turnOverride;
+      turnSource = 'override';
     } else if (typeof hints.plyCount === 'number' && hints.plyCount >= 0) {
       turn = hints.plyCount % 2 === 0 ? 'w' : 'b';
+      turnSource = 'ply';
     } else if (Array.isArray(hints.lastHighlightSquares) && hints.lastHighlightSquares.length === 2) {
       const sqA = parseSquare(hints.lastHighlightSquares[0]);
       const sqB = parseSquare(hints.lastHighlightSquares[1]);
@@ -631,6 +636,7 @@
         if (dest) {
           const movedColor = pieceColor(dest.piece);
           turn = movedColor === 'w' ? 'b' : 'w';
+          turnSource = 'highlight';
           if (dest.piece.toLowerCase() === 'p' && orig.file === dest.file && Math.abs(dest.rank - orig.rank) === 2) {
             ep = squareName(dest.file, (orig.rank + dest.rank) / 2);
           }
@@ -638,6 +644,7 @@
       }
     } else if (hints.activeClockTurn === 'w' || hints.activeClockTurn === 'b') {
       turn = hints.activeClockTurn;
+      turnSource = 'clock';
     }
 
     const castling = {
@@ -658,7 +665,8 @@
       castling,
       ep,
       halfmove: 0,
-      fullmove
+      fullmove,
+      turnSource
     };
   }
 
@@ -670,6 +678,7 @@
     reset() {
       this.currentState = null;
       this.uciMoves = null; // null when attached mid-game without full history from startpos
+      this.turnSource = 'assumed';
       this.history = [];
     }
 
@@ -682,6 +691,7 @@
         halfmove: state.halfmove,
         fullmove: state.fullmove,
         plyCount: typeof plyCount === 'number' ? plyCount : null,
+        turnSource: this.turnSource,
         uciMoves: Array.isArray(uciMoves) ? uciMoves.slice() : null
       });
       if (this.history.length > 250) {
@@ -697,6 +707,7 @@
         ep: '-'
       };
       this.uciMoves = null;
+      this.turnSource = 'override';
       return this.getSnapshot(false, null);
     }
 
@@ -705,6 +716,9 @@
         ...this.currentState,
         fen: buildFen(this.currentState),
         uciMoves: Array.isArray(this.uciMoves) ? this.uciMoves.slice() : null,
+        turnSource: this.turnSource,
+        // A guess is not evidence: display it, never act on it.
+        turnCertain: this.turnSource !== 'assumed',
         changed,
         lastMoveUci
       };
@@ -724,6 +738,7 @@
         const changed = prevFen !== buildFen(start);
         this.currentState = start;
         this.uciMoves = [];
+        this.turnSource = hints.turnOverride === 'w' || hints.turnOverride === 'b' ? 'override' : 'start';
         if (changed) {
           this.history = [];
           this.recordHistory(start, 0, []);
@@ -742,6 +757,7 @@
           const prevMovesLen = Array.isArray(this.uciMoves) ? this.uciMoves.length : -1;
           this.currentState = replayed.state;
           this.uciMoves = replayed.uciMoves;
+          this.turnSource = 'moves';
           const nextFen = buildFen(this.currentState);
           const changed = prevFen !== nextFen || prevMovesLen !== replayed.uciMoves.length;
           if (changed) {
@@ -757,6 +773,7 @@
         if ((hints.turnOverride === 'w' || hints.turnOverride === 'b') && this.currentState.turn !== hints.turnOverride) {
           this.currentState = { ...this.currentState, turn: hints.turnOverride };
           this.uciMoves = null;
+          this.turnSource = 'override';
           changed = true;
         }
         return this.getSnapshot(changed, null);
@@ -772,6 +789,7 @@
           if (hints.turnOverride === 'w' || hints.turnOverride === 'b') {
             this.currentState.turn = hints.turnOverride;
             this.uciMoves = null;
+            this.turnSource = 'override';
           } else if (Array.isArray(this.uciMoves)) {
             this.uciMoves = [...this.uciMoves, uci];
           }
@@ -796,6 +814,9 @@
             fullmove: entry.fullmove
           };
           this.uciMoves = Array.isArray(entry.uciMoves) ? entry.uciMoves.slice() : null;
+          this.turnSource = hints.turnOverride === 'w' || hints.turnOverride === 'b'
+            ? 'override'
+            : (entry.turnSource || 'history');
           return this.getSnapshot(true, null);
         }
       }
@@ -803,6 +824,7 @@
       // Mid-game attach or board jump fallback
       this.currentState = inferMidgameState(grid, hints);
       this.uciMoves = null;
+      this.turnSource = this.currentState.turnSource || 'assumed';
       this.recordHistory(this.currentState, hints.plyCount, null);
       return this.getSnapshot(true, null);
     }

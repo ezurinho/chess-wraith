@@ -353,6 +353,7 @@ class WraithPanel {
     this.#wire();
     this.setTab('live');
     this.setTheme(cfg.theme || 'carbon');
+    this.panel.dataset.collapsed = String(Boolean(cfg.panelCollapsed));
     this.render();
   }
 
@@ -386,7 +387,7 @@ class WraithPanel {
         }
         this.cfg.style = style;
         this.handlers.settingsChanged(this.cfg);
-        this.render({});
+        this.handlers.refresh();
       });
     }
 
@@ -394,7 +395,7 @@ class WraithPanel {
       on(btn, 'click', () => {
         this.cfg.theme = btn.dataset.themeBtn;
         this.setTheme(this.cfg.theme);
-        this.handlers.settingsChanged(this.cfg);
+        this.handlers.settingsApplied(this.cfg);
       });
     }
 
@@ -408,27 +409,29 @@ class WraithPanel {
           this.cfg[key] = !this.cfg[key];
           sw.setAttribute('aria-checked', String(Boolean(this.cfg[key])));
         }
-        this.handlers.settingsChanged(this.cfg);
+        this.handlers.settingsApplied(this.cfg);
         if (key === 'afkKeepAlive' || key === 'autoRematch') this.handlers.toggleAfk(this.cfg);
       });
     }
 
-    const bindNumber = (el, key) => {
+    const bindNumber = (el, key, affectsSearch) => {
       if (!el) return;
       el.value = String(this.cfg[key]);
       on(el, 'change', () => {
         this.cfg[key] = clampInt(el.value, Number(el.min), Number(el.max), this.cfg[key]);
         el.value = String(this.cfg[key]);
-        this.handlers.settingsChanged(this.cfg);
+        if (affectsSearch) this.handlers.settingsChanged(this.cfg);
+        else this.handlers.settingsApplied(this.cfg);
       });
     };
-    bindNumber(this.el.elo, 'targetElo');
-    bindNumber(this.el.depth, 'maxDepth');
-    bindNumber(this.el.movetime, 'moveTimeMs');
-    bindNumber(this.el.mint, 'minThinkMs');
-    bindNumber(this.el.maxt, 'maxThinkMs');
-    bindNumber(this.el.slack, 'humanSlackCp');
-    bindNumber(this.el.showLines, 'showLines');
+    // Only the four knobs that change the search restart it; the rest are
+    // display or pacing and must not throw away the running analysis.
+    for (const key of ['targetElo', 'maxDepth', 'moveTimeMs']) {
+      bindNumber(this.el[{ targetElo: 'elo', maxDepth: 'depth', moveTimeMs: 'movetime' }[key]], key, true);
+    }
+    for (const [el, key] of [[this.el.mint, 'minThinkMs'], [this.el.maxt, 'maxThinkMs'], [this.el.slack, 'humanSlackCp'], [this.el.showLines, 'showLines']]) {
+      bindNumber(el, key, false);
+    }
 
     this.#drag();
   }
@@ -482,7 +485,7 @@ class WraithPanel {
     const next = this.panel.dataset.collapsed !== 'true';
     this.panel.dataset.collapsed = String(next);
     this.cfg.panelCollapsed = next;
-    this.handlers.settingsChanged(this.cfg);
+    this.handlers.settingsApplied(this.cfg);
   }
 
   toggleHidden() {

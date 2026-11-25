@@ -26,3 +26,5 @@ jobs:
         run: npm ci
       - name: Build check, lint and tests
         run: npm run check
+      - name: Versions agree
+        run: node tools/release.js check

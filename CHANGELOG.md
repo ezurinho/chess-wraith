@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.2.0 — 2026-11-25
+
+A review against the live site found seven ways the script could be confidently
+wrong. This release makes the wrong cases visible instead of silent.
+
+- **The turn is evidence, not a default.** The tracker now records where the
+  turn came from (`start`, `moves`, `ply`, `clock`, `highlight`, `override`,
+  `assumed`). When it is only a guess, the panel says `turn not readable; not
+  playing` and neither auto-play nor Step will move a piece. Previously a
+  mid-game attach with no move list and no clock assumed White to move, which
+  meant the eval and the suggested move belonged to the other player, and a
+  click during the opponent's turn became a premove.
+- **Move lists without `data-ply` are read.** chess.com also renders moves as
+  `.node` rows inside `wc-simple-move-list`; those are now parsed in DOM order,
+  so the exact path (full UCI history, exact halfmove clock) works there too.
+- **`onlyMyTurn` is honoured.** Off, the script plays both seats; on (default),
+  it only moves its own side.
+- **A theme click no longer kills the analysis.** Settings are split in two:
+  style, target Elo, depth and movetime restart the search; theme, collapse,
+  pacing, line count and switches only save and repaint.
+- **The collapsed panel stays collapsed** across reloads; the setting was saved
+  but never applied on mount.
+- **Search watchdog.** A worker that accepts `go` and never answers used to leave
+  the panel saying `thinking` forever, with the 2 s scan loop waiting on it. The
+  engine now sends `stop` after `movetime * 6 + 6 s`, and if the answer still
+  does not arrive 2.5 s later it drops the worker, reports it and reboots.
+- **The engine is pinned to a release tag**, not `@main`: the bytes executed
+  inside chess.com must not change without a tag. The NNUE verdict is cached for
+  seven days per mirror, so the four second handshake that can only fail is paid
+  once a week instead of on every page load. `ChessWraith.retryEngine()` clears
+  the verdict.
+- **AFK button search is scoped** to the game-over dialog, where `new game`
+  cannot hit the site navigation.
+- Dead code removed: the no-op resize handler, the unwritten search counters and
+  the unused `bestSan` branch.
+- 37 tests (was 29): turn certainty per source, the search budget, the NNUE
+  verdict cache and the README version badge.
 ## 1.1.0 — 2026-11-25
 
 The interface is now the NITRO WRAITH system, and the session can run unattended.
@@ -86,3 +123,4 @@ First release.
 - Hotkeys: `Alt+Shift+A` auto-play, `Alt+Shift+M` play one move, `Alt+Shift+H`
   panel.
 - Fallback engine (`stockfish.js`, no WASM) when the NNUE worker cannot start.
+

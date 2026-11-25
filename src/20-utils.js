@@ -1,3 +1,51 @@
+// Bump the engine pin and the NNUE verdict is re-earned: a new build may fix
+// what the shim cannot do today. Keys are scoped to the mirror URL.
+const NNUE_SKIP_KEY = 'chess-wraith-nnue-skip-v1';
+const NNUE_SKIP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function nnueSkipActive(raw, mirror, nowMs) {
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.mirror !== mirror) return false;
+    const age = nowMs - Number(parsed.at || 0);
+    return Number.isFinite(age) && age >= 0 && age < NNUE_SKIP_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function readNnueSkip() {
+  try {
+    return nnueSkipActive(localStorage.getItem(NNUE_SKIP_KEY), ENGINE_MIRROR, Date.now());
+  } catch {
+    return false;
+  }
+}
+
+function rememberNnueSkip() {
+  try {
+    localStorage.setItem(NNUE_SKIP_KEY, JSON.stringify({ mirror: ENGINE_MIRROR, at: Date.now() }));
+  } catch {
+    /* storage can be blocked; the four seconds are the whole cost */
+  }
+}
+
+function forgetNnueSkip() {
+  try {
+    localStorage.removeItem(NNUE_SKIP_KEY);
+  } catch {
+    /* nothing to forget */
+  }
+}
+
+// A search that never answers must not wedge the panel forever. The budget is
+// generous relative to the request so a slow-but-working search still finishes.
+function searchBudgetMs(job) {
+  const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
+  return movetime * 6 + 6000;
+}
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clampInt = (v, lo, hi, fallback) => {
   const n = Number.parseInt(v, 10);
