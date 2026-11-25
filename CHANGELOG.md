@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.19.0 — 2026-11-25
+
+The engine can now lose a worker and come back inside the same move.
+
+- **A worker that died after booting kept `ready` true.** The UCI handshake had
+  said readyok, so `ensureReady` returned immediately and every search after the
+  crash waited out the whole budget (6–40 s) before the watchdog noticed. On a
+  3-second clock that is the game. `#recover` now kills the worker, drops the
+  ready flag, settles whoever was waiting and boots a replacement in the
+  background, so the next scan finds a live engine instead of paying a
+  handshake mid-move.
+- The stall watchdog uses the same path: it stays responsible for unblocking the
+  caller, and `#recover` rebuilds instead of leaving `worker: null` for the next
+  `ensureReady` to discover.
+- Two recoveries per crash cluster, cleared by the next readyok: a worker that
+  cannot start at all must not spin.
+- Test with the fake worker: kill it after readyok, the engine is not ready any
+  more, and a fresh worker is spawned and handshaking. 135 tests.
+
 ## 1.18.2 — 2026-11-25
 
 The measurement behind 1.18.1, recorded so the claim does not rest on a hunch:

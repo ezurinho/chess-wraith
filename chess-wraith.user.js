@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.18.2
+// @version      1.19.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.18.2';
+const VERSION = '1.19.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.18.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.19.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -1992,6 +1992,8 @@ class WraithEngine {
     // and that made the fallback take the NNUE-only option path.
     this.nnue = false;
     this.nnueRetried = false;
+    this.recovering = false;
+    this.recoveries = 0;
   }
 
   async boot() {
@@ -2034,6 +2036,38 @@ class WraithEngine {
     }
   }
 
+  // Kill the worker, unblock whoever is waiting on it, and boot a fresh one in
+  // the background. One recovery at a time: a worker that fails while the
+  // replacement is still booting must not start a boot loop.
+  #recover(reason) {
+    // Two attempts per crash cluster: a worker that cannot start at all must not
+    // spin, and the counter is cleared by the next readyok.
+    if (this.recovering || this.recoveries >= 2) return;
+    this.recoveries += 1;
+    this.recovering = true;
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = null;
+    try {
+      this.worker && this.worker.terminate();
+    } catch {
+      /* already gone */
+    }
+    const pending = this.search;
+    this.worker = null;
+    this.ready = false;
+    this.booted = null;
+    this.searching = false;
+    this.search = null;
+    this.lines = new Map();
+    this.onError && this.onError(reason);
+    if (pending && pending.resolve) pending.resolve([]);
+    this.#bootInner()
+      .catch(() => {})
+      .finally(() => {
+        this.recovering = false;
+      });
+  }
+
   async #spawn(preferNnue) {
     if (this.worker) {
       try {
@@ -2066,7 +2100,10 @@ class WraithEngine {
         this.#spawn(false).catch(() => {});
         return;
       }
-      this.onError && this.onError(event && event.message ? event.message : 'engine worker error');
+      // A worker that dies after booting keeps `ready` true, so every search
+      // after it waits out the full budget before the watchdog notices. Rebuild
+      // now instead of losing a move to the handshake.
+      this.#recover(event && event.message ? event.message : 'engine worker error');
     };
 
     this.#send('uci');
@@ -2135,6 +2172,7 @@ class WraithEngine {
 
     if (line === 'readyok') {
       this.ready = true;
+      this.recoveries = 0;
       // It booted: whatever we remembered about this mirror is wrong now.
       if (this.nnue) forgetNnueSkip();
       if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
@@ -2259,14 +2297,6 @@ class WraithEngine {
         this.search = null;
         this.searching = false;
         this.lines = new Map();
-        try {
-          this.worker && this.worker.terminate();
-        } catch {
-          /* already gone */
-        }
-        this.worker = null;
-        this.ready = false;
-        this.booted = null;
         this.onFinal && this.onFinal({
           fen: job.fen,
           turn: job.turn,
@@ -2278,6 +2308,7 @@ class WraithEngine {
           engine: this.mode
         });
         if (job.resolve) job.resolve([]);
+        this.#recover('engine stopped answering; rebuilt');
       }, 2500);
     }, searchBudgetMs(job));
   }

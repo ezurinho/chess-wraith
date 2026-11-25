@@ -135,6 +135,33 @@ test('a search sends position and go, then resolves the formatted best move', as
   engine.destroy();
 });
 
+test('a worker that dies after booting is replaced instead of timing out', async () => {
+  // Plain engine on purpose: the NNUE spawn already falls back to the JS build
+  // when its worker fails, so the case that had no answer is a dead JS worker.
+  const { api, workers, storage } = harness({ nnueSkip: false });
+  storage.set('chess-wraith-nnue-skip-v1', JSON.stringify({ mirror: api.ENGINE_MIRROR, at: Date.now() }));
+  const engine = new api.WraithEngine();
+  const errors = [];
+  engine.onError = (m) => errors.push(m);
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const first = workers[workers.length - 1];
+  first.reply('uciok');
+  first.reply('readyok');
+  await booting;
+  assert.equal(engine.ready, true);
+  assert.equal(engine.nnue, false, 'the plain build is the one under test');
+
+  first.onerror({ message: 'boom' });
+  assert.equal(engine.ready, false, 'a dead worker is not ready any more');
+  for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r));
+  const second = workers[workers.length - 1];
+  assert.notEqual(second, first, 'a fresh worker was spawned');
+  assert.ok(second.sent.includes('uci'), 'and it is asked to handshake');
+  assert.match(errors.join(' '), /boom/);
+  engine.destroy();
+});
+
 test('an empty move list analyses the FEN, not the starting position', async () => {
   const { api, workers } = harness();
   const engine = new api.WraithEngine();
