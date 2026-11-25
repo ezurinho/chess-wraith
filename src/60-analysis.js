@@ -191,5 +191,12 @@ function computeDelay(cfg, opts = {}) {
     if (opts.clockSeconds <= 8) ms = Math.min(ms, 420);
     else if (opts.clockSeconds <= cfg.clockFloorSeconds) ms = Math.min(ms, 900);
   }
+  // Never spend more than a eighteenth of what is left on one move. The published
+  // baseline is honest - it is what the account does - but with forty seconds on
+  // the clock a six second median is how a person flags, and people do not flag
+  // by playing their usual rhythm: they start moving in a second.
+  if (cfg.pauseOnLowClock && Number.isFinite(opts.clockSeconds) && opts.clockSeconds > 0) {
+    ms = Math.min(ms, Math.max(280, (opts.clockSeconds * 1000) / 18));
+  }
   return Math.round(clamp(ms, 250, 9000));
 }

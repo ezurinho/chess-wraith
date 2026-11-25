@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.1 — 2026-11-25
+
+A six second pace is honest until the clock is not.
+
+- The published median is now capped at a eighteenth of the remaining clock
+  (`min(ms, max(280, clockMs / 18))`, under the same low-clock setting). With ten
+  minutes left nothing changes; with forty seconds the account moves like a
+  person in time trouble instead of flagging while thinking six seconds per move.
+- One test: ten minutes keeps the rhythm, forty seconds keeps an eighteen-move
+  tank, nine seconds becomes a scramble and never zero.
+
 ## 1.7.0 — 2026-11-25
 
 The pacing stops being a default and becomes the account's own measured rhythm.

@@ -194,3 +194,14 @@ test('a long session gets slower, like a person not a metronome', () => {
   // The cap: eight hours is not eight times slower.
   assert.equal(api.fatigueFactor(8 * 3600000), 1.06);
 });
+test('the clock caps the published baseline instead of letting it flag the account', () => {
+  // The account's own median, read from its games: six seconds a move.
+  const opts = { plyCount: 24, legalMoveCount: 30, baselineMs: 6000 };
+  const comfortable = api.computeDelay(baseCfg, { ...opts, clockSeconds: 600 });
+  const low = api.computeDelay(baseCfg, { ...opts, clockSeconds: 40 });
+  const cramped = api.computeDelay(baseCfg, { ...opts, clockSeconds: 9 });
+  assert.ok(comfortable > 2000, `ten minutes left, usual rhythm: ${comfortable}`);
+  assert.ok(low <= 2222, `forty seconds left keeps a 18-move tank: ${low}`);
+  assert.ok(cramped <= 500, `nine seconds left is a scramble: ${cramped}`);
+  assert.ok(cramped >= 250, 'but never an impossible zero');
+});
