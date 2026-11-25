@@ -86,7 +86,20 @@ function repeatedOpening(uci, ply) {
   return count >= 2 ? uci : null;
 }
 
+// chess.com's own write-up lists "global scope audits" among the things they
+// look for in cheat clients. A script that names itself on `window` for every
+// visitor is a free fingerprint, so the debug API is opt-in.
+function debugEnabled() {
+  try {
+    if (/[?&]cw=1(&|$)/.test(location.search)) return true;
+    return localStorage.getItem('chess-wraith-debug') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function registerButler() {
+  if (!debugEnabled()) return;
   const api = {
     version: VERSION,
     state,

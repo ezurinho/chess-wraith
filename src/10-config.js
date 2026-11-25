@@ -1,4 +1,4 @@
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {

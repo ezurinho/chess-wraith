@@ -142,8 +142,10 @@ The rules engine is checked with real perft counts: `20 / 400 / 8902` from the
 start position, `48 / 2039` on Kiwipete and `14 / 191 / 2812` on the en-passant
 position. Move selection and pacing are property-tested over hundreds of draws.
 
-`window.ChessWraith` is left available for debugging (`state`, `board()`,
-`analyzeNow()`, `playNow()`, `unload()`).
+For debugging, `window.ChessWraith` (`state`, `board()`, `analyzeNow()`,
+`playNow()`, `unload()`) is opt-in: open the page with `?cw=1` or set
+`localStorage['chess-wraith-debug'] = '1'`. Without it nothing is added to the
+page's global scope.
 
 ## License
 

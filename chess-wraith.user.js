@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.0.2
+// @version      1.0.3
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -2493,7 +2493,20 @@ function repeatedOpening(uci, ply) {
   return count >= 2 ? uci : null;
 }
 
+// chess.com's own write-up lists "global scope audits" among the things they
+// look for in cheat clients. A script that names itself on `window` for every
+// visitor is a free fingerprint, so the debug API is opt-in.
+function debugEnabled() {
+  try {
+    if (/[?&]cw=1(&|$)/.test(location.search)) return true;
+    return localStorage.getItem('chess-wraith-debug') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function registerButler() {
+  if (!debugEnabled()) return;
   const api = {
     version: VERSION,
     state,

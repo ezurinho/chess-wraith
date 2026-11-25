@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3 — 2026-11-25
+
+- The debug API is no longer a global by default. chess.com's own analysis of
+  cheat clients lists "global scope audits" as a detection angle; `window.ChessWraith`
+  is now exposed only with `?cw=1` in the URL or
+  `localStorage['chess-wraith-debug'] = '1'`. The panel, auto-play and engine are
+  unaffected.
+
 ## 1.0.2 — 2026-11-25
 
 A code review turned up three things the previous release claimed but did not
