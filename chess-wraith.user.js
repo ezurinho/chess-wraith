@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.4.1
+// @version      1.4.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.4.1';
+const VERSION = '1.4.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -102,7 +102,7 @@ const STYLES = {
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2283,7 +2283,9 @@ function computeDelay(cfg, opts = {}) {
   // faster or slower than this account usually plays is the loudest signal on
   // the page, so the delay stays inside a band around it.
   const baseline = Number.isFinite(opts.baselineMs) && opts.baselineMs > 0 ? opts.baselineMs : null;
-  if (baseline) ms = clamp(ms, baseline * 0.65, baseline * 1.5);
+  // Centred on the account, not clamped into its band: clamping a uniform draw
+  // piles mass on both edges and makes the median of every game drift with it.
+  if (baseline) ms = clamp(baseline * (0.78 + 0.44 * skew), baseline * 0.65, baseline * 1.5);
 
   // Never answer much faster than the person across the board: a wall of
   // instant replies against someone taking ten seconds a move is a pattern.

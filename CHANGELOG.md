@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.4.2 — 2026-11-25
+
+CI caught a flaky assertion in the pace test, and the flake was the feature
+working badly: the account band clamped a uniform draw, so a session's median
+sat wherever the clamp put it.
+
+- The delay is now drawn around the account's own baseline (0.78–1.22×, median
+  on the baseline) instead of being clamped into 0.65–1.5×, which piled mass on
+  both edges and let the median drift past 2 800 ms on a 2 000 ms account.
+- The test asserts the median lands within ±10% of the baseline.
+- 72 tests, five consecutive green runs.
+
 ## 1.4.1 — 2026-11-25
 
 The engine reporting `readyok` cleared every warning, including the two that

@@ -145,7 +145,9 @@ function computeDelay(cfg, opts = {}) {
   // faster or slower than this account usually plays is the loudest signal on
   // the page, so the delay stays inside a band around it.
   const baseline = Number.isFinite(opts.baselineMs) && opts.baselineMs > 0 ? opts.baselineMs : null;
-  if (baseline) ms = clamp(ms, baseline * 0.65, baseline * 1.5);
+  // Centred on the account, not clamped into its band: clamping a uniform draw
+  // piles mass on both edges and makes the median of every game drift with it.
+  if (baseline) ms = clamp(baseline * (0.78 + 0.44 * skew), baseline * 0.65, baseline * 1.5);
 
   // Never answer much faster than the person across the board: a wall of
   // instant replies against someone taking ten seconds a move is a pattern.

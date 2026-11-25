@@ -142,7 +142,9 @@ test('an account baseline keeps every move inside a band around its own rhythm',
   }
   picks.sort((a, b) => a - b);
   const mid = picks[Math.floor(picks.length / 2)];
-  assert.ok(mid >= 1500 && mid <= 2800, `median off the baseline: ${mid}`);
+  // Centred on the account: the jitter is drawn around the baseline, so the
+  // median of a session stays on it instead of drifting with the drawn window.
+  assert.ok(mid >= 1800 && mid <= 2200, `median off the baseline: ${mid}`);
   assert.ok(picks[0] >= 900, `too fast for the account: ${picks[0]}`);
 });
 
