@@ -46,7 +46,8 @@ function mount(html) {
     Date,
     JSON,
     Promise,
-    AbortSignal
+    AbortSignal,
+    getComputedStyle: window.getComputedStyle.bind(window)
   });
   const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { readGridFromBoard, readSanMoveList, readMoveNodes, scanBoard, Chess };';
   vm.runInContext(source, context, { filename: 'dom-harness.js' });
@@ -82,6 +83,17 @@ test('a piece being dragged invalidates the snapshot instead of guessing', () =>
   const read0 = api.readGridFromBoard(boardEl, false);
   assert.equal(read0.isDragging, true);
   assert.equal(read0.valid, false);
+});
+
+test('a flag fall is detected from the modal, not from a board that never moved', () => {
+  // The pieces do not move when the clock runs out. If the game-over signal were
+  // read only on a position change, a session would sit on that board all night.
+  const finished = mount(boardHtml() + '<div class="game-over-modal" style="position:fixed"><div class="game-over-modal-content">White won on time</div></div>');
+  const scan = finished.api.scanBoard('w');
+  assert.equal(scan.valid, true);
+  assert.equal(scan.gameOver, true, 'the modal is the signal');
+  const playing = mount(boardHtml() + '<div class="game-over-modal" style="display:none">hidden</div>');
+  assert.equal(playing.api.scanBoard('w').gameOver, false, 'a hidden modal is not a finished game');
 });
 
 test('promotion and spare-piece pieces are not part of the board', () => {

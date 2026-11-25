@@ -105,6 +105,17 @@ function moveRetryPlan(attempt) {
   return { retry: true, delayMs: 900 * n };
 }
 
+// Should the idle tick arm a move right now? A finished game is the trap: the
+// board does not change when the clock runs out, so the last analysis still
+// matches the last position and the turn still looks ours.
+function autoArmDecision(opts) {
+  const o = opts || {};
+  if (!o.autoPlay || o.thinking || o.autoTimer || o.retryTimer) return false;
+  if (o.gameOver) return false;
+  if (!o.analysisFen || !o.snapshotFen || o.analysisFen !== o.snapshotFen) return false;
+  return Boolean(o.ourTurn);
+}
+
 // A move landed on our own turn that we did not click: a human took over, or
 // another tab played. A guessed turn never fires this, only a certain one.
 function foreignMoveSeen(opts) {

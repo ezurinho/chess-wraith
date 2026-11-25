@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.18.1 — 2026-11-25
+
+The rematch never fired after a game that ended on the clock, which is the
+normal way a session ends at night.
+
+- **Game over was only read when the position changed.** `runScan` checked
+  `scanned.gameOver` inside the `if (changed)` branch. A flag fall or a
+  resignation does not move a piece, so the check never ran: the script sat on
+  the last position, `gameOverSeen` stayed false, and `queueRematch` — which is
+  called from that same branch — was never reached. The modal is now read on
+  every scan, before the changed/unchanged split. This is the likeliest reason
+  the session "stopped" mid-game in the first place.
+- **The 1.18.0 watchdog could fire into a finished game.** It is now gated by
+  `autoArmDecision`, which refuses a finished board, and `playNow` refuses too,
+  because a timeout leaves the last analysis and the last turn still on screen.
+- A jsdom test for the modal itself (visible modal → game over, hidden modal →
+  not), and the decision helper is tested case by case. 134 tests.
+
 ## 1.18.0 — 2026-11-25
 
 Auto-play could stop mid-game and never say why, and the panel could show no

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.18.0
+// @version      1.18.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.18.0';
+const VERSION = '1.18.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.18.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.18.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -223,6 +223,17 @@ function moveRetryPlan(attempt) {
   const n = Math.max(1, Math.floor(Number(attempt) || 1));
   if (n > 3) return { retry: false, delayMs: 0 };
   return { retry: true, delayMs: 900 * n };
+}
+
+// Should the idle tick arm a move right now? A finished game is the trap: the
+// board does not change when the clock runs out, so the last analysis still
+// matches the last position and the turn still looks ours.
+function autoArmDecision(opts) {
+  const o = opts || {};
+  if (!o.autoPlay || o.thinking || o.autoTimer || o.retryTimer) return false;
+  if (o.gameOver) return false;
+  if (!o.analysisFen || !o.snapshotFen || o.analysisFen !== o.snapshotFen) return false;
+  return Boolean(o.ourTurn);
 }
 
 // A move landed on our own turn that we did not click: a human took over, or
@@ -4335,6 +4346,7 @@ function armMoveRetry() {
   moveRetryTimer = setTimeout(() => {
     moveRetryTimer = null;
     if (!state.autoPlay || !state.snapshot || !state.analysis) return;
+    if (state.gameOverSeen) return;
     // The game moved on while we waited; the next scan has fresh work to do.
     if (state.analysis.fen !== state.snapshot.fen) return;
     if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
@@ -4811,6 +4823,9 @@ async function playNow() {
   const snap = state.snapshot;
   const result = state.analysis;
   if (!snap || !state.boardEl || !result) return false;
+  // A finished game keeps the last position and sometimes the last turn on the
+  // board; nothing should be played into it.
+  if (state.gameOverSeen) return false;
   if (snap.turnCertain === false) return false;
   if (result.fen !== snap.fen) return false;
   const ply = plyOf(snap);
@@ -4879,6 +4894,24 @@ function runScan() {
   });
   if (!snapshot) return;
 
+  // A resignation or a flag fall leaves the position untouched, so this cannot
+  // live inside `changed` like it used to: a game that ended on time sat on the
+  // last board forever, and a session with rematch armed never asked for one.
+  if (scanned.gameOver) {
+    state.snapshot = snapshot;
+    if (!state.gameOverSeen) {
+      state.gameOverSeen = true;
+      state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
+      clearAutoTimer();
+      clearMoveRetry();
+      state.moveMisses = 0;
+      if (cfg.autoRematch) queueRematch();
+      else state.autoPlay = false;
+    }
+    refreshPanel();
+    return;
+  }
+
   const changed = !prev || prev.fen !== snapshot.fen;
   if (changed) {
     // Carry the evaluation of the position we just left onto the new snapshot:
@@ -4921,15 +4954,6 @@ function runScan() {
     }
     state.autoMovedFen = null;
     state.autoMovedGrid = null;
-    if (scanned.gameOver) {
-      state.gameOverSeen = true;
-      state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
-      clearAutoTimer();
-      if (cfg.autoRematch) queueRematch();
-      else state.autoPlay = false;
-      refreshPanel();
-      return;
-    }
     if (state.gameOverSeen) onNewGame();
     analyze(snapshot, false);
   } else {
@@ -5189,7 +5213,17 @@ function boot() {
     // that arms a move lives inside a callback that already ran or was skipped.
     // This tick is the only thing left that can notice, and without it the panel
     // says "playing" while nothing plays.
-    if (!state.autoPlay || state.thinking || state.autoTimer || moveRetryTimer) return;
+    if (!state.snapshot) return;
+    if (!autoArmDecision({
+      autoPlay: state.autoPlay,
+      thinking: state.thinking,
+      autoTimer: state.autoTimer,
+      retryTimer: moveRetryTimer,
+      gameOver: state.gameOverSeen,
+      analysisFen: state.analysis ? state.analysis.fen : '',
+      snapshotFen: state.snapshot.fen,
+      ourTurn: mySide(state.snapshot.flipped) === state.snapshot.turn
+    })) return;
     if (!state.analysis || !state.snapshot) return;
     if (state.analysis.fen !== state.snapshot.fen) return;
     if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
