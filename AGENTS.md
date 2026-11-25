@@ -53,9 +53,10 @@ only version anyone installs.
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic (83 tests). There is no DOM test harness: the board
-  reader and the worker boot are verified by hand against the live site, which is
-  the known weak point.
+- `tests/unit/` — pure logic and jsdom board tests (87 tests). The worker boot is still verified by
+  hand against the live site; that is the remaining weak point.
+- `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the
+  selector layer is tested, not just eyeballed.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,
   and the comparison with `nitro-wraith`. Update the numbers when they change;
   they are claims, and claims rot.

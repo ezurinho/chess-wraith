@@ -1,6 +1,6 @@
 {
   "name": "chess-wraith",
-  "version": "1.6.4",
+  "version": "1.6.5",
   "private": true,
   "description": "CHESS WRAITH — human-paced Chess.com userscript with local Stockfish",
   "scripts": {
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "eslint": "^9.39.5",
-    "globals": "^15.15.0"
+    "globals": "^15.15.0",
+    "jsdom": "^31.0.1"
   }
 }

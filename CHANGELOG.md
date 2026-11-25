@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.5 — 2026-11-25
+
+The selector layer stops being the untested part.
+
+- **jsdom fixtures of chess.com's own markup.** `tests/unit/dom-board.test.js`
+  builds a real board (`div.piece.wp.square-52`, the `square-{file}{rank}`
+  convention), a move list with figurines and a spare-pieces tray, then reads it
+  back through the shipped reader: start position, a dragging piece invalidating
+  the snapshot, promotion/spare pieces excluded, `e4 e5 Nf3` parsed in order.
+  87 tests (was 83).
+- **A daily canary** (`canary.yml`) fails when jsDelivr stops serving the pinned
+  tag, when either engine file 404s, when the release is missing an asset, or
+  when `ENGINE_MIRROR` drifts from `package.json`. A green release with a dead
+  engine URL is the failure this catches.
+
 ## 1.6.4 — 2026-11-25
 
 Two things the panel could not tell you, and one it was lying about.

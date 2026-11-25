@@ -1,0 +1,48 @@
+name: canary
+
+# The release workflow proves the tag exists. This proves it can still be
+# installed: jsDelivr edge, both engine files, and the pinned mirror matching the
+# published version. A green release with a 404 engine is the failure mode this
+# job exists for.
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  served:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the pinned engine and the version
+        id: v
+        run: |
+          set -euo pipefail
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "mirror=$(grep -o "chess-wraith@v[0-9.]*" src/10-config.js | head -1 | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
+      - name: The mirror is the release
+        run: |
+          set -euo pipefail
+          test "v${{ steps.v.outputs.version }}" = "${{ steps.v.outputs.mirror }}"
+      - name: jsDelivr serves the tag
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.v.outputs.version }}"
+          for path in chess-wraith.user.js vendor/stockfish-19-lite-single.js vendor/stockfish-19-lite-single.wasm vendor/stockfish.js; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --retry 5 --retry-all-errors "https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@${tag}/${path}")
+            echo "${path} ${code}"
+            test "${code}" = 200
+          done
+      - name: The GitHub release carries both assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.v.outputs.version }}"
+          assets=$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name')
+          echo "$assets"
+          echo "$assets" | grep -qx 'chess-wraith.user.js'
+          echo "$assets" | grep -qx 'chess-wraith.meta.js'
