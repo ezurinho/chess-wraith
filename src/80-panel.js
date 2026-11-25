@@ -590,7 +590,7 @@ class WraithPanel {
     this.el.bandCap.textContent = band ? `${band} cp` : '–';
     this.el.bandFill.style.setProperty('--band', String(band && acpl !== null ? clamp(acpl / band, 0, 1) : 0));
     this.el.account.textContent = v.account || 'anonymous';
-    this.el.pace.textContent = v.pace ? `${(v.pace / 1000).toFixed(1)}s` : '–';
+    this.el.pace.textContent = v.pace ? `${(v.pace / 1000).toFixed(1)}s · ${v.paceSource}` : '–';
     this.el.tempoRow.textContent = v.tempo ? `${(v.tempo / 1000).toFixed(1)}s` : '–';
     this.el.games.textContent = String(Number(v.games) || 1);
     this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';

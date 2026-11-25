@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.0 — 2026-11-25
+
+The pacing stops being a default and becomes the account's own measured rhythm.
+
+- **`src/55-pace.js`**: chess.com writes `%clk` on every move of a finished game,
+  so a public archive says exactly how long the account thinks. The script now
+  reads the last month of the same time class, drops premoves (0 s) and
+  disconnects (over 150 s), takes the median of 30+ moves and uses it as
+  `baselineMs` before the locally learned sample exists. Cached six hours per
+  account, one request, never for an anonymous tab.
+- **Measured what a human pace actually is** (328 games, three 2700+ accounts):
+  bullet median 0.70 s (p90 2.3 s), blitz median 1.60 s (p90 8.9 s). A fixed
+  400-700 ms think time is not neutral: it is faster than a grandmaster's median
+  blitz move. That is the number the account anchor fixes.
+- The Session row now reads `1.6s · acct` or `1.6s · learned`, so it is obvious
+  which baseline produced the delay, and `copy report` prints it.
+- Four tests for the parser and the sample floor: per-side deltas, book moves
+  excluded, premove, stall, class filter, 30-move minimum. 95 tests.
+
 ## 1.6.8 — 2026-11-25
 
 `copy report` printed `slack undefined cp`.

@@ -52,10 +52,12 @@ only version anyone installs.
 - `src/40-board.js` — every chess.com selector. Two move-list shapes exist:
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
+- `src/55-pace.js` — `%clk` parsing from public PGN and the per-account pace
+  median. Chess.com splits the clock comment across tokens; the parser knows.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic, jsdom board tests and a fake-worker engine test (90 tests).
-  The real wasm download and compile still need a browser; the UCI protocol,
-  options, queued searches and fallback are covered.
+- `tests/unit/` — pure logic, jsdom board tests, a fake-worker engine test and
+  the pace parser (95 tests). The real wasm download and compile still need a
+  browser; the UCI protocol, options, queued searches and fallback are covered.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the
   selector layer is tested, not just eyeballed.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,

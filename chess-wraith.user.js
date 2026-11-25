@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.6.8
+// @version      1.7.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.6.8';
+const VERSION = '1.7.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.8/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.7.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2215,6 +2215,143 @@ function positionMoves(uciMoves) {
   return `position startpos moves ${uciMoves.join(' ')}`;
 }
 
+// ---------------------------------------------------------------------------
+// Pace anchor taken from the account's own published games.
+//
+// The learned baseline only exists after this browser has made a few moves, so
+// the first ten moves of every fresh profile are paced by defaults. chess.com
+// publishes the clock annotation `%clk` on every move of a finished game, which
+// is the account's real think time, not a guess about it: parse the last month,
+// take the median of the same time class, and the script starts at the speed
+// that player actually plays at.
+//
+// Chess.com's PGN writer puts a space inside the comment (`{[%clk 0:02:59]}`),
+// so the clock is its own token after the move and the braces are glued to it.
+function parseClockTimes(pgn) {
+  if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
+  const times = [];
+  const last = { w: null, b: null };
+  let side = null;
+  let moveNo = 0;
+  for (const token of pgn.replace(/(\[%clk)\s+/g, '$1_').split(/\s+/)) {
+    const num = /^(\d+)\.(\.\.)?$/.exec(token);
+    if (num) {
+      moveNo = Number(num[1]);
+      side = num[2] ? 'b' : 'w';
+      continue;
+    }
+    const clk = /^\{?\[%clk_(\d+):(\d+):(\d+(?:\.\d+)?)\]\}?$/.exec(token);
+    if (!clk || !side) continue;
+    const seconds = Number(clk[1]) * 3600 + Number(clk[2]) * 60 + Number(clk[3]);
+    const previous = last[side];
+    last[side] = seconds;
+    // Book moves and the first two moves are not thinking; a premove spends no
+    // time at all and would drag the median to zero; a disconnect spends
+    // minutes and is not a move either.
+    if (previous === null || moveNo <= 3) continue;
+    const used = previous - seconds;
+    if (used > 0 && used <= 150) times.push(Math.round(used * 1000));
+  }
+  return times;
+}
+
+function paceFromGames(games, timeClass) {
+  const times = [];
+  let used = 0;
+  for (const game of games || []) {
+    if (!game || game.rules !== 'chess' || game.time_class !== timeClass || !game.pgn) continue;
+    const parsed = parseClockTimes(game.pgn);
+    if (!parsed.length) continue;
+    for (const ms of parsed) times.push(ms);
+    used += 1;
+    if (used >= 40) break;
+  }
+  // Thirty moves is the floor: below that one quick game moves the median.
+  return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
+}
+
+function paceProfileKey() {
+  return `chess-wraith-acct-pace-v1:${currentAccount()}`;
+}
+
+function readPaceProfile(timeClass) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(paceProfileKey()) || 'null');
+    if (!cached || cached.cls !== timeClass) return null;
+    if (!(Number(cached.at) > 0)) return null;
+    if (Date.now() - Number(cached.at) > PACEPROFILE_TTL_MS && !cached.retryAt) return null;
+    if (cached.retryAt && Number(cached.retryAt) > Date.now()) return { error: cached.error } ;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function persistPaceProfile(value) {
+  try {
+    localStorage.setItem(paceProfileKey(), JSON.stringify(value));
+  } catch {
+    /* private mode: the session keeps the value */
+  }
+}
+
+function monthPath(offset) {
+  const now = new Date();
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${d.getUTCFullYear()}/${month}`;
+}
+
+// One extra request to a public archive, per account and time class, cached for
+// six hours. It never runs for an anonymous tab: there is no pace to anchor to.
+async function syncPaceProfile(force) {
+  const user = currentAccount();
+  if (!user || user === 'anonymous') return null;
+  if (!state.clockPeak && !state.clockSeconds) return null;
+  const timeClass = timeClassFromSeconds(state.clockPeak || state.clockSeconds);
+  if (!timeClass) return null;
+  if (state.pacePending && !force) return state.paceProfile || null;
+  const cached = readPaceProfile(timeClass);
+  if (cached && !force && !cached.error) {
+    state.paceProfile = cached;
+    return cached;
+  }
+  if (cached && cached.error && !force) {
+    state.paceError = String(cached.error);
+    return null;
+  }
+  state.pacePending = true;
+  state.paceError = '';
+  try {
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined;
+    let profile = null;
+    for (const offset of [0, 1]) {
+      const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
+        cache: 'no-store',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        signal
+      });
+      if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+      const body = await response.json();
+      const parsed = paceFromGames(body && body.games, timeClass);
+      if (parsed.medianMs) { profile = parsed; break; }
+    }
+    if (!profile) throw new Error('no games');
+    profile.cls = timeClass;
+    profile.at = Date.now();
+    state.paceProfile = profile;
+    persistPaceProfile(profile);
+  } catch (error) {
+    state.paceError = String((error && error.message) || error).slice(0, 40);
+    persistPaceProfile({ cls: timeClass, retryAt: Date.now() + PACEPROFILE_RETRY_MS, error: state.paceError });
+  } finally {
+    state.pacePending = false;
+  }
+  refreshPanel();
+  return state.paceProfile || null;
+}
+
 // Move selection and pacing. The engine is not asked to play its raw #1 every
 // time: on a fixed style it may take a near-equal alternative, in adaptive mode
 // it studies the opponent and sits slightly above them, and the weaker presets
@@ -3337,7 +3474,7 @@ class WraithPanel {
     this.el.bandCap.textContent = band ? `${band} cp` : '–';
     this.el.bandFill.style.setProperty('--band', String(band && acpl !== null ? clamp(acpl / band, 0, 1) : 0));
     this.el.account.textContent = v.account || 'anonymous';
-    this.el.pace.textContent = v.pace ? `${(v.pace / 1000).toFixed(1)}s` : '–';
+    this.el.pace.textContent = v.pace ? `${(v.pace / 1000).toFixed(1)}s · ${v.paceSource}` : '–';
     this.el.tempoRow.textContent = v.tempo ? `${(v.tempo / 1000).toFixed(1)}s` : '–';
     this.el.games.textContent = String(Number(v.games) || 1);
     this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
@@ -3428,6 +3565,10 @@ const RATING_KEY = 'chess-wraith-rating-v1';
 const GUARD_KEY = 'chess-wraith-guard-v1';
 const RATING_TTL_MS = 6 * 60 * 60 * 1000;
 const RATING_RETRY_MS = 15 * 60 * 1000;
+// Published pace is half a megabyte of PGN; six hours is plenty for data that
+// only changes when the account finishes another game.
+const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
+const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -3498,6 +3639,9 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  paceProfile: null,
+  pacePending: false,
+  paceError: '',
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   ratingAt: 0,
@@ -3668,7 +3812,12 @@ function readPaceSamples() {
   }
 }
 
+// The account's published median wins over the learned one: the learned sample
+// starts empty on a new browser, and the first ten moves of a fresh profile are
+// exactly where a bot-looking rhythm would show.
 function paceBaseline() {
+  const published = state.paceProfile && Number(state.paceProfile.medianMs);
+  if (Number.isFinite(published) && published > 200) return published;
   const samples = readPaceSamples();
   return samples.length >= 6 ? median(samples) : null;
 }
@@ -3950,6 +4099,9 @@ function statusView() {
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
     account: currentAccount(),
     pace: paceBaseline(),
+    paceSamples: state.paceProfile ? state.paceProfile.samples || 0 : readPaceSamples().length,
+    paceSource: state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned',
+    paceError: state.paceError,
     tempo: median(state.tempoSamples),
     band: acplBand(state.effectiveElo || cfg.targetElo),
     slackBoost: state.slackBoost,
@@ -4274,6 +4426,8 @@ function runScan() {
     // three hundred Elo of drift nobody asked for.
     const cls = timeClassFromSeconds(state.clockPeak);
     if (state.accountRatings && cls !== state.ratingClass) resolveElo();
+    // The clock also names which published pace to anchor to.
+    if (state.accountRatings && (!state.paceProfile || state.paceProfile.cls !== cls)) syncPaceProfile();
   }
   state.opponentRating = scanned.opponentRating;
 
@@ -4385,6 +4539,7 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
+    `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.warn ? `warn ${state.warn}` : ''
   ];
@@ -4533,6 +4688,7 @@ function boot() {
   setInterval(heartbeatTab, 3000);
   startUpdateCheck();
   syncAccountRatings();
+  syncPaceProfile();
   // Clicking the rating asks again instead of waiting out the six-hour cache.
   if (panel.el && panel.el.rating) {
     panel.el.rating.style.cursor = 'pointer';

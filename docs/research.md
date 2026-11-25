@@ -91,6 +91,32 @@ move is played almost at once. A long session also drifts 2% slower per hour,
 capped at 6% after three hours - the same time-on-task effect the typing model in
 `nitro-wraith` carries. A fixed window is the part that looks like a clock.
 
+## The pace anchor is measured, not invented
+
+`%clk` is written on every move of a finished chess.com game, so a public
+archive is a record of exactly how long the account thinks. Measured on 328
+games from three 2700+ accounts (`magnuscarlsen`, `alireza2003`, `gukesh_d`,
+2026-08/10):
+
+| Class | Moves sampled | Median | p25 | p75 | p90 |
+| --- | --- | --- | --- | --- | --- |
+| bullet | 13,158 | **0.70 s** | 0.40 | 1.30 | 2.30 |
+| blitz | 11,290 | **1.60 s** | 0.80 | 4.30 | 8.90 |
+
+Two things follow. First, a fixed 400-700 ms budget per move is not a
+human rhythm, it is a *fast* human rhythm even for a grandmaster. Second, the
+distribution is not uniform: p75 is 2.7x the median in blitz and p90 is 5.6x,
+because some moves are taken in a second and some take half a minute. The
+delays are drawn from a triangular skew and the visual band matches, but the
+median is the number that matters, and it belongs to the account.
+
+So the script now reads the same `%clk` stream: last month of the same time
+class, median of the deltas, 30-move floor, premoves (0 s) and stalls (over
+150 s) dropped, cached six hours per account. That median becomes `baselineMs`
+and is used before the locally learned one exists. A 1800 blitz account whose
+games average 3 s a move now moves at 3 s from move one, not after ten moves of
+defaults.
+
 ## Why the lite single-threaded build, and not the strong one
 
 Stockfish.js 19 ships five builds. The multi-threaded ones need the page to be

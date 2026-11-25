@@ -8,6 +8,10 @@ const RATING_KEY = 'chess-wraith-rating-v1';
 const GUARD_KEY = 'chess-wraith-guard-v1';
 const RATING_TTL_MS = 6 * 60 * 60 * 1000;
 const RATING_RETRY_MS = 15 * 60 * 1000;
+// Published pace is half a megabyte of PGN; six hours is plenty for data that
+// only changes when the account finishes another game.
+const PACEPROFILE_TTL_MS = 6 * 60 * 60 * 1000;
+const PACEPROFILE_RETRY_MS = 20 * 60 * 1000;
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -78,6 +82,9 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  paceProfile: null,
+  pacePending: false,
+  paceError: '',
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   ratingAt: 0,
@@ -248,7 +255,12 @@ function readPaceSamples() {
   }
 }
 
+// The account's published median wins over the learned one: the learned sample
+// starts empty on a new browser, and the first ten moves of a fresh profile are
+// exactly where a bot-looking rhythm would show.
 function paceBaseline() {
+  const published = state.paceProfile && Number(state.paceProfile.medianMs);
+  if (Number.isFinite(published) && published > 200) return published;
   const samples = readPaceSamples();
   return samples.length >= 6 ? median(samples) : null;
 }
@@ -530,6 +542,9 @@ function statusView() {
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
     account: currentAccount(),
     pace: paceBaseline(),
+    paceSamples: state.paceProfile ? state.paceProfile.samples || 0 : readPaceSamples().length,
+    paceSource: state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned',
+    paceError: state.paceError,
     tempo: median(state.tempoSamples),
     band: acplBand(state.effectiveElo || cfg.targetElo),
     slackBoost: state.slackBoost,
@@ -854,6 +869,8 @@ function runScan() {
     // three hundred Elo of drift nobody asked for.
     const cls = timeClassFromSeconds(state.clockPeak);
     if (state.accountRatings && cls !== state.ratingClass) resolveElo();
+    // The clock also names which published pace to anchor to.
+    if (state.accountRatings && (!state.paceProfile || state.paceProfile.cls !== cls)) syncPaceProfile();
   }
   state.opponentRating = scanned.opponentRating;
 
@@ -965,6 +982,7 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}`,
+    `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.warn ? `warn ${state.warn}` : ''
   ];
@@ -1113,6 +1131,7 @@ function boot() {
   setInterval(heartbeatTab, 3000);
   startUpdateCheck();
   syncAccountRatings();
+  syncPaceProfile();
   // Clicking the rating asks again instead of waiting out the six-hour cache.
   if (panel.el && panel.el.rating) {
     panel.el.rating.style.cursor = 'pointer';

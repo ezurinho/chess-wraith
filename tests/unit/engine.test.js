@@ -33,6 +33,28 @@ function harness({ nnueSkip = true } = {}) {
   }
   const storage = new Map();
   if (nnueSkip) storage.set('chess-wraith-nnue-skip-v1', JSON.stringify({ mirror: 'v0.0.0-test', at: Date.now() }));
+  // Fake timers: the watchdog only matters after ten real seconds, which no test
+  // should wait for. advance() runs what is due in order, like the event loop.
+  const timers = new Map();
+  let timerId = 1;
+  let fakeNow = 0;
+  const fakeSetTimeout = (fn, ms, ...args) => {
+    const id = timerId++;
+    timers.set(id, { at: fakeNow + (Number(ms) || 0), fn, args });
+    return id;
+  };
+  const fakeClearTimeout = (id) => timers.delete(id);
+  const advance = (ms) => {
+    const target = fakeNow + ms;
+    for (;;) {
+      const due = [...timers.entries()].filter(([, t]) => t.at <= target).sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      timers.delete(due[0]);
+      fakeNow = due[1].at;
+      due[1].fn(...due[1].args);
+    }
+    fakeNow = target;
+  };
   const context = vm.createContext({
     window: dom.window,
     document: dom.window.document,
@@ -47,12 +69,12 @@ function harness({ nnueSkip = true } = {}) {
       setItem: (k, v) => storage.set(k, String(v)),
       removeItem: (k) => storage.delete(k)
     },
-    setTimeout, clearTimeout, setInterval, clearInterval, console, Math, Number, Date, JSON, Promise, Array, Object, String, Map, Set, RegExp, Error
+    setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout, setInterval, clearInterval, console, Math, Number, Date, JSON, Promise, Array, Object, String, Map, Set, RegExp, Error
   });
   const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { WraithEngine, positionMoves, CONFIG, ENGINE_MIRROR };';
   vm.runInContext(source, context, { filename: 'engine-harness.js' });
   const api = vm.runInContext('globalThis.__t', context);
-  return { api, dom, workers, storage };
+  return { api, dom, workers, storage, advance };
 }
 
 test('the UCI handshake ends with a ready engine and a mode', async () => {
@@ -164,5 +186,43 @@ test('a second search queues behind the first and starts on its bestmove', async
   await new Promise((r) => setImmediate(r));
   worker.reply('bestmove h1g2');
   await second;
+  engine.destroy();
+});
+test('a search that never answers is stopped, the worker is dropped and the promise settles', async () => {
+  const { api, workers, advance } = harness();
+  const engine = new api.WraithEngine();
+  const finals = [];
+  engine.onFinal = (p) => finals.push(p);
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+
+  const pending = engine.analyze({
+    fen: '8/8/8/8/8/8/8/K6k w - - 0 1',
+    turn: 'w',
+    uciMoves: [],
+    depth: 20,
+    moveTimeMs: 400,
+    multiPv: 1
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.equal(engine.searching, true);
+
+  // Nothing replies. The watchdog asks for a stop, then gives it 2.5 s.
+  advance(8500);
+  assert.ok(worker.sent.filter((c) => c === 'stop').length >= 1, 'the watchdog sends stop');
+  advance(2600);
+  await new Promise((r) => setImmediate(r));
+
+  const lines = await pending;
+  assert.equal(lines.length, 0, 'the search resolves empty instead of hanging');
+  assert.equal(worker.terminated, true, 'the worker is terminated');
+  assert.equal(engine.ready, false, 'the engine must re-handshake before the next move');
+  assert.equal(finals.length, 1);
+  assert.equal(finals[0].bestmove, null);
+  assert.equal(finals[0].final, true);
   engine.destroy();
 });
