@@ -620,7 +620,13 @@ class WraithPanel {
     const latest = String(v.updateLatest || '');
     const newer = versionNewer(latest, v.version || VERSION);
     this.el.update.hidden = !newer;
-    if (newer) this.el.update.querySelector('span').textContent = `Update ${latest}`;
+    if (newer) {
+      // Only the number: the header has 322 px and the word plus a version
+      // ellipsised the title to "CHESS WRA…".
+      this.el.update.querySelector('span').textContent = latest;
+      this.el.update.title = `Download v${latest} from GitHub`;
+      this.el.update.setAttribute('aria-label', `Update available: v${latest}`);
+    }
     this.el.latest.textContent = latest ? latest : '–';
     this.el.checked.textContent = v.updateAt
       ? `${Math.max(0, Math.round((Date.now() - v.updateAt) / 60000))}m ago`

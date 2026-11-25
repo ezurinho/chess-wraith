@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.5.1
+// @version      1.5.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.5.1';
+const VERSION = '1.5.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -105,7 +105,7 @@ const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3282,7 +3282,13 @@ class WraithPanel {
     const latest = String(v.updateLatest || '');
     const newer = versionNewer(latest, v.version || VERSION);
     this.el.update.hidden = !newer;
-    if (newer) this.el.update.querySelector('span').textContent = `Update ${latest}`;
+    if (newer) {
+      // Only the number: the header has 322 px and the word plus a version
+      // ellipsised the title to "CHESS WRA…".
+      this.el.update.querySelector('span').textContent = latest;
+      this.el.update.title = `Download v${latest} from GitHub`;
+      this.el.update.setAttribute('aria-label', `Update available: v${latest}`);
+    }
     this.el.latest.textContent = latest ? latest : '–';
     this.el.checked.textContent = v.updateAt
       ? `${Math.max(0, Math.round((Date.now() - v.updateAt) / 60000))}m ago`

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.2 — 2026-11-25
+
+The pill said `UPDATE 1.5.1` and ate the header: the title rendered as
+`CHESS WRA…`.
+
+- The pill shows only the version next to its arrow, and the tooltip and
+  `aria-label` carry the full sentence.
+- 76 tests, unchanged.
+
 ## 1.5.1 — 2026-11-25
 
 `@latest` on jsDelivr kept answering `1.4.2` for minutes after 1.5.0 was tagged,
