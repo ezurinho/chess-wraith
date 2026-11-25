@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.21.1 — 2026-11-25
+
+Softened 1.21.0's claim. "Worker timers are not batched the same way page timers
+are" is folklore: practitioners repeat it, no official document states it, and
+the honest position is that the worker is a best-effort wake-up while the lag
+check is the guarantee. README and `docs/research.md` now say that, with the
+stage schedule Chrome does document.
+
 ## 1.21.0 — 2026-11-25
 
 AFK in a hidden tab, which is how AFK actually runs.

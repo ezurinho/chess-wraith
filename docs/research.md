@@ -104,6 +104,21 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## Timers in a hidden tab
+
+What is documented: Chrome has throttled timers in hidden pages since 88, in
+stages — a 1 s alignment, then chained timers (more than five deep) to 1/minute,
+then after five minutes hidden a budget of one wake-up per minute. Chess.com
+does not need a page timer to keep a game clock: the clock is server-side, so a
+batching tab loses games, not frames.
+
+What is *not* documented: whether a dedicated worker's intervals are batched on
+the same schedule. The claim ``worker timers are exempt`` is repeated by
+practitioners and contradicted nowhere official, so it is used here as a
+best-effort mitigation and not as a guarantee. The guarantee is the lag check:
+`throttleDecision` sees a 2 s tick arrive a minute late and says so, whether or
+not the worker survived the batching.
+
 ## Low clock is not an edge case
 
 57,340 moves from three blitz leaderboard players in October 2026 (Hikaru,
