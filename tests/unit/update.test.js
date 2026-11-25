@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js'],
-  `{ versionNewer, versionParts, UPDATE_META_URL, UPDATE_API_URL, UPDATE_DOWNLOAD_URL, UPDATE_PAGE_URL, VERSION }`
+  `{ versionNewer, versionParts, updateCheckDue, UPDATE_META_URL, UPDATE_API_URL, UPDATE_DOWNLOAD_URL, UPDATE_PAGE_URL, UPDATE_RECHECK_MS, VERSION }`
 );
 
 test('a higher version is newer, an equal or lower one is not', () => {
@@ -34,4 +34,13 @@ test('the updater reads public static files and installs from the latest release
   assert.match(api.UPDATE_DOWNLOAD_URL, /releases\/latest\/download\/chess-wraith\.user\.js$/);
   assert.match(api.UPDATE_PAGE_URL, /releases\/latest$/);
   assert.match(api.VERSION, /^\d+\.\d+\.\d+$/);
+});
+test('a check is due at boot, throttled for five minutes, then due again', () => {
+  const now = 1_700_000_000_000;
+  assert.equal(api.updateCheckDue(now, 0, api.UPDATE_RECHECK_MS), true, 'never checked');
+  assert.equal(api.updateCheckDue(now, now - 1000, api.UPDATE_RECHECK_MS), false, 'just checked');
+  assert.equal(api.updateCheckDue(now, now - 5 * 60 * 1000, api.UPDATE_RECHECK_MS), true, 'five minutes later');
+  assert.equal(api.updateCheckDue(now, undefined, api.UPDATE_RECHECK_MS), true);
+  assert.equal(api.updateCheckDue(now, 'nonsense', api.UPDATE_RECHECK_MS), true);
+  assert.ok(api.UPDATE_RECHECK_MS > 0 && api.UPDATE_RECHECK_MS < 60 * 60 * 1000);
 });

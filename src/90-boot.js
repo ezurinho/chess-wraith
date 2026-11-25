@@ -312,8 +312,37 @@ async function readVersion(url) {
   return String(parsed.version || parsed.tag_name || '').replace(/^v/i, '');
 }
 
-async function checkUpdate() {
+const UPDATE_CACHE_KEY = 'chess-wraith-update-v1';
+
+// The last known version, so a reload paints the button immediately instead of
+// four seconds later.
+function readUpdateCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(UPDATE_CACHE_KEY) || 'null');
+    return cached && versionParts(cached.latest) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateCache(latest) {
+  try {
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ latest, at: Date.now() }));
+  } catch {
+    /* private mode: the in-memory value is still correct */
+  }
+}
+
+function restoreUpdateCache() {
+  const cached = readUpdateCache();
+  if (!cached) return;
+  state.updateAt = Number(cached.at) || 0;
+  if (versionNewer(cached.latest, VERSION)) state.updateLatest = cached.latest;
+}
+
+async function checkUpdate(force) {
   if (state.updateChecking) return false;
+  if (!force && !updateCheckDue(Date.now(), state.updateAt, UPDATE_RECHECK_MS)) return false;
   state.updateChecking = true;
   refreshPanel();
   try {
@@ -329,6 +358,7 @@ async function checkUpdate() {
     if (!latest) throw new Error('no version');
     state.updateLatest = latest;
     state.updateError = '';
+    writeUpdateCache(latest);
   } catch (error) {
     state.updateLatest = '';
     state.updateError = String((error && error.message) || error).slice(0, 60);
@@ -341,13 +371,24 @@ async function checkUpdate() {
 }
 
 function startUpdateCheck() {
-  // Six seconds: the engine and the board matter more than a version number.
+  restoreUpdateCache();
+  refreshPanel();
+  // Four seconds: the engine and the board matter more than a version number.
   setTimeout(() => {
     checkUpdate();
-  }, 6000);
+  }, 4000);
   setInterval(() => {
     checkUpdate();
   }, UPDATE_CHECK_MS);
+  // A tab left open for a day is exactly when a release appears, and a frozen
+  // background timer never fires. Coming back to the tab is the reliable moment,
+  // and UPDATE_RECHECK_MS keeps the three events from becoming a burst. A
+  // manual click on the row skips the throttle.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkUpdate();
+  });
+  window.addEventListener('focus', () => checkUpdate());
+  window.addEventListener('online', () => checkUpdate());
 }
 
 function registerButler() {
@@ -368,7 +409,7 @@ function registerButler() {
     },
     ready: () => engine.ready,
     retryEngine: () => engine.retryNnue(),
-    checkUpdate,
+    checkUpdate: () => checkUpdate(true),
     refreshRating: () => syncAccountRatings(true),
     // One call that answers "is this install actually working", so a report is
     // a list of facts instead of a screenshot and a guess.
@@ -1079,7 +1120,7 @@ const panel = new WraithPanel(cfg, {
     runScan();
     analyze(state.snapshot, true);
   },
-  checkUpdate,
+  checkUpdate: () => checkUpdate(true),
   copyReport,
   hide: () => panel.toggleHidden(),
   refresh: () => refreshPanel(),

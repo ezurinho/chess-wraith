@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.10.0
+// @version      1.11.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -52,6 +52,9 @@ const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/lat
 const UPDATE_DOWNLOAD_URL = `https://github.com/${UPDATE_REPO}/releases/latest/download/chess-wraith.user.js`;
 const UPDATE_PAGE_URL = `https://github.com/${UPDATE_REPO}/releases/latest`;
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
+// The six hour timer is what browsers freeze in a background tab; the shortest
+// gap between two opportunistic checks (focus, visibility, reconnect) is this.
+const UPDATE_RECHECK_MS = 5 * 60 * 1000;
 
 const CONFIG = {
   // Engine
@@ -104,7 +107,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.10.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.11.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -180,6 +183,16 @@ function versionParts(value) {
 
 // Strictly newer, or it is not an update: a meta file that cannot be parsed
 // must never make the panel nag.
+// A check is due when there is no usable timestamp yet or the last one is old
+// enough. Kept pure so the throttle can be tested without a clock.
+function updateCheckDue(now, lastAt, minMs) {
+  const current = Number(now);
+  const last = Number(lastAt);
+  if (!Number.isFinite(last) || last <= 0) return true;
+  if (!Number.isFinite(current)) return false;
+  return current - last >= (Number(minMs) > 0 ? Number(minMs) : 0);
+}
+
 function versionNewer(next, current) {
   const a = versionParts(next);
   const b = versionParts(current);
@@ -3989,8 +4002,37 @@ async function readVersion(url) {
   return String(parsed.version || parsed.tag_name || '').replace(/^v/i, '');
 }
 
-async function checkUpdate() {
+const UPDATE_CACHE_KEY = 'chess-wraith-update-v1';
+
+// The last known version, so a reload paints the button immediately instead of
+// four seconds later.
+function readUpdateCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(UPDATE_CACHE_KEY) || 'null');
+    return cached && versionParts(cached.latest) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeUpdateCache(latest) {
+  try {
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ latest, at: Date.now() }));
+  } catch {
+    /* private mode: the in-memory value is still correct */
+  }
+}
+
+function restoreUpdateCache() {
+  const cached = readUpdateCache();
+  if (!cached) return;
+  state.updateAt = Number(cached.at) || 0;
+  if (versionNewer(cached.latest, VERSION)) state.updateLatest = cached.latest;
+}
+
+async function checkUpdate(force) {
   if (state.updateChecking) return false;
+  if (!force && !updateCheckDue(Date.now(), state.updateAt, UPDATE_RECHECK_MS)) return false;
   state.updateChecking = true;
   refreshPanel();
   try {
@@ -4006,6 +4048,7 @@ async function checkUpdate() {
     if (!latest) throw new Error('no version');
     state.updateLatest = latest;
     state.updateError = '';
+    writeUpdateCache(latest);
   } catch (error) {
     state.updateLatest = '';
     state.updateError = String((error && error.message) || error).slice(0, 60);
@@ -4018,13 +4061,24 @@ async function checkUpdate() {
 }
 
 function startUpdateCheck() {
-  // Six seconds: the engine and the board matter more than a version number.
+  restoreUpdateCache();
+  refreshPanel();
+  // Four seconds: the engine and the board matter more than a version number.
   setTimeout(() => {
     checkUpdate();
-  }, 6000);
+  }, 4000);
   setInterval(() => {
     checkUpdate();
   }, UPDATE_CHECK_MS);
+  // A tab left open for a day is exactly when a release appears, and a frozen
+  // background timer never fires. Coming back to the tab is the reliable moment,
+  // and UPDATE_RECHECK_MS keeps the three events from becoming a burst. A
+  // manual click on the row skips the throttle.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) checkUpdate();
+  });
+  window.addEventListener('focus', () => checkUpdate());
+  window.addEventListener('online', () => checkUpdate());
 }
 
 function registerButler() {
@@ -4045,7 +4099,7 @@ function registerButler() {
     },
     ready: () => engine.ready,
     retryEngine: () => engine.retryNnue(),
-    checkUpdate,
+    checkUpdate: () => checkUpdate(true),
     refreshRating: () => syncAccountRatings(true),
     // One call that answers "is this install actually working", so a report is
     // a list of facts instead of a screenshot and a guess.
@@ -4756,7 +4810,7 @@ const panel = new WraithPanel(cfg, {
     runScan();
     analyze(state.snapshot, true);
   },
-  checkUpdate,
+  checkUpdate: () => checkUpdate(true),
   copyReport,
   hide: () => panel.toggleHidden(),
   refresh: () => refreshPanel(),

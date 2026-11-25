@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.11.0 — 2026-11-25
+
+The update pill now shows up on its own; it used to depend on a timer that a
+background tab freezes.
+
+- **Checks happen at the moments that matter**, not only on the six hour timer:
+  on boot (four seconds), when the tab becomes visible again, when the window
+  regains focus and when the network comes back. `UPDATE_RECHECK_MS` (five
+  minutes) keeps those three events from becoming a burst, and a manual click on
+  the row still forces a check.
+- **The last answer is cached** in `chess-wraith-update-v1`, so opening the panel
+  after a reload shows `UPDATE vX.Y.Z` immediately instead of four seconds later.
+- A throttled check used to have no return value at all; it now reports that it
+  skipped, which is what the live verification reads.
+- One test for the throttle window (`updateCheckDue`). 110 tests.
+
 ## 1.10.0 — 2026-11-25
 
 Review of the input path: one real failure mode, one timing assumption.

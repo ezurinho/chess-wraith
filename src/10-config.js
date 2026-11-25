@@ -1,4 +1,4 @@
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -9,6 +9,9 @@ const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/lat
 const UPDATE_DOWNLOAD_URL = `https://github.com/${UPDATE_REPO}/releases/latest/download/chess-wraith.user.js`;
 const UPDATE_PAGE_URL = `https://github.com/${UPDATE_REPO}/releases/latest`;
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
+// The six hour timer is what browsers freeze in a background tab; the shortest
+// gap between two opportunistic checks (focus, visibility, reconnect) is this.
+const UPDATE_RECHECK_MS = 5 * 60 * 1000;
 
 const CONFIG = {
   // Engine
@@ -61,7 +64,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.10.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.11.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

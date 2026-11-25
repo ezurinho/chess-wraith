@@ -66,6 +66,16 @@ function versionParts(value) {
 
 // Strictly newer, or it is not an update: a meta file that cannot be parsed
 // must never make the panel nag.
+// A check is due when there is no usable timestamp yet or the last one is old
+// enough. Kept pure so the throttle can be tested without a clock.
+function updateCheckDue(now, lastAt, minMs) {
+  const current = Number(now);
+  const last = Number(lastAt);
+  if (!Number.isFinite(last) || last <= 0) return true;
+  if (!Number.isFinite(current)) return false;
+  return current - last >= (Number(minMs) > 0 ? Number(minMs) : 0);
+}
+
 function versionNewer(next, current) {
   const a = versionParts(next);
   const b = versionParts(current);
