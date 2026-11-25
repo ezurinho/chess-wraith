@@ -31,6 +31,8 @@ function adoptAccountSettings(user) {
   const adopted = loadSettings(name);
   Object.assign(cfg, adopted);
   state.settingsAccount = name;
+  // A name learned late also unlocks the published pace.
+  if (state.clockPeak || state.clockSeconds) syncPaceProfile();
   refreshPanel();
   return true;
 }

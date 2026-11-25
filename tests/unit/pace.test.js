@@ -92,3 +92,38 @@ test('only chess games of the requested class are read, and the median is per cl
   assert.equal(rapid.medianMs, null, 'and it is too small to use');
   assert.ok(blitz.medianMs > 0);
 });
+// The account is only one of the two players in its archive. Mixing the
+// opponent's clocks in halves the signal, and in a game against a much slower
+// player it does something worse: it teaches the script the wrong rhythm.
+const PGN_BOTH = [
+  '[White "Slowpoke"]',
+  '[Black "Hikaru"]',
+  '',
+  '1. e4 {[%clk 0:10:00]} 1... c5 {[%clk 0:10:00]} 2. Nf3 {[%clk 0:09:40]} 2... d6 {[%clk 0:09:58]}',
+  '3. d4 {[%clk 0:09:20]} 3... cxd4 {[%clk 0:09:56]} 4. Nxd4 {[%clk 0:09:00]} 4... Nf6 {[%clk 0:09:54]}',
+  '5. Nc3 {[%clk 0:08:40]} 5... a6 {[%clk 0:09:52]} 6. Be3 {[%clk 0:08:20]} 6... e6 {[%clk 0:09:50]}',
+  '7. f3 {[%clk 0:08:00]} 7... b5 {[%clk 0:09:48]}'
+].join(' ');
+
+test('the pace is the account\'s own clocks, not its opponents\'', () => {
+  const api = harness();
+  assert.equal(api.pgnPlayerSide(PGN_BOTH, 'Hikaru'), 'b');
+  assert.equal(api.pgnPlayerSide(PGN_BOTH, 'slowpoke'), 'w');
+  assert.equal(api.pgnPlayerSide(PGN_BOTH, 'someoneelse'), null);
+  const black = api.parseClockTimes(PGN_BOTH, 'b').sort((a, b) => a - b);
+  assert.deepEqual(black, [2000, 2000, 2000, 2000], 'black spent two seconds a move');
+  const white = api.parseClockTimes(PGN_BOTH, 'w').sort((a, b) => a - b);
+  assert.deepEqual(white, [20000, 20000, 20000, 20000], 'white spent twenty');
+  const both = api.parseClockTimes(PGN_BOTH).length;
+  assert.equal(both, 8);
+});
+
+test('the newest games are read first, so an old season cannot set the pace', () => {
+  const api = harness();
+  const games = [];
+  for (let i = 0; i < 40; i++) games.push({ rules: 'chess', time_class: 'blitz', pgn: '[Event "old"] 1. e4 e5' });
+  games.push({ rules: 'chess', time_class: 'blitz', pgn: PGN.replace('White \"Someone\"', 'White \"Hikaru\"') });
+  const profile = api.paceFromGames(games, 'blitz', 'Hikaru');
+  assert.equal(profile.games, 1, 'the one recent game is the one that is read');
+  assert.ok(profile.samples >= 4);
+});

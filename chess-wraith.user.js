@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.7.2
+// @version      1.8.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.7.2';
+const VERSION = '1.8.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.7.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.8.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2287,44 +2287,66 @@ function positionMoves(uciMoves) {
 //
 // Chess.com's PGN writer puts a space inside the comment (`{[%clk 0:02:59]}`),
 // so the clock is its own token after the move and the braces are glued to it.
-function parseClockTimes(pgn) {
+function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
   const last = { w: null, b: null };
-  let side = null;
+  let turn = null;
   let moveNo = 0;
   for (const token of pgn.replace(/(\[%clk)\s+/g, '$1_').split(/\s+/)) {
     const num = /^(\d+)\.(\.\.)?$/.exec(token);
     if (num) {
       moveNo = Number(num[1]);
-      side = num[2] ? 'b' : 'w';
+      turn = num[2] ? 'b' : 'w';
       continue;
     }
     const clk = /^\{?\[%clk_(\d+):(\d+):(\d+(?:\.\d+)?)\]\}?$/.exec(token);
-    if (!clk || !side) continue;
+    if (!clk || !turn) continue;
     const seconds = Number(clk[1]) * 3600 + Number(clk[2]) * 60 + Number(clk[3]);
-    const previous = last[side];
-    last[side] = seconds;
+    const previous = last[turn];
+    last[turn] = seconds;
     // Book moves and the first two moves are not thinking; a premove spends no
     // time at all and would drag the median to zero; a disconnect spends
     // minutes and is not a move either.
     if (previous === null || moveNo <= 3) continue;
+    if (side === 'w' || side === 'b') {
+      if (turn !== side) continue;
+    }
     const used = previous - seconds;
     if (used > 0 && used <= 150) times.push(Math.round(used * 1000));
   }
   return times;
 }
 
-function paceFromGames(games, timeClass) {
+// Which colour the account had. Without the headers the caller gets both sides,
+// which is still a human pace, just half of it somebody else's.
+function pgnPlayerSide(pgn, user) {
+  const name = normalizeAccountName(user);
+  if (!name || typeof pgn !== 'string') return null;
+  const white = /\[White\s+"([^"]*)"\]/i.exec(pgn);
+  const black = /\[Black\s+"([^"]*)"\]/i.exec(pgn);
+  if (!white || !black) return null;
+  if (normalizeAccountName(white[1]) === name) return 'w';
+  if (normalizeAccountName(black[1]) === name) return 'b';
+  return null;
+}
+
+function paceFromGames(games, timeClass, user) {
+  const list = Array.isArray(games) ? games : [];
   const times = [];
   let used = 0;
-  for (const game of games || []) {
+  // The archive is oldest-first, so the newest games are at the end: the pace
+  // that matters is the one the account has now, not a year of drift.
+  for (let i = list.length - 1; i >= 0 && used < 40; i--) {
+    const game = list[i];
     if (!game || game.rules !== 'chess' || game.time_class !== timeClass || !game.pgn) continue;
-    const parsed = parseClockTimes(game.pgn);
+    const side = pgnPlayerSide(game.pgn, user);
+    let parsed = parseClockTimes(game.pgn, side);
+    // No headers, or a PGN from before this account had the name: both sides.
+    if (!parsed.length && side) parsed = parseClockTimes(game.pgn, null);
     if (!parsed.length) continue;
     for (const ms of parsed) times.push(ms);
     used += 1;
-    if (used >= 40) break;
   }
   // Thirty moves is the floor: below that one quick game moves the median.
   return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
@@ -2394,7 +2416,7 @@ async function syncPaceProfile(force) {
       });
       if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
       const body = await response.json();
-      const parsed = paceFromGames(body && body.games, timeClass);
+      const parsed = paceFromGames(body && body.games, timeClass, user);
       if (parsed.medianMs) { profile = parsed; break; }
     }
     if (!profile) throw new Error('no games');
@@ -2411,7 +2433,6 @@ async function syncPaceProfile(force) {
   refreshPanel();
   return state.paceProfile || null;
 }
-
 // Move selection and pacing. The engine is not asked to play its raw #1 every
 // time: on a fixed style it may take a near-equal alternative, in adaptive mode
 // it studies the opponent and sits slightly above them, and the weaker presets
@@ -3655,6 +3676,8 @@ function adoptAccountSettings(user) {
   const adopted = loadSettings(name);
   Object.assign(cfg, adopted);
   state.settingsAccount = name;
+  // A name learned late also unlocks the published pace.
+  if (state.clockPeak || state.clockSeconds) syncPaceProfile();
   refreshPanel();
   return true;
 }

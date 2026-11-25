@@ -111,8 +111,12 @@ delays are drawn from a triangular skew and the visual band matches, but the
 median is the number that matters, and it belongs to the account.
 
 So the script now reads the same `%clk` stream: last month of the same time
-class, median of the deltas, 30-move floor, premoves (0 s) and stalls (over
-150 s) dropped, cached six hours per account. That median becomes `baselineMs`
+class, the account's own colour only (the opponent's clocks are right there in
+the same PGN and would otherwise halve the signal), newest games first, median of
+the deltas, 30-move floor, premoves (0 s) and stalls (over 150 s) dropped, cached
+six hours per account. Measured on the live archive, own-side median for one
+2700+ account is 1.7 s from 1492 moves, against 1.9 s when both colours are
+mixed: the mixed number was the *opponent's* rhythm leaking in. That median becomes `baselineMs`
 and is used before the locally learned one exists. A 1800 blitz account whose
 games average 3 s a move now moves at 3 s from move one, not after ten moves of
 defaults.

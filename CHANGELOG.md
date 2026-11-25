@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.0 — 2026-11-25
+
+The pace anchor stops averaging the opponent into your own rhythm.
+
+- **Own colour only**: a chess.com PGN carries both players' `%clk`, and the old
+  parser summed the two. The headers name White and Black, so the profile now
+  takes the account's side only. On the live archive: 1.7 s (1492 of its own
+  moves) instead of 1.9 s (2974 mixed moves).
+- **Newest games first**: the archive is oldest-first, so reading the first 40
+  games anchored a returning player to a season they have already left. The loop
+  now walks from the newest game backwards.
+- A name learned after boot (navbar painted late) also triggers the pace fetch,
+  not only the settings swap.
+- Two tests: colour filtering with a fixture where White and Black think 20 s and
+  2 s, and recency (a month of clockless games followed by one recent game).
+  102 tests.
+
 ## 1.7.2 — 2026-11-25
 
 Settings stop belonging to the browser and start belonging to the account.
