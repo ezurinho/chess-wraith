@@ -60,7 +60,7 @@ the browser for provenance.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | per-account opening memory + learned think-time band |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 96 files | 49 tests in 7 files |
+| Tests | 96 files | 72 tests in 8 files |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

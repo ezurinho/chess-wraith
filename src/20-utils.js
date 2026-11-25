@@ -55,6 +55,28 @@ function pushBounded(list, value, cap) {
   while (next.length > cap) next.shift();
   return next;
 }
+// Two tabs of the same browser must not drive the same board. The lease is a
+// heartbeat; whoever holds a fresh one keeps the wheel, a closed tab expires.
+function tabLeaseDecision(entry, now, ttlMs, myId) {
+  if (!entry || typeof entry !== 'object') return 'claim';
+  const at = Number(entry.at);
+  if (typeof entry.id !== 'string' || !entry.id || !Number.isFinite(at)) return 'claim';
+  if (!(now - at <= ttlMs)) return 'claim';
+  return entry.id === myId ? 'renew' : 'passive';
+}
+
+// A move landed on our own turn that we did not click: a human took over, or
+// another tab played. A guessed turn never fires this, only a certain one.
+function foreignMoveSeen(opts) {
+  const o = opts || {};
+  if (!o.prevCertain || !o.nextCertain) return false;
+  if (!o.prevMine || o.nextMine) return false;
+  // A board with no clocks is an analysis board: the turn is a guess there, so
+  // never accuse the user of moving on it.
+  if (!o.hasClock) return false;
+  if (!o.plyAdvanced) return false;
+  return !o.matchedOurGrid;
+}
 
 // A search that never answers must not wedge the panel forever. The budget is
 // generous relative to the request so a slow-but-working search still finishes.

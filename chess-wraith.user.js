@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.3.1
+// @version      1.4.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.3.1';
+const VERSION = '1.4.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -102,7 +102,7 @@ const STYLES = {
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.3.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -166,6 +166,28 @@ function pushBounded(list, value, cap) {
   if (Number.isFinite(value) && value > 0) next.push(Math.round(value));
   while (next.length > cap) next.shift();
   return next;
+}
+// Two tabs of the same browser must not drive the same board. The lease is a
+// heartbeat; whoever holds a fresh one keeps the wheel, a closed tab expires.
+function tabLeaseDecision(entry, now, ttlMs, myId) {
+  if (!entry || typeof entry !== 'object') return 'claim';
+  const at = Number(entry.at);
+  if (typeof entry.id !== 'string' || !entry.id || !Number.isFinite(at)) return 'claim';
+  if (!(now - at <= ttlMs)) return 'claim';
+  return entry.id === myId ? 'renew' : 'passive';
+}
+
+// A move landed on our own turn that we did not click: a human took over, or
+// another tab played. A guessed turn never fires this, only a certain one.
+function foreignMoveSeen(opts) {
+  const o = opts || {};
+  if (!o.prevCertain || !o.nextCertain) return false;
+  if (!o.prevMine || o.nextMine) return false;
+  // A board with no clocks is an analysis board: the turn is a guess there, so
+  // never accuse the user of moving on it.
+  if (!o.hasClock) return false;
+  if (!o.plyAdvanced) return false;
+  return !o.matchedOurGrid;
 }
 
 // A search that never answers must not wedge the panel forever. The budget is
@@ -2139,6 +2161,29 @@ function effectiveElo(cfg, opts = {}) {
   return clampInt(cfg.targetElo, 1320, 3190, 1650);
 }
 
+// How many centipawns a human at this rating actually loses per move. Rough
+// fit to the published ACPL-vs-rating curve: generous at the bottom, tight at
+// the top, and clamped so neither end becomes absurd.
+function acplBand(elo) {
+  const e = clamp(Number(elo) || 1500, 600, 3200);
+  return Math.round(clamp(96 - e / 34, 8, 90));
+}
+
+// The throttle nothing else has: when the account is playing far above its own
+// rating, hand it more slack until the numbers look human again. It only ever
+// moves in small steps, and only after 15 moves of evidence.
+function acplGuard(opts) {
+  const o = opts || {};
+  const band = acplBand(o.elo);
+  const samples = Number(o.samples) || 0;
+  const acpl = Number(o.acpl) || 0;
+  const boost = clampInt(o.boost, 0, 160, 0);
+  if (samples < 15 || acpl <= 0) return { band, boost, verdict: 'wait' };
+  if (acpl < band * 0.45) return { band, boost: clampInt(boost + 12, 0, 160, 0), verdict: 'raise' };
+  if (acpl > band * 2 && boost > 0) return { band, boost: clampInt(boost - 8, 0, 160, 0), verdict: 'lower' };
+  return { band, boost, verdict: 'hold' };
+}
+
 function styleProfile(cfg, opts = {}) {
   const preset = STYLES[cfg.style] || STYLES.adaptive;
   return {
@@ -2804,6 +2849,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .panel[data-collapsed="true"] .body{display:none}
 .panel[data-collapsed="true"] .head{border-bottom:0}
 .panel[data-collapsed="true"] .head::after{display:none}
+.band{display:grid;gap:5px;margin:2px 0 9px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.022);border:1px solid var(--line)}
+.band-h{display:flex;align-items:baseline;justify-content:space-between;font:700 7.5px/1 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--dim-2)}
+.band-h b{font:700 11px/1 var(--font-mono);letter-spacing:0;color:var(--acc)}
+.band-bar{height:5px;border-radius:99px;background:rgba(255,255,255,.05);overflow:hidden}
+.band-bar i{display:block;height:100%;transform:scaleX(var(--band,0));transform-origin:left center;background:linear-gradient(90deg,var(--acc),var(--acc-2));box-shadow:0 0 8px color-mix(in srgb,var(--acc) 55%,transparent);transition:transform .3s}
+.band-f{display:flex;justify-content:space-between;font:600 8px/1 var(--font-mono);color:var(--dim)}
+.band-f b{color:var(--ink-2);font-weight:600}
 `;
 
 const ICON = {
@@ -2847,6 +2899,11 @@ const PANEL_HTML = `
           <span class="sep" aria-hidden="true"></span>
           <div class="stat"><b class="mid" data-el="best">–</b><span>Best</span></div>
         </div>
+        <div class="band">
+          <div class="band-h"><span>Target</span><b data-el="target2">–</b></div>
+          <div class="band-bar"><i data-el="bandFill"></i></div>
+          <div class="band-f"><span>accuracy <b data-el="acpl2">–</b></span><span>band <b data-el="bandCap">–</b></span></div>
+        </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Lines</span><span class="card-s live" data-el="engineTag">waiting</span><span class="card-age" data-el="depth">–</span></div>
           <div class="lines" data-el="lines"><div class="empty">waiting for a board…</div></div>
@@ -2857,8 +2914,19 @@ const PANEL_HTML = `
             <div class="row"><span>Your accuracy</span><b data-el="acpl">–</b></div>
             <div class="row"><span>Opponent</span><b data-el="opp">–</b></div>
             <div class="row"><span>Playing at</span><b data-el="target">–</b></div>
-            <div class="row"><span>Account</span><b data-el="account">–</b></div>
             <div class="row"><span>Your pace</span><b data-el="pace">–</b></div>
+            <div class="row"><span>Their tempo</span><b data-el="tempoRow">–</b></div>
+            <div class="row"><span>Games</span><b data-el="games">–</b></div>
+            <div class="row"><span>Rest</span><b data-el="rest">–</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Account</span><span class="card-s">profile only</span></div>
+          <div class="rows">
+            <div class="row"><span>User</span><b data-el="account">anonymous</b></div>
+            <div class="row"><span>Rating</span><b data-el="rating">–</b></div>
+            <div class="row"><span>Session</span><b data-el="sessionLen">–</b></div>
+            <div class="row"><span>Guard</span><b data-el="guard">off</b></div>
           </div>
         </div>
       </div>
@@ -2924,6 +2992,14 @@ const PANEL_HTML = `
   <div class="foot"><span data-el="foot">waiting</span><span class="warnline" data-el="warn"></span></div>
 </div>
 `;
+
+function clockText(ms) {
+  const total = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  return `${m}:${String(total % 60).padStart(2, '0')}`;
+}
 
 const THEME_NAMES = { carbon: 'Carbon', aurora: 'Aurora', sunset: 'Sunset', ice: 'Ice', violet: 'Violet', rgb: 'RGB' };
 
@@ -3138,13 +3214,24 @@ class WraithPanel {
     }
 
     this.el.turn.textContent = v.turn ? (v.turn === 'w' ? 'White to move' : 'Black to move') : '–';
-    this.el.acpl.textContent = v.acpl > 0 ? `${Math.round(v.acpl)} cp` : '–';
+    const band = Number(v.band) || 0;
+    const acpl = v.acpl > 0 ? Math.round(v.acpl) : null;
+    const boost = Number(v.slackBoost) || 0;
+    this.el.acpl.textContent = acpl === null ? '–' : `${acpl} cp${band ? ` / ${band}` : ''}`;
+    this.el.acpl2.textContent = acpl === null ? '–' : `${acpl} cp`;
+    this.el.bandCap.textContent = band ? `${band} cp` : '–';
+    this.el.bandFill.style.setProperty('--band', String(band && acpl !== null ? clamp(acpl / band, 0, 1) : 0));
     this.el.account.textContent = v.account || 'anonymous';
-    this.el.pace.textContent = v.pace
-      ? `${(v.pace / 1000).toFixed(1)}s${v.tempo ? ` · they ${(v.tempo / 1000).toFixed(1)}s` : ''}`
-      : '–';
+    this.el.pace.textContent = v.pace ? `${(v.pace / 1000).toFixed(1)}s` : '–';
+    this.el.tempoRow.textContent = v.tempo ? `${(v.tempo / 1000).toFixed(1)}s` : '–';
+    this.el.games.textContent = String(Number(v.games) || 1);
+    this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
+    this.el.sessionLen.textContent = clockText(v.sessionMs);
+    this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
+    this.el.rating.textContent = v.opponent ? String(v.opponent) : '–';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
     this.el.target.textContent = v.elo ? String(v.elo) : 'full';
+    this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);
     this.el.auto.classList.toggle('on', autoOn);
@@ -3183,6 +3270,11 @@ class WraithPanel {
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
 const PACE_KEY = 'chess-wraith-pace-v1';
+// One board per browser: the lease is renewed every few seconds, so a closed
+// tab hands the wheel over instead of blocking it forever.
+const TAB_KEY = 'chess-wraith-tab-v1';
+const TAB_TTL_MS = 9000;
+const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // A move landing while a hand is on the board is the one case where the script
 // must yield: playing over someone who just grabbed a piece looks exactly like
 // what it is.
@@ -3237,7 +3329,10 @@ const state = {
   boardTouchAt: 0,
   defers: 0,
   sessionStart: Date.now(),
-  gamesPlayed: 1
+  gamesPlayed: 1,
+  slackBoost: 0,
+  passiveTab: false,
+  autoMovedGrid: null
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -3489,6 +3584,12 @@ function statusView() {
     account: currentAccount(),
     pace: paceBaseline(),
     tempo: median(state.tempoSamples),
+    band: acplBand(state.effectiveElo || cfg.targetElo),
+    slackBoost: state.slackBoost,
+    passiveTab: state.passiveTab,
+    sessionMs: Date.now() - state.sessionStart,
+    restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
+    games: state.gamesPlayed,
     version: VERSION
   };
 }
@@ -3582,6 +3683,16 @@ function onFinal(result) {
   if (state.autoPlay) scheduleAutoMove(result);
 }
 
+// The guard raises slack for this session only; the user's saved setting is
+// never rewritten behind their back.
+function slackCfg() {
+  if (!state.slackBoost) return cfg;
+  return {
+    ...cfg,
+    humanSlackCp: clampInt(cfg.humanSlackCp + state.slackBoost, 0, 300, cfg.humanSlackCp)
+  };
+}
+
 function scheduleAutoMove(result) {
   clearAutoTimer();
   const snap = state.snapshot;
@@ -3596,7 +3707,7 @@ function scheduleAutoMove(result) {
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
 
   const ply = plyOf(snap);
-  const choice = chooseMove(result.lines, cfg, {
+  const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply)
@@ -3662,6 +3773,16 @@ function armAutoMove(move, targetFen, choice, delay) {
   }, delay);
 }
 
+function applyAcplGuard() {
+  const verdict = acplGuard({
+    acpl: state.myAcpl,
+    samples: state.myCpLosses.length,
+    elo: state.effectiveElo || cfg.targetElo,
+    boost: state.slackBoost
+  });
+  if (verdict.verdict === 'raise' || verdict.verdict === 'lower') state.slackBoost = verdict.boost;
+}
+
 async function playMove(move, targetFen, choice) {
   const snap = state.snapshot;
   if (!snap || !state.boardEl) return false;
@@ -3677,12 +3798,14 @@ async function playMove(move, targetFen, choice) {
   const after = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
   const landed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
   if (landed) {
+    state.autoMovedGrid = after.grid;
     if (choice && choice.cpLoss === 0) state.top1Streak += 1;
     else state.top1Streak = 0;
     if (choice) {
       state.myCpLosses.push(clamp(Math.round(choice.cpLoss || 0), 0, 600));
       if (state.myCpLosses.length > 20) state.myCpLosses.shift();
       state.myAcpl = state.myCpLosses.reduce((a, b) => a + b, 0) / state.myCpLosses.length;
+      applyAcplGuard();
     }
     recordOpening(move, plyOf(snap));
     recordPace(state.lastDelayMs);
@@ -3699,6 +3822,7 @@ async function playMove(move, targetFen, choice) {
     await sleep(cfg.verifyMoveMs);
     const second = scanBoard(mySide(snap.flipped));
     if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {
+      state.autoMovedGrid = second.grid;
       state.warn = '';
       recordOpening(move, plyOf(snap));
       scheduleScan(120);
@@ -3718,7 +3842,7 @@ async function playNow() {
   if (snap.turnCertain === false) return false;
   if (result.fen !== snap.fen) return false;
   const ply = plyOf(snap);
-  const choice = chooseMove(result.lines, cfg, {
+  const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply)
@@ -3784,7 +3908,24 @@ function runScan() {
     state.prevSnapshot = prev;
     state.snapshot = snapshot;
     state.analysis = null;
+    if (state.autoPlay && prev) {
+      const foreign = foreignMoveSeen({
+        prevCertain: prev.turnCertain !== false,
+        nextCertain: snapshot.turnCertain !== false,
+        prevMine: prev.turn === mySide(prev.flipped),
+        nextMine: snapshot.turn === mySide(snapshot.flipped),
+        hasClock: Number.isFinite(state.clockSeconds) && state.clockSeconds > 0,
+        plyAdvanced: plyOf(snapshot) === plyOf(prev) + 1,
+        matchedOurGrid: Boolean(state.autoMovedGrid && Chess.gridsEqual(state.autoMovedGrid, scanned.grid))
+      });
+      if (foreign) {
+        state.autoPlay = false;
+        clearAutoTimer();
+        state.warn = 'paused: manual move detected';
+      }
+    }
     state.autoMovedFen = null;
+    state.autoMovedGrid = null;
     if (scanned.gameOver) {
       state.gameOverSeen = true;
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
@@ -3902,8 +4043,45 @@ engine.onProgress = (result) => {
 
 engine.onFinal = onFinal;
 
+function heartbeatTab() {
+  let entry = null;
+  try {
+    entry = JSON.parse(localStorage.getItem(TAB_KEY) || 'null');
+  } catch {
+    entry = null;
+  }
+  const decision = tabLeaseDecision(entry, Date.now(), TAB_TTL_MS, TAB_ID);
+  if (decision === 'passive') {
+    if (!state.passiveTab) {
+      state.passiveTab = true;
+      state.autoPlay = false;
+      state.warn = 'another tab is playing';
+      refreshPanel();
+    }
+    return;
+  }
+  state.passiveTab = false;
+  try {
+    localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));
+  } catch {
+    /* storage blocked: no lock, no crash */
+  }
+}
+
+function releaseTab() {
+  try {
+    const entry = JSON.parse(localStorage.getItem(TAB_KEY) || 'null');
+    if (entry && entry.id === TAB_ID) localStorage.removeItem(TAB_KEY);
+  } catch {
+    /* nothing to clean */
+  }
+}
+
 function boot() {
   panel.mount();
+  heartbeatTab();
+  setInterval(heartbeatTab, 3000);
+  window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();
   syncKeepAlive();

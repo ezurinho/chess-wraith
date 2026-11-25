@@ -2,6 +2,11 @@
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
 const PACE_KEY = 'chess-wraith-pace-v1';
+// One board per browser: the lease is renewed every few seconds, so a closed
+// tab hands the wheel over instead of blocking it forever.
+const TAB_KEY = 'chess-wraith-tab-v1';
+const TAB_TTL_MS = 9000;
+const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // A move landing while a hand is on the board is the one case where the script
 // must yield: playing over someone who just grabbed a piece looks exactly like
 // what it is.
@@ -56,7 +61,10 @@ const state = {
   boardTouchAt: 0,
   defers: 0,
   sessionStart: Date.now(),
-  gamesPlayed: 1
+  gamesPlayed: 1,
+  slackBoost: 0,
+  passiveTab: false,
+  autoMovedGrid: null
 };
 
 // Diagnostic FEN for the panel/debug API only; the real analysis path uses the
@@ -308,6 +316,12 @@ function statusView() {
     account: currentAccount(),
     pace: paceBaseline(),
     tempo: median(state.tempoSamples),
+    band: acplBand(state.effectiveElo || cfg.targetElo),
+    slackBoost: state.slackBoost,
+    passiveTab: state.passiveTab,
+    sessionMs: Date.now() - state.sessionStart,
+    restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
+    games: state.gamesPlayed,
     version: VERSION
   };
 }
@@ -401,6 +415,16 @@ function onFinal(result) {
   if (state.autoPlay) scheduleAutoMove(result);
 }
 
+// The guard raises slack for this session only; the user's saved setting is
+// never rewritten behind their back.
+function slackCfg() {
+  if (!state.slackBoost) return cfg;
+  return {
+    ...cfg,
+    humanSlackCp: clampInt(cfg.humanSlackCp + state.slackBoost, 0, 300, cfg.humanSlackCp)
+  };
+}
+
 function scheduleAutoMove(result) {
   clearAutoTimer();
   const snap = state.snapshot;
@@ -415,7 +439,7 @@ function scheduleAutoMove(result) {
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
 
   const ply = plyOf(snap);
-  const choice = chooseMove(result.lines, cfg, {
+  const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply)
@@ -481,6 +505,16 @@ function armAutoMove(move, targetFen, choice, delay) {
   }, delay);
 }
 
+function applyAcplGuard() {
+  const verdict = acplGuard({
+    acpl: state.myAcpl,
+    samples: state.myCpLosses.length,
+    elo: state.effectiveElo || cfg.targetElo,
+    boost: state.slackBoost
+  });
+  if (verdict.verdict === 'raise' || verdict.verdict === 'lower') state.slackBoost = verdict.boost;
+}
+
 async function playMove(move, targetFen, choice) {
   const snap = state.snapshot;
   if (!snap || !state.boardEl) return false;
@@ -496,12 +530,14 @@ async function playMove(move, targetFen, choice) {
   const after = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
   const landed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
   if (landed) {
+    state.autoMovedGrid = after.grid;
     if (choice && choice.cpLoss === 0) state.top1Streak += 1;
     else state.top1Streak = 0;
     if (choice) {
       state.myCpLosses.push(clamp(Math.round(choice.cpLoss || 0), 0, 600));
       if (state.myCpLosses.length > 20) state.myCpLosses.shift();
       state.myAcpl = state.myCpLosses.reduce((a, b) => a + b, 0) / state.myCpLosses.length;
+      applyAcplGuard();
     }
     recordOpening(move, plyOf(snap));
     recordPace(state.lastDelayMs);
@@ -518,6 +554,7 @@ async function playMove(move, targetFen, choice) {
     await sleep(cfg.verifyMoveMs);
     const second = scanBoard(mySide(snap.flipped));
     if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {
+      state.autoMovedGrid = second.grid;
       state.warn = '';
       recordOpening(move, plyOf(snap));
       scheduleScan(120);
@@ -537,7 +574,7 @@ async function playNow() {
   if (snap.turnCertain === false) return false;
   if (result.fen !== snap.fen) return false;
   const ply = plyOf(snap);
-  const choice = chooseMove(result.lines, cfg, {
+  const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply)
@@ -603,7 +640,24 @@ function runScan() {
     state.prevSnapshot = prev;
     state.snapshot = snapshot;
     state.analysis = null;
+    if (state.autoPlay && prev) {
+      const foreign = foreignMoveSeen({
+        prevCertain: prev.turnCertain !== false,
+        nextCertain: snapshot.turnCertain !== false,
+        prevMine: prev.turn === mySide(prev.flipped),
+        nextMine: snapshot.turn === mySide(snapshot.flipped),
+        hasClock: Number.isFinite(state.clockSeconds) && state.clockSeconds > 0,
+        plyAdvanced: plyOf(snapshot) === plyOf(prev) + 1,
+        matchedOurGrid: Boolean(state.autoMovedGrid && Chess.gridsEqual(state.autoMovedGrid, scanned.grid))
+      });
+      if (foreign) {
+        state.autoPlay = false;
+        clearAutoTimer();
+        state.warn = 'paused: manual move detected';
+      }
+    }
     state.autoMovedFen = null;
+    state.autoMovedGrid = null;
     if (scanned.gameOver) {
       state.gameOverSeen = true;
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
@@ -721,8 +775,45 @@ engine.onProgress = (result) => {
 
 engine.onFinal = onFinal;
 
+function heartbeatTab() {
+  let entry = null;
+  try {
+    entry = JSON.parse(localStorage.getItem(TAB_KEY) || 'null');
+  } catch {
+    entry = null;
+  }
+  const decision = tabLeaseDecision(entry, Date.now(), TAB_TTL_MS, TAB_ID);
+  if (decision === 'passive') {
+    if (!state.passiveTab) {
+      state.passiveTab = true;
+      state.autoPlay = false;
+      state.warn = 'another tab is playing';
+      refreshPanel();
+    }
+    return;
+  }
+  state.passiveTab = false;
+  try {
+    localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));
+  } catch {
+    /* storage blocked: no lock, no crash */
+  }
+}
+
+function releaseTab() {
+  try {
+    const entry = JSON.parse(localStorage.getItem(TAB_KEY) || 'null');
+    if (entry && entry.id === TAB_ID) localStorage.removeItem(TAB_KEY);
+  } catch {
+    /* nothing to clean */
+  }
+}
+
 function boot() {
   panel.mount();
+  heartbeatTab();
+  setInterval(heartbeatTab, 3000);
+  window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();
   syncKeepAlive();

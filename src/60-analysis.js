@@ -23,6 +23,29 @@ function effectiveElo(cfg, opts = {}) {
   return clampInt(cfg.targetElo, 1320, 3190, 1650);
 }
 
+// How many centipawns a human at this rating actually loses per move. Rough
+// fit to the published ACPL-vs-rating curve: generous at the bottom, tight at
+// the top, and clamped so neither end becomes absurd.
+function acplBand(elo) {
+  const e = clamp(Number(elo) || 1500, 600, 3200);
+  return Math.round(clamp(96 - e / 34, 8, 90));
+}
+
+// The throttle nothing else has: when the account is playing far above its own
+// rating, hand it more slack until the numbers look human again. It only ever
+// moves in small steps, and only after 15 moves of evidence.
+function acplGuard(opts) {
+  const o = opts || {};
+  const band = acplBand(o.elo);
+  const samples = Number(o.samples) || 0;
+  const acpl = Number(o.acpl) || 0;
+  const boost = clampInt(o.boost, 0, 160, 0);
+  if (samples < 15 || acpl <= 0) return { band, boost, verdict: 'wait' };
+  if (acpl < band * 0.45) return { band, boost: clampInt(boost + 12, 0, 160, 0), verdict: 'raise' };
+  if (acpl > band * 2 && boost > 0) return { band, boost: clampInt(boost - 8, 0, 160, 0), verdict: 'lower' };
+  return { band, boost, verdict: 'hold' };
+}
+
 function styleProfile(cfg, opts = {}) {
   const preset = STYLES[cfg.style] || STYLES.adaptive;
   return {

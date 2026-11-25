@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.4.0 — 2026-11-25
+
+Three ways a bot gets caught that have nothing to do with move quality: it plays
+after a human took over, two tabs drive the same board, and the account plays
+far above its own rating. Each one now has a guard, and the panel shows the
+numbers behind them.
+
+- **Takeover detection.** A move that lands on our turn without our click pauses
+  auto-play and says `paused: manual move detected`. It only fires on a board
+  with a real clock, a certain turn and a ply that advanced by exactly one, so
+  the analysis board never triggers it.
+- **One tab per board.** A `localStorage` lease is renewed every 3 s; a second
+  tab goes passive with `another tab is playing`, and closing a tab releases the
+  lease on `pagehide` instead of leaving the board locked.
+- **Accuracy guard.** `acplBand(elo)` is the ACPL a human at that rating loses
+  per move. After 15 assessed moves, `acplGuard()` raises the slack 12 cp at a
+  time (cap 160) when the account is under 45% of its band, and gives it back
+  when it is over twice the band. The boost is per session: the saved setting is
+  never rewritten.
+- **Denser panel.** A target strip with the accuracy band and a fill bar, session
+  rows for your pace, their tempo, games played and time left, and an account
+  card with the signed-in user, rating, session length and current guard.
+- 72 tests (was 53); the 19 new ones live in `tests/unit/guards.test.js`.
+
 ## 1.3.1 — 2026-11-25
 
 A session with no end is the one shape that is hard to explain away, and the AFK

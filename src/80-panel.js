@@ -208,6 +208,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .panel[data-collapsed="true"] .body{display:none}
 .panel[data-collapsed="true"] .head{border-bottom:0}
 .panel[data-collapsed="true"] .head::after{display:none}
+.band{display:grid;gap:5px;margin:2px 0 9px;padding:7px 9px;border-radius:9px;background:rgba(255,255,255,.022);border:1px solid var(--line)}
+.band-h{display:flex;align-items:baseline;justify-content:space-between;font:700 7.5px/1 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--dim-2)}
+.band-h b{font:700 11px/1 var(--font-mono);letter-spacing:0;color:var(--acc)}
+.band-bar{height:5px;border-radius:99px;background:rgba(255,255,255,.05);overflow:hidden}
+.band-bar i{display:block;height:100%;transform:scaleX(var(--band,0));transform-origin:left center;background:linear-gradient(90deg,var(--acc),var(--acc-2));box-shadow:0 0 8px color-mix(in srgb,var(--acc) 55%,transparent);transition:transform .3s}
+.band-f{display:flex;justify-content:space-between;font:600 8px/1 var(--font-mono);color:var(--dim)}
+.band-f b{color:var(--ink-2);font-weight:600}
 `;
 
 const ICON = {
@@ -251,6 +258,11 @@ const PANEL_HTML = `
           <span class="sep" aria-hidden="true"></span>
           <div class="stat"><b class="mid" data-el="best">–</b><span>Best</span></div>
         </div>
+        <div class="band">
+          <div class="band-h"><span>Target</span><b data-el="target2">–</b></div>
+          <div class="band-bar"><i data-el="bandFill"></i></div>
+          <div class="band-f"><span>accuracy <b data-el="acpl2">–</b></span><span>band <b data-el="bandCap">–</b></span></div>
+        </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Lines</span><span class="card-s live" data-el="engineTag">waiting</span><span class="card-age" data-el="depth">–</span></div>
           <div class="lines" data-el="lines"><div class="empty">waiting for a board…</div></div>
@@ -261,8 +273,19 @@ const PANEL_HTML = `
             <div class="row"><span>Your accuracy</span><b data-el="acpl">–</b></div>
             <div class="row"><span>Opponent</span><b data-el="opp">–</b></div>
             <div class="row"><span>Playing at</span><b data-el="target">–</b></div>
-            <div class="row"><span>Account</span><b data-el="account">–</b></div>
             <div class="row"><span>Your pace</span><b data-el="pace">–</b></div>
+            <div class="row"><span>Their tempo</span><b data-el="tempoRow">–</b></div>
+            <div class="row"><span>Games</span><b data-el="games">–</b></div>
+            <div class="row"><span>Rest</span><b data-el="rest">–</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Account</span><span class="card-s">profile only</span></div>
+          <div class="rows">
+            <div class="row"><span>User</span><b data-el="account">anonymous</b></div>
+            <div class="row"><span>Rating</span><b data-el="rating">–</b></div>
+            <div class="row"><span>Session</span><b data-el="sessionLen">–</b></div>
+            <div class="row"><span>Guard</span><b data-el="guard">off</b></div>
           </div>
         </div>
       </div>
@@ -328,6 +351,14 @@ const PANEL_HTML = `
   <div class="foot"><span data-el="foot">waiting</span><span class="warnline" data-el="warn"></span></div>
 </div>
 `;
+
+function clockText(ms) {
+  const total = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  return `${m}:${String(total % 60).padStart(2, '0')}`;
+}
 
 const THEME_NAMES = { carbon: 'Carbon', aurora: 'Aurora', sunset: 'Sunset', ice: 'Ice', violet: 'Violet', rgb: 'RGB' };
 
@@ -542,13 +573,24 @@ class WraithPanel {
     }
 
     this.el.turn.textContent = v.turn ? (v.turn === 'w' ? 'White to move' : 'Black to move') : '–';
-    this.el.acpl.textContent = v.acpl > 0 ? `${Math.round(v.acpl)} cp` : '–';
+    const band = Number(v.band) || 0;
+    const acpl = v.acpl > 0 ? Math.round(v.acpl) : null;
+    const boost = Number(v.slackBoost) || 0;
+    this.el.acpl.textContent = acpl === null ? '–' : `${acpl} cp${band ? ` / ${band}` : ''}`;
+    this.el.acpl2.textContent = acpl === null ? '–' : `${acpl} cp`;
+    this.el.bandCap.textContent = band ? `${band} cp` : '–';
+    this.el.bandFill.style.setProperty('--band', String(band && acpl !== null ? clamp(acpl / band, 0, 1) : 0));
     this.el.account.textContent = v.account || 'anonymous';
-    this.el.pace.textContent = v.pace
-      ? `${(v.pace / 1000).toFixed(1)}s${v.tempo ? ` · they ${(v.tempo / 1000).toFixed(1)}s` : ''}`
-      : '–';
+    this.el.pace.textContent = v.pace ? `${(v.pace / 1000).toFixed(1)}s` : '–';
+    this.el.tempoRow.textContent = v.tempo ? `${(v.tempo / 1000).toFixed(1)}s` : '–';
+    this.el.games.textContent = String(Number(v.games) || 1);
+    this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
+    this.el.sessionLen.textContent = clockText(v.sessionMs);
+    this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
+    this.el.rating.textContent = v.opponent ? String(v.opponent) : '–';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
     this.el.target.textContent = v.elo ? String(v.elo) : 'full';
+    this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);
     this.el.auto.classList.toggle('on', autoOn);
