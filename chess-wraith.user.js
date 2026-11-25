@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.17.0
+// @version      1.18.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.17.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.18.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -214,6 +214,15 @@ function tabLeaseDecision(entry, now, ttlMs, myId) {
   if (typeof entry.id !== 'string' || !entry.id || !Number.isFinite(at)) return 'claim';
   if (!(now - at <= ttlMs)) return 'claim';
   return entry.id === myId ? 'renew' : 'passive';
+}
+
+// A swallowed click is not a stopped session. Three growing attempts cover the ad
+// overlay, the promotion dialog that painted late and the board that was still
+// animating; after that the click is the problem and saying so is honest.
+function moveRetryPlan(attempt) {
+  const n = Math.max(1, Math.floor(Number(attempt) || 1));
+  if (n > 3) return { retry: false, delayMs: 0 };
+  return { retry: true, delayMs: 900 * n };
 }
 
 // A move landed on our own turn that we did not click: a human took over, or
@@ -2374,6 +2383,21 @@ function paceSamplesKey(account, cls) {
   return `${PACE_SAMPLES_KEY}:${account || 'anonymous'}:${cls || 'any'}`;
 }
 
+// Which number the delay is centred on, and where it came from. The source
+// matters as much as the value: the three routes describe very different
+// evidence, and the panel was showing - while the moves were paced by a class
+// default it never mentioned.
+function paceAnchorFor(opts) {
+  const o = opts || {};
+  const published = Number(o.publishedMs) || 0;
+  if (published > 200) return { ms: published, classScoped: true, source: 'acct' };
+  const learned = Number(o.learnedMs) || 0;
+  if (learned > 200) return { ms: learned, classScoped: false, source: 'learned' };
+  const fallback = classMedianMs(o.cls);
+  if (fallback) return { ms: fallback, classScoped: true, source: 'class' };
+  return { ms: null, classScoped: false, source: 'none' };
+}
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
@@ -3885,6 +3909,12 @@ const state = {
   clockPeak: 0,
   passiveTab: false,
   autoMovedGrid: null,
+  // A click that did not land, and a move that showed up on our turn without us:
+  // both are counted before the session stops, because one bad scan is not a
+  // reason to end the night.
+  moveMisses: 0,
+  foreignHits: 0,
+  foreignFen: null,
   updateLatest: '',
   updateAt: 0,
   updateError: '',
@@ -4060,12 +4090,11 @@ function paceBaseline() {
 // class, the median this browser has learned, or the class default for a profile
 // that has neither. The first and third are already class-specific numbers.
 function paceAnchor() {
-  const published = Number(state.paceProfile && state.paceProfile.medianMs) || 0;
-  if (published > 200) return { ms: published, classScoped: true };
-  const learned = paceBaseline();
-  if (learned) return { ms: learned, classScoped: false };
-  const fallback = classMedianMs(timeClassFromSeconds(state.clockPeak || state.clockSeconds));
-  return { ms: fallback, classScoped: Boolean(fallback) };
+  return paceAnchorFor({
+    publishedMs: Number(state.paceProfile && state.paceProfile.medianMs) || 0,
+    learnedMs: paceBaseline(),
+    cls: timeClassFromSeconds(state.clockPeak || state.clockSeconds)
+  });
 }
 
 function recordPace(ms) {
@@ -4280,6 +4309,47 @@ function clearAutoTimer() {
   }
 }
 
+let moveRetryTimer = null;
+
+function clearMoveRetry() {
+  if (moveRetryTimer) {
+    clearTimeout(moveRetryTimer);
+    moveRetryTimer = null;
+  }
+}
+
+// A swallowed click is not a stopped session: retry the same analysis a few times
+// with growing pauses, then stop and say so.
+function armMoveRetry() {
+  const plan = moveRetryPlan(state.moveMisses + 1);
+  if (!plan.retry) {
+    state.warn = 'the board is not taking moves; auto-play paused';
+    state.autoPlay = false;
+    refreshPanel();
+    return;
+  }
+  state.moveMisses = Math.max(1, state.moveMisses + 1);
+  state.warn = `move not taken, retrying (${state.moveMisses}/3)`;
+  refreshPanel();
+  clearMoveRetry();
+  moveRetryTimer = setTimeout(() => {
+    moveRetryTimer = null;
+    if (!state.autoPlay || !state.snapshot || !state.analysis) return;
+    // The game moved on while we waited; the next scan has fresh work to do.
+    if (state.analysis.fen !== state.snapshot.fen) return;
+    if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
+    playNow()
+      .then((played) => {
+        if (played) {
+          state.moveMisses = 0;
+          if (/^move not taken/.test(state.warn)) state.warn = '';
+          refreshPanel();
+        } else armMoveRetry();
+      })
+      .catch(() => armMoveRetry());
+  }, plan.delayMs);
+}
+
 function clearRematchTimer() {
   if (state.rematchTimer) {
     clearTimeout(state.rematchTimer);
@@ -4377,6 +4447,10 @@ function onNewGame() {
   // A retry armed for the old game must not fire into the new one and mark the
   // rematch as already tried, which would silently end the session later.
   clearRematchTimer();
+  clearMoveRetry();
+  state.moveMisses = 0;
+  state.foreignHits = 0;
+  state.foreignFen = null;
   state.gamesPlayed += 1;
   state.gameOverSeen = false;
   state.rematchTried = false;
@@ -4444,9 +4518,9 @@ function statusView() {
     styleLabel: LEGIT.label,
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
     account: currentAccount(),
-    pace: paceBaseline(),
+    pace: paceAnchor().ms,
     paceSamples: state.paceProfile ? state.paceProfile.samples || 0 : readPaceSamples().length,
-    paceSource: state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned',
+    paceSource: paceAnchor().source,
     paceError: state.paceError,
     tempo: median(state.tempoSamples),
     band: acplBand(state.effectiveElo || cfg.targetElo),
@@ -4646,11 +4720,16 @@ function armAutoMove(move, targetFen, choice, delay) {
     state.defers = 0;
     // A rejected promise here used to leave auto-play on with no timer and no
     // message: the panel said "playing" while nothing was playing.
-    playMove(move, targetFen, choice).catch((error) => {
-      state.warn = `move failed: ${String((error && error.message) || error).slice(0, 40)}`;
-      refreshPanel();
-      scheduleScan(400);
-    });
+    playMove(move, targetFen, choice)
+      .then((played) => {
+        if (played) state.moveMisses = 0;
+        else armMoveRetry();
+      })
+      .catch((error) => {
+        state.warn = `move failed: ${String((error && error.message) || error).slice(0, 40)}`;
+        refreshPanel();
+        armMoveRetry();
+      });
   }, delay);
 }
 
@@ -4689,6 +4768,7 @@ async function playMove(move, targetFen, choice) {
   const landed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
   if (landed) {
     state.autoMovedGrid = after.grid;
+    state.moveMisses = 0;
     if (choice && choice.cpLoss === 0) state.top1Streak += 1;
     else state.top1Streak = 0;
     if (choice) {
@@ -4720,8 +4800,9 @@ async function playMove(move, targetFen, choice) {
       return true;
     }
   }
-  state.warn = 'chess.com ignored the click; auto-play paused';
-  state.autoPlay = false;
+  // Not a pause: the caller re-arms from here, and only three misses in a row
+  // stop the session. A board that painted late is the common case, not a bug.
+  state.warn = 'chess.com did not register the move';
   refreshPanel();
   return false;
 }
@@ -4820,9 +4901,22 @@ function runScan() {
         matchedOurGrid: Boolean(state.autoMovedGrid && Chess.gridsEqual(state.autoMovedGrid, scanned.grid))
       });
       if (foreign) {
-        state.autoPlay = false;
+        // One scan can catch the board mid-paint. The second one, same position,
+        // is a person moving, and then stopping is the right answer.
+        const samePosition = state.foreignFen === snapshot.fen;
+        state.foreignFen = snapshot.fen;
+        state.foreignHits = samePosition ? state.foreignHits + 1 : 1;
         clearAutoTimer();
-        state.warn = 'paused: manual move detected';
+        if (state.foreignHits >= 2) {
+          state.autoPlay = false;
+          state.warn = 'paused: manual move detected';
+        } else {
+          state.warn = 'checking a move that was not mine';
+          scheduleScan(700);
+        }
+      } else {
+        state.foreignHits = 0;
+        state.foreignFen = null;
       }
     }
     state.autoMovedFen = null;
@@ -4939,7 +5033,10 @@ function toggleAuto() {
   state.autoPlay = !state.autoPlay;
   cfg.autoPlayOnLoad = state.autoPlay;
   saveSettings(cfg);
-  if (!state.autoPlay) clearAutoTimer();
+  if (!state.autoPlay) {
+    clearAutoTimer();
+    clearMoveRetry();
+  }
   else if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
     scheduleAutoMove(state.analysis);
   }
@@ -5080,8 +5177,23 @@ function boot() {
 
   runScan();
   scanTimer = setInterval(() => {
-    if (!state.boardEl || !state.boardEl.isConnected) scheduleScan(0);
-    else if (!state.analysis && !state.thinking) runScan();
+    if (!state.boardEl || !state.boardEl.isConnected) {
+      scheduleScan(0);
+      return;
+    }
+    if (!state.analysis && !state.thinking) {
+      runScan();
+      return;
+    }
+    // Self-heal. Our turn, a fresh analysis, and nothing armed: every other path
+    // that arms a move lives inside a callback that already ran or was skipped.
+    // This tick is the only thing left that can notice, and without it the panel
+    // says "playing" while nothing plays.
+    if (!state.autoPlay || state.thinking || state.autoTimer || moveRetryTimer) return;
+    if (!state.analysis || !state.snapshot) return;
+    if (state.analysis.fen !== state.snapshot.fen) return;
+    if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
+    scheduleAutoMove(state.analysis);
   }, 2000);
 
   registerButler();

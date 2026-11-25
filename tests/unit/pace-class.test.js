@@ -10,7 +10,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '55-pace.js', '60-analysis.js'],
-  `{ computeDelay, classMedianMs, paceSamplesKey }`
+  `{ computeDelay, classMedianMs, paceSamplesKey, paceAnchorFor }`
 );
 
 const cfg = { minThinkMs: 700, maxThinkMs: 1600, pauseOnLowClock: false, clockFloorSeconds: 30 };
@@ -59,6 +59,17 @@ test('the learned sample is stored per account and per class', () => {
   assert.match(bullet, /bullet$/);
   assert.equal(api.paceSamplesKey('other', 'bullet') === bullet, false, 'accounts do not share');
   assert.match(api.paceSamplesKey('x', null), /:any$/, 'no clock yet still resolves to one bucket');
+});
+
+test('the anchor says which evidence it used', () => {
+  const acct = api.paceAnchorFor({ publishedMs: 700, learnedMs: 900, cls: 'bullet' });
+  assert.deepEqual([acct.ms, acct.source, acct.classScoped], [700, 'acct', true], 'published wins');
+  const learned = api.paceAnchorFor({ publishedMs: 0, learnedMs: 900, cls: 'bullet' });
+  assert.deepEqual([learned.ms, learned.source, learned.classScoped], [900, 'learned', false], 'learned still scales');
+  const klass = api.paceAnchorFor({ publishedMs: 0, learnedMs: 0, cls: 'rapid' });
+  assert.deepEqual([klass.ms, klass.source, klass.classScoped], [5500, 'class', true], 'class default, not silence');
+  const none = api.paceAnchorFor({ cls: 'daily' });
+  assert.deepEqual([none.ms, none.source], [null, 'none'], 'nothing to stand on is said out loud');
 });
 
 test('a rapid game with no history is not played at blitz speed', () => {

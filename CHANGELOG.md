@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.18.0 — 2026-11-25
+
+Auto-play could stop mid-game and never say why, and the panel could show no
+pace while the moves were paced. The stalls first.
+
+- **A swallowed click ended the session.** `playMove` paused auto-play the first
+  time chess.com did not register a move. An ad overlay, a promotion dialog that
+  painted late or a board still animating is a *transient*, not a broken board.
+  It now re-arms the same analysis up to three times (0.9 s, 1.8 s, 2.7 s) and
+  stops on the fourth miss with `the board is not taking moves`.
+- **A rejected coordinate returned silently.** When `executeMoveOnBoard` failed,
+  `playMove` returned false with no warning, no retry and `state.analysis` still
+  set, so the 2 s tick skipped the rescan and the position sat there. Every
+  failure path now lands in the retry.
+- **Nothing noticed a dead loop.** The 2 s tick also checks: auto-play on, our
+  turn, a fresh analysis, no auto timer and no retry timer — then arms the move.
+  That is the watchdog for the stall nobody predicted.
+- **A takeover takes two scans.** One scan can see the board mid-paint and accuse
+  you of moving when the script's own click was late; it now confirms the same
+  position twice before pausing. The rule is otherwise unchanged: real clock,
+  certain turn, ply advanced, grid not the one we produced.
+- **The panel names the pace source.** It showed `–` while a fresh profile was
+  paced by its class default, and `learned` even when the learned sample came
+  from another time class. `paceAnchorFor` is now the single answer — acct,
+  learned, class or none — and the row prints it next to the milliseconds.
+- Five tests for `moveRetryPlan`, one for the anchor sources. 132 tests.
+
 ## 1.17.0 — 2026-11-25
 
 Pace, third pass: the learned sample was still class-blind, and the rapid number

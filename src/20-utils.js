@@ -96,6 +96,15 @@ function tabLeaseDecision(entry, now, ttlMs, myId) {
   return entry.id === myId ? 'renew' : 'passive';
 }
 
+// A swallowed click is not a stopped session. Three growing attempts cover the ad
+// overlay, the promotion dialog that painted late and the board that was still
+// animating; after that the click is the problem and saying so is honest.
+function moveRetryPlan(attempt) {
+  const n = Math.max(1, Math.floor(Number(attempt) || 1));
+  if (n > 3) return { retry: false, delayMs: 0 };
+  return { retry: true, delayMs: 900 * n };
+}
+
 // A move landed on our own turn that we did not click: a human took over, or
 // another tab played. A guessed turn never fires this, only a certain one.
 function foreignMoveSeen(opts) {

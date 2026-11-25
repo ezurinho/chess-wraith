@@ -43,6 +43,21 @@ function paceSamplesKey(account, cls) {
   return `${PACE_SAMPLES_KEY}:${account || 'anonymous'}:${cls || 'any'}`;
 }
 
+// Which number the delay is centred on, and where it came from. The source
+// matters as much as the value: the three routes describe very different
+// evidence, and the panel was showing - while the moves were paced by a class
+// default it never mentioned.
+function paceAnchorFor(opts) {
+  const o = opts || {};
+  const published = Number(o.publishedMs) || 0;
+  if (published > 200) return { ms: published, classScoped: true, source: 'acct' };
+  const learned = Number(o.learnedMs) || 0;
+  if (learned > 200) return { ms: learned, classScoped: false, source: 'learned' };
+  const fallback = classMedianMs(o.cls);
+  if (fallback) return { ms: fallback, classScoped: true, source: 'class' };
+  return { ms: null, classScoped: false, source: 'none' };
+}
+
 function parseClockTimes(pgn, side) {
   if (typeof pgn !== 'string' || pgn.indexOf('%clk') < 0) return [];
   const times = [];
