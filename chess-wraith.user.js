@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.13.0
+// @version      1.14.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.13.0';
+const VERSION = '1.14.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -55,6 +55,9 @@ const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 // The six hour timer is what browsers freeze in a background tab; the shortest
 // gap between two opportunistic checks (focus, visibility, reconnect) is this.
 const UPDATE_RECHECK_MS = 5 * 60 * 1000;
+// A rematch the opponent never accepts leaves the same dialog on screen. Twelve
+// seconds is long enough for chess.com to answer, short enough not to idle.
+const REMATCH_RETRY_MS = 12000;
 
 const CONFIG = {
   // Engine
@@ -107,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.13.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.14.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2729,16 +2732,22 @@ const REMATCH_PRIORITY = [
 
 // Pure: given the visible candidates, which one would a person press? Rematch
 // first (same opponent, same clock), then the shortest new game. Disabled
-// candidates are ignored, and the list order is only a tie-breaker.
-function pickRematchButton(candidates) {
+// candidates are ignored, and the list order is only a tie-breaker. `skipTexts`
+// is how a declined rematch moves on to the next button the site offers.
+function pickRematchButton(candidates, skipTexts) {
   if (!Array.isArray(candidates) || candidates.length === 0) return -1;
+  const skip = new Set(
+    (Array.isArray(skipTexts) ? skipTexts : [])
+      .map((text) => String(text || '').trim().toLowerCase().replace(/\s+/g, ' '))
+      .filter(Boolean)
+  );
   const usable = candidates
     .map((item, index) => ({
       index,
       text: String((item && item.text) || '').trim().toLowerCase().replace(/\s+/g, ' '),
       disabled: Boolean(item && item.disabled)
     }))
-    .filter((item) => item.text && !item.disabled);
+    .filter((item) => item.text && !item.disabled && !skip.has(item.text));
   if (usable.length === 0) return -1;
 
   for (const wanted of REMATCH_PRIORITY) {
@@ -2826,13 +2835,13 @@ function visibleButtons() {
 
 // The element to click, or null. Kept separate from pickRematchButton so the
 // decision itself stays testable without a DOM.
-function findRematchButton() {
+function findRematchButton(skipTexts) {
   const nodes = visibleButtons();
   const candidates = nodes.map((el) => ({
     text: (el.textContent || '').trim(),
     disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true'
   }));
-  const index = pickRematchButton(candidates);
+  const index = pickRematchButton(candidates, skipTexts);
   return index >= 0 ? nodes[index] : null;
 }
 
@@ -3800,6 +3809,9 @@ const state = {
   gameOverSeen: false,
   rematchTried: false,
   rematchTimer: null,
+  rematchAttempts: 0,
+  rematchTriedTexts: [],
+  rematchMisses: 0,
   keepAlive: 'off',
   lastMyMoveAt: 0,
   lastDelayMs: 0,
@@ -4128,6 +4140,12 @@ function registerButler() {
     chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate }),
     computeDelay: (opts) => computeDelay(cfg, opts),
     phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
+    // "Why did it not rematch?" answered without reading the source: what the
+    // picker would press right now, and what it would press after a decline.
+    rematchButton: (skip) => {
+      const el = findRematchButton(skip);
+      return el ? (el.textContent || '').trim() : null;
+    },
     scan: () => runScan(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
@@ -4214,6 +4232,45 @@ function syncKeepAlive() {
   return state.keepAlive;
 }
 
+function stopRematch(reason) {
+  state.rematchTried = true;
+  cfg.autoRematch = false;
+  state.warn = reason;
+  saveSettings(cfg);
+  refreshPanel();
+}
+
+// Press one button and, if the dialog is still there later, the next one. A
+// rematch the opponent never accepts otherwise leaves the session parked on a
+// dead dialog with no way back.
+function pressRematch() {
+  const button = findRematchButton(state.rematchTriedTexts);
+  if (!button) {
+    stopRematch('no rematch button; AFK stopped');
+    return;
+  }
+  const text = (button.textContent || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (text) state.rematchTriedTexts.push(text);
+  state.rematchAttempts += 1;
+  button.click();
+  state.warn = '';
+  scheduleScan(900);
+  if (state.rematchAttempts >= 3) {
+    stopRematch('rematch declined; AFK stopped');
+    return;
+  }
+  state.rematchTimer = setTimeout(() => {
+    state.rematchTimer = null;
+    if (!cfg.autoRematch) return;
+    if (!hasGameOverModal() || !state.gameOverSeen) {
+      state.rematchTried = true;
+      return;
+    }
+    pressRematch();
+  }, REMATCH_RETRY_MS);
+  refreshPanel();
+}
+
 // AFK, in the same shape as nitro-wraith: wait like a person, press the button
 // the site offers, and give up out loud instead of pretending to work.
 function queueRematch() {
@@ -4238,31 +4295,33 @@ function queueRematch() {
     state.rematchTimer = null;
     if (!cfg.autoRematch) return;
     if (!hasGameOverModal()) {
+      // The dialog can paint late. Look once more before calling it a miss.
+      state.rematchMisses += 1;
+      if (state.rematchMisses < 3) {
+        state.rematchTimer = setTimeout(() => {
+          state.rematchTimer = null;
+          queueRematch();
+        }, 4000);
+        return;
+      }
       state.rematchTried = true;
       return;
     }
-    const button = findRematchButton();
-    if (!button) {
-      state.rematchTried = true;
-      state.warn = 'no rematch button; AFK stopped';
-      cfg.autoRematch = false;
-      saveSettings(cfg);
-      refreshPanel();
-      return;
-    }
-    button.click();
-    state.rematchTried = true;
-    state.warn = '';
-    scheduleScan(900);
-    refreshPanel();
+    pressRematch();
   }, delay);
   refreshPanel();
 }
 
 function onNewGame() {
+  // A retry armed for the old game must not fire into the new one and mark the
+  // rematch as already tried, which would silently end the session later.
+  clearRematchTimer();
   state.gamesPlayed += 1;
   state.gameOverSeen = false;
   state.rematchTried = false;
+  state.rematchAttempts = 0;
+  state.rematchTriedTexts = [];
+  state.rematchMisses = 0;
   state.myCpLosses = [];
   state.myAcpl = 0;
   state.lossRecordedFen = null;
@@ -4288,6 +4347,9 @@ function toggleAfk(next) {
   if (!cfg.autoRematch) {
     clearRematchTimer();
     state.rematchTried = false;
+    state.rematchAttempts = 0;
+    state.rematchTriedTexts = [];
+    state.rematchMisses = 0;
   }
   if (!cfg.autoRematch && !cfg.afkKeepAlive) cfg.pauseWhenHidden = true;
   syncKeepAlive();

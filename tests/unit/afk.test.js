@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '65-afk.js'],
-  `{ pickRematchButton, nextGameDelay, sessionLimit, REMATCH_PRIORITY }`
+  `{ pickRematchButton, nextGameDelay, sessionLimit, REMATCH_PRIORITY, REMATCH_RETRY_MS }`
 );
 
 test('rematch wins over a new game when both are offered', () => {
@@ -44,6 +44,20 @@ test('unrelated buttons are never chosen', () => {
 test('button text is matched regardless of case and extra spaces', () => {
   const index = api.pickRematchButton([{ text: '  REMATCH  ' }]);
   assert.equal(index, 0);
+});
+
+test('a declined rematch moves on to the next button the site offers', () => {
+  const candidates = [{ text: 'Rematch' }, { text: 'Game Review' }, { text: 'New 5 min' }];
+  assert.equal(api.pickRematchButton(candidates), 0, 'the first attempt is the rematch');
+  assert.equal(api.pickRematchButton(candidates, ['rematch']), 2, 'the second is a new game');
+  assert.equal(api.pickRematchButton(candidates, ['  REMATCH ']), 2, 'the skip is normalised');
+  assert.equal(api.pickRematchButton(candidates, ['rematch', 'new 5 min']), -1, 'nothing left to press');
+  assert.equal(api.pickRematchButton(candidates, null), 0, 'no skip list keeps the old behaviour');
+});
+
+test('the retry pause gives the opponent time to answer without idling', () => {
+  assert.ok(api.REMATCH_RETRY_MS >= 5000, 'not so short that a human answer is missed');
+  assert.ok(api.REMATCH_RETRY_MS <= 30000, 'not so long that an empty session sits there');
 });
 
 test('the next-game delay stays inside the configured windows', () => {

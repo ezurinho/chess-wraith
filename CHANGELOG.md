@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.14.0 — 2026-11-25
+
+AFK: the one path that parked a session on a dialog nobody was going to press.
+
+- **A declined rematch used to end the session silently.** After the click the
+  script marked the rematch as tried and never looked again, so when the
+  opponent had left, chess.com kept its `Rematch` button on screen forever and
+  auto-play sat there. Now, twelve seconds later, it takes the next button the
+  dialog offers — `New 5 min` and friends — skipping the one already pressed, up
+  to three attempts before it stops out loud (`rematch declined; AFK stopped`).
+- **A late dialog is not a miss.** When the game-over modal is not painted at
+  the moment the delay expires, it looks three times, four seconds apart, before
+  calling it a miss.
+- **A stale retry can no longer kill the next game**: `onNewGame` clears the
+  armed timer, which otherwise fired mid-game, set `rematchTried` and left the
+  following game over without a rematch.
+- The debug API gains `rematchButton(skip)`, which is how the picker was
+  verified against a synthetic game-over dialog.
+- Two tests for the skip list and the retry window. 117 tests.
+
 ## 1.13.0 — 2026-11-25
 
 A real engine bug, found while proving the 1.12.0 timings against a bare FEN.

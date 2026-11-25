@@ -16,16 +16,22 @@ const REMATCH_PRIORITY = [
 
 // Pure: given the visible candidates, which one would a person press? Rematch
 // first (same opponent, same clock), then the shortest new game. Disabled
-// candidates are ignored, and the list order is only a tie-breaker.
-function pickRematchButton(candidates) {
+// candidates are ignored, and the list order is only a tie-breaker. `skipTexts`
+// is how a declined rematch moves on to the next button the site offers.
+function pickRematchButton(candidates, skipTexts) {
   if (!Array.isArray(candidates) || candidates.length === 0) return -1;
+  const skip = new Set(
+    (Array.isArray(skipTexts) ? skipTexts : [])
+      .map((text) => String(text || '').trim().toLowerCase().replace(/\s+/g, ' '))
+      .filter(Boolean)
+  );
   const usable = candidates
     .map((item, index) => ({
       index,
       text: String((item && item.text) || '').trim().toLowerCase().replace(/\s+/g, ' '),
       disabled: Boolean(item && item.disabled)
     }))
-    .filter((item) => item.text && !item.disabled);
+    .filter((item) => item.text && !item.disabled && !skip.has(item.text));
   if (usable.length === 0) return -1;
 
   for (const wanted of REMATCH_PRIORITY) {
@@ -113,13 +119,13 @@ function visibleButtons() {
 
 // The element to click, or null. Kept separate from pickRematchButton so the
 // decision itself stays testable without a DOM.
-function findRematchButton() {
+function findRematchButton(skipTexts) {
   const nodes = visibleButtons();
   const candidates = nodes.map((el) => ({
     text: (el.textContent || '').trim(),
     disabled: Boolean(el.disabled) || el.getAttribute('aria-disabled') === 'true'
   }));
-  const index = pickRematchButton(candidates);
+  const index = pickRematchButton(candidates, skipTexts);
   return index >= 0 ? nodes[index] : null;
 }
 
