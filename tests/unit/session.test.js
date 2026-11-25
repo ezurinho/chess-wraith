@@ -137,7 +137,7 @@ function boot(html = PAGE) {
     console, Math, Date, JSON, Promise
   });
   const source = FRAGMENTS.map(read).join('\n');
-  vm.runInContext(`${source}\n;globalThis.__cw = { state, cfg, engine, panel, scanBoard, isGameOverDom };`, context, {
+  vm.runInContext(`${source}\n;globalThis.__cw = { state, cfg, engine, panel, scanBoard, isGameOverDom, adoptAccountSettings };`, context, {
     filename: 'chess-wraith-boot.js'
   });
   const api = vm.runInContext('globalThis.__cw', context);
@@ -189,7 +189,9 @@ test('a finished game with AFK on presses the button a person would press', asyn
     button.addEventListener('click', () => pressed.push(button.textContent));
     assert.equal(api.isGameOverDom(), true, 'the dialog is found');
     assert.equal(api.scanBoard('w').gameOver, true, 'the scan sees a finished game');
-    const ok = await until(() => pressed.length > 0);
+    // The human delay is 1.7–4.2 s and the scan runs every 2 s; the budget has
+    // to cover the worst case, not the average one.
+    const ok = await until(() => pressed.length > 0, 15000);
     assert.ok(ok, `no rematch; afk=${api.cfg.autoRematch} warn=${api.state.warn} seen=${api.state.gameOverSeen} tried=${api.state.rematchTried}` +
       ` scanning=${Boolean(api.state.analysis)} thinking=${api.state.thinking} lastScanAt=${api.state.lastScanAt} modal=${window.document.querySelectorAll('.game-over-modal-content').length}`);
     assert.deepEqual(pressed, ['Rematch'], 'the first choice, not a random button');
@@ -198,6 +200,21 @@ test('a finished game with AFK on presses the button a person would press', asyn
     const last = api.state.events[api.state.events.length - 1];
     assert.match(last.text, /rematch/i, 'the press landed in the history');
     assert.ok(api.state.events.length <= 5, 'and the history stays short');
+  } finally {
+    stop();
+  }
+});
+
+test('the history is per account, so a second login does not inherit the night', async () => {
+  const { window, api, stop } = boot();
+  try {
+    window.localStorage.setItem('chess-wraith-history-v1:other', JSON.stringify([
+      { at: Date.now(), text: 'session limit: 3h' }
+    ]));
+    api.adoptAccountSettings('other');
+    assert.equal(api.state.events.length, 1, 'the stored line came back');
+    assert.equal(api.state.events[0].text, 'session limit: 3h');
+    assert.equal(api.state.settingsAccount, 'other');
   } finally {
     stop();
   }

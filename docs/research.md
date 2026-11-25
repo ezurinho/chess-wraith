@@ -116,6 +116,21 @@ the rest live in the tooltip. Repeats are collapsed, because a retry loop can
 fire the same reason every four seconds and would otherwise erase its own
 history.
 
+## The night outlives the tab
+
+An in-memory history has a hole a user would find in a week: the update
+checker itself reloads nothing, but a Tampermonkey update, a laptop waking from
+sleep with a discarded tab, or a `chess.com` navigation all start the script
+again — and the log with it. The five entries are therefore written per account
+under `chess-wraith-history-v1:<user>`, cleared when the list is empty, and
+capped on read as well as on write: storage is shared with everything else on
+the origin, and a hand-edited value must not paint 200 lines into a 322 px
+panel.
+
+Dates matter once the list survives midnight. A line from 23:40 shown as
+`23:40` next to a line from 00:10 reads as "twenty minutes ago" when it is a
+day older, so anything not from today carries `DD/MM`.
+
 ## The engine floor is a wall, not an opinion
 
 Stockfish's option table is explicit (`src/search.h`, current master):

@@ -210,6 +210,21 @@ function eventClock(at) {
   return `${hh}:${mm}`;
 }
 
+// A persisted history outlives midnight, so today's line reads `14:03` and an
+// older one keeps its date: an AFK night is exactly when that distinction
+// matters.
+function eventLabel(at, now) {
+  const when = new Date(Number(at) || 0);
+  const today = new Date(Number(now) || 0);
+  const sameDay = when.getFullYear() === today.getFullYear() &&
+    when.getMonth() === today.getMonth() &&
+    when.getDate() === today.getDate();
+  if (sameDay) return eventClock(at);
+  const dd = String(when.getDate()).padStart(2, '0');
+  const mm = String(when.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm} ${eventClock(at)}`;
+}
+
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
   const base = movetime * 6 + 6000;

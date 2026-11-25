@@ -11,6 +11,7 @@ const RATING_RETRY_MS = 15 * 60 * 1000;
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
+const HISTORY_KEY = 'chess-wraith-history-v1';
 const TAB_TTL_MS = 9000;
 const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // A move landing while a hand is on the board is the one case where the script
@@ -29,6 +30,8 @@ function adoptAccountSettings(user) {
   state.settingsAccount = name;
   // A name learned late also unlocks the published pace.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
+  // The history is per account too: another login must not inherit the night.
+  state.events = readHistory();
   refreshPanel();
   return true;
 }
@@ -39,6 +42,34 @@ function paceKey() {
 
 function ratingKey() {
   return `${RATING_KEY}:${currentAccount()}`;
+}
+
+function historyKey() {
+  return `${HISTORY_KEY}:${state.settingsAccount || currentAccount()}`;
+}
+
+function readHistory() {
+  try {
+    const raw = localStorage.getItem(historyKey());
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item.text === 'string' && item.text.trim())
+      .slice(-5)
+      .map((item) => ({ at: Number(item.at) || 0, text: item.text.slice(0, 120) }));
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveHistory() {
+  try {
+    if (!state.events.length) localStorage.removeItem(historyKey());
+    else localStorage.setItem(historyKey(), JSON.stringify(state.events.slice(-5)));
+  } catch (error) {
+    /* storage full or blocked: the panel still shows this session */
+  }
 }
 
 function guardKey() {
@@ -85,7 +116,7 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
-  events: [],
+  events: readHistory(),
   // Which account the loaded settings belong to; see adoptAccountSettings().
   settingsAccount: '',
   paceProfile: null,
@@ -720,6 +751,7 @@ function noteEvent(text) {
   const next = pushEvent(state.events, text, Date.now());
   if (next.length === state.events.length && state.events.length > 0) return;
   state.events = next;
+  saveHistory();
   refreshPanel();
 }
 
@@ -1287,7 +1319,7 @@ function reportText() {
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
     state.events.length
-      ? `history ${state.events.map((item) => `${eventClock(item.at)} ${item.text}`).join(' | ')}`
+      ? `history ${state.events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join(' | ')}`
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,

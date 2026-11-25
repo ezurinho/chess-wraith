@@ -636,12 +636,12 @@ class WraithPanel {
     this.el.warn.textContent = v.warn || '';
     const events = Array.isArray(v.events) ? v.events.slice(-2) : [];
     this.el.history.hidden = events.length === 0;
-    this.el.history.title = events.map((item) => `${eventClock(item.at)} ${item.text}`).join('\n');
+    this.el.history.title = events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join('\n');
     this.el.history.textContent = '';
     for (const item of events) {
       const line = document.createElement('span');
       const when = document.createElement('b');
-      when.textContent = eventClock(item.at);
+      when.textContent = eventLabel(item.at, Date.now());
       line.appendChild(when);
       line.appendChild(document.createTextNode(item.text));
       this.el.history.appendChild(line);

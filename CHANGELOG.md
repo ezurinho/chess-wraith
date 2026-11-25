@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.27.0 — 2026-11-25
+
+The night outlives the tab.
+
+- The panel history from 1.26.0 lived in memory only. A Tampermonkey update, a
+  discarded tab or a chess.com navigation started the script again and wiped
+  the only record of why it stopped — which is the exact moment you want it.
+- The five entries are now written per account
+  (`chess-wraith-history-v1:<user>`), restored on boot and when a late account
+  name is adopted, and cleared once the list is empty.
+- Read back through a filter and a cap: a hand-edited storage value cannot
+  paint two hundred lines into a 322 px panel.
+- Lines from another day carry `DD/MM` (`24/11 23:40`); today's keep `HH:MM`,
+  so a night that crosses midnight is not misread as twenty minutes.
+- 148 tests: the date label, the per-account restore, and the epoch line.
+
 ## 1.26.0 — 2026-11-25
 
 A tab you left alone can say what happened.

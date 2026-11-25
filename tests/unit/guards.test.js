@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadFragments } = require('./helpers');
 
-const utils = loadFragments(['10-config.js', '20-utils.js'], `{ tabLeaseDecision, foreignMoveSeen, pushEvent, eventClock }`);
+const utils = loadFragments(['10-config.js', '20-utils.js'], `{ tabLeaseDecision, foreignMoveSeen, pushEvent, eventClock, eventLabel }`);
 const analysis = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
   `{ acplBand, acplGuard }`
@@ -32,6 +32,15 @@ test('the history clock is 24-hour HH:MM', () => {
   const at = new Date(2026, 10, 25, 7, 4).getTime();
   assert.equal(utils.eventClock(at), '07:04');
   assert.equal(utils.eventClock(0).length, 5);
+});
+
+test('an old history line keeps its date', () => {
+  const today = new Date(2026, 10, 25, 9, 30).getTime();
+  const earlier = new Date(2026, 10, 25, 1, 12).getTime();
+  const yesterday = new Date(2026, 10, 24, 23, 40).getTime();
+  assert.equal(utils.eventLabel(earlier, today), '01:12', 'same day: just the time');
+  assert.equal(utils.eventLabel(yesterday, today), '24/11 23:40', 'another day: dated');
+  assert.match(utils.eventLabel(0, today), /^\d\d\/\d\d \d\d:\d\d$/, 'epoch is dated, whatever the timezone');
 });
 
 test('an empty lease is claimed', () => {
