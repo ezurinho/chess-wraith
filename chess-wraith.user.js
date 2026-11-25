@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.4.0
+// @version      1.4.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.4.0';
+const VERSION = '1.4.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 const CONFIG = {
@@ -102,7 +102,7 @@ const STYLES = {
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.4.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3247,7 +3247,13 @@ class WraithPanel {
     this.el.clock.textContent = Number.isFinite(v.clock) ? `${Math.round(v.clock)}s` : '—';
     this.el.fill.style.setProperty('--fill', String(clamp((v.ply || 0) / 80, 0, 1)));
     this.el.warn.textContent = v.warn || '';
-    this.el.foot.textContent = v.status === 'thinking' ? 'thinking' : autoOn ? 'auto play armed' : 'idle';
+    this.el.foot.textContent = v.passiveTab
+      ? 'second tab · passive'
+      : v.status === 'thinking'
+        ? 'thinking'
+        : autoOn
+          ? 'auto play armed'
+          : 'idle';
     this.el.build.textContent = v.version || VERSION;
     this.el.kaInfo.textContent = v.keepAlive || 'off';
 
@@ -4026,7 +4032,9 @@ const panel = new WraithPanel(cfg, {
 });
 
 engine.onReady = (mode) => {
-  state.warn = '';
+  // A guard message is the reason the panel exists in that moment; the engine
+  // coming up must not wipe the reason auto-play is off.
+  if (!state.passiveTab && !/^(paused|another tab)/.test(state.warn)) state.warn = '';
   panel.render({ ...statusView(), engine: mode });
 };
 

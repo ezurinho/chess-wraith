@@ -758,7 +758,9 @@ const panel = new WraithPanel(cfg, {
 });
 
 engine.onReady = (mode) => {
-  state.warn = '';
+  // A guard message is the reason the panel exists in that moment; the engine
+  // coming up must not wipe the reason auto-play is off.
+  if (!state.passiveTab && !/^(paused|another tab)/.test(state.warn)) state.warn = '';
   panel.render({ ...statusView(), engine: mode });
 };
 

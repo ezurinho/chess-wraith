@@ -606,7 +606,13 @@ class WraithPanel {
     this.el.clock.textContent = Number.isFinite(v.clock) ? `${Math.round(v.clock)}s` : '—';
     this.el.fill.style.setProperty('--fill', String(clamp((v.ply || 0) / 80, 0, 1)));
     this.el.warn.textContent = v.warn || '';
-    this.el.foot.textContent = v.status === 'thinking' ? 'thinking' : autoOn ? 'auto play armed' : 'idle';
+    this.el.foot.textContent = v.passiveTab
+      ? 'second tab · passive'
+      : v.status === 'thinking'
+        ? 'thinking'
+        : autoOn
+          ? 'auto play armed'
+          : 'idle';
     this.el.build.textContent = v.version || VERSION;
     this.el.kaInfo.textContent = v.keepAlive || 'off';
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.1 — 2026-11-25
+
+The engine reporting `readyok` cleared every warning, including the two that
+explain why auto-play just turned itself off.
+
+- The guard messages (`paused: …`, `another tab is playing`) survive the engine
+  boot; a normal warning still clears.
+- The footer says `second tab · passive` while the lease belongs to another tab.
+- 72 tests, unchanged: the fix is in the wiring, not in the pure helpers.
+
 ## 1.4.0 — 2026-11-25
 
 Three ways a bot gets caught that have nothing to do with move quality: it plays
