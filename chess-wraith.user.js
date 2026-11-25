@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.5.4
+// @version      1.6.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.5.4';
+const VERSION = '1.6.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -55,7 +55,7 @@ const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 const CONFIG = {
   // Engine
-  targetElo: 1650,
+  targetElo: 0, // 0 = follow the signed-in account's own rating
   maxDepth: 14,
   moveTimeMs: 700,
   multiPv: 4,
@@ -101,11 +101,10 @@ const CONFIG = {
 // "full engine" switch. The engine is capped to a rating a human at this table
 // could plausibly hold, and nothing here ever asks it to play its raw best.
 const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
-const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.4/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -243,13 +242,53 @@ function pickEnum(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
 
+// chess.com publishes one rating per time class. Which one the board is asking
+// for is decided by the clock, not by a setting, so the same account plays at
+// 1800 in blitz and 1600 in bullet instead of a single invented number.
+const RATING_CLASSES = { bullet: 'chess_bullet', blitz: 'chess_blitz', rapid: 'chess_rapid', daily: 'chess_daily' };
+
+function timeClassFromSeconds(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return 'blitz';
+  if (s < 180) return 'bullet';
+  if (s < 600) return 'blitz';
+  if (s < 1800) return 'rapid';
+  return 'daily';
+}
+
+// Keeps only the classes the account actually has, as a flat map.
+function normalizeRatings(stats) {
+  const out = {};
+  for (const [cls, key] of Object.entries(RATING_CLASSES)) {
+    const node = stats && stats[key];
+    const rating = node && node.last && Number(node.last.rating);
+    if (Number.isFinite(rating) && rating > 0) out[cls] = Math.round(rating);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function pickRating(ratings, timeClass) {
+  if (!ratings) return null;
+  return ratings[timeClass] || ratings.blitz || ratings.rapid || ratings.bullet || ratings.daily || null;
+}
+
+// Set when the stored settings were rewritten in memory and should be flushed.
+let settingsNeedsSave = false;
+
 function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     const merged = { ...CONFIG, ...raw };
-    merged.style = pickEnum(merged.style, Object.keys(STYLES), CONFIG.style);
+    // 1650 was this script's own default, not a choice. The first load after
+    // 1.6.0 treats it as "no opinion" and lets the account's rating take over.
+    if (!raw.anchorMigrated) {
+      if (raw.targetElo === undefined || raw.targetElo === 1650) merged.targetElo = 0;
+      settingsNeedsSave = true;
+    }
+    merged.anchorMigrated = true;
     merged.sideOverride = pickEnum(merged.sideOverride, ['auto', 'w', 'b'], 'auto');
-    merged.targetElo = clampInt(merged.targetElo, 1320, 3190, CONFIG.targetElo);
+    // 0 means "the account's own rating"; anything else is a manual ceiling.
+    merged.targetElo = clampInt(merged.targetElo, 0, 3190, CONFIG.targetElo);
     merged.maxDepth = clampInt(merged.maxDepth, 4, 20, CONFIG.maxDepth);
     merged.moveTimeMs = clampInt(merged.moveTimeMs, 150, 5000, CONFIG.moveTimeMs);
     merged.multiPv = clampInt(merged.multiPv, 1, 5, CONFIG.multiPv);
@@ -2192,9 +2231,19 @@ function sideScore(line) {
 // Stockfish's Skill Level is 0..20 and roughly one step per ~90 Elo at the
 // bottom of the scale, flattening at the top. This is the only strength dial
 // the bundled 2019 build honours, so the styles go through it.
+// The rating this account is allowed to play at. The account's own published
+// rating is the anchor: a 1400 account that suddenly scores like a 2000 is the
+// pattern every fair-play system looks for first, so the ceiling is its own
+// level plus a hair, and the floor is its own level minus a bad day.
 function effectiveElo(cfg, opts = {}) {
-  const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : clampInt(cfg.targetElo, 1320, 3190, 1650);
-  return Math.round(clamp(base + 130, 1320, 2600));
+  const account = Number(opts.accountElo) > 0 ? Number(opts.accountElo) : null;
+  const manual = Number(cfg.targetElo) > 0 ? Number(cfg.targetElo) : null;
+  const base = clampInt(account || manual || 1500, 1320, 3190, 1500);
+  const opp = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : null;
+  const anchored = opp ? opp + 130 : base;
+  const hi = Math.min(base + 25, 3190);
+  const lo = Math.min(base - 75, hi);
+  return Math.round(clamp(Math.min(anchored, hi), lo, hi));
 }
 
 // How many centipawns a human at this rating actually loses per move. Rough
@@ -2327,9 +2376,19 @@ function computeDelay(cfg, opts = {}) {
   const tempo = Number.isFinite(opts.oppTempoMs) && opts.oppTempoMs > 300 ? opts.oppTempoMs : null;
   if (tempo) ms = Math.max(ms, Math.min(tempo * 0.35, 3200));
 
-  if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
+  if (opts.legalMoveCount === 1) ms *= 0.45;
+  else if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
   if (opts.isCheck) ms *= 1.12;
   if (opts.isCapture) ms *= 0.92;
+
+  // Time control sets the scale. A 1-minute game is not played with the same
+  // deliberation as a 15+10, and a fixed window is the tell that says so.
+  const budget = Number(opts.budgetSeconds);
+  if (Number.isFinite(budget) && budget > 0) {
+    if (budget < 120) ms *= 0.5;
+    else if (budget < 300) ms *= 0.78;
+    else if (budget >= 600) ms *= 1.15;
+  }
 
   // Rare second thought, outside the normal window. The pattern-breaker a
   // bounded uniform delay does not have.
@@ -2980,7 +3039,7 @@ const PANEL_HTML = `
         <div class="view-head"><span>Tune</span><b>legit · engine · panel</b></div>
         <div class="card">
           <div class="card-h"><span class="card-t">Engine</span><span class="card-s">local, no server</span></div>
-          <div class="set"><span class="set-lbl">Target Elo<i>drives Skill Level</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="1320" max="3190" step="10"></span></div>
+          <div class="set"><span class="set-lbl">Target Elo<i>0 = your own rating</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="0" max="3190" step="10"></span></div>
           <div class="set"><span class="set-lbl">Depth</span><span class="set-val"><input class="num" type="number" data-el="depthInput" min="4" max="20" step="1"></span></div>
           <div class="set"><span class="set-lbl">Search ms</span><span class="set-val"><input class="num" type="number" data-el="movetime" min="150" max="5000" step="50"></span></div>
           <div class="set"><span class="set-lbl">Slack cp<i>how far from best it may drift</i></span><span class="set-val"><input class="num" type="number" data-el="slack" min="0" max="300" step="5"></span></div>
@@ -3268,9 +3327,19 @@ class WraithPanel {
     this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
     this.el.sessionLen.textContent = clockText(v.sessionMs);
     this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
-    this.el.rating.textContent = v.opponent ? String(v.opponent) : '–';
+    this.el.rating.textContent = v.accountRating
+      ? `${v.accountRating} ${v.ratingClass || ''}`.trim()
+      : v.ratingError
+        ? 'offline'
+        : 'anonymous';
+    this.el.rating.title = v.ratingAt
+      ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
+      : 'the public rating of the signed-in account';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? String(v.elo) : 'full';
+    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? ' · acct' : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+    this.el.target.title = v.eloSource === 'account'
+      ? 'anchored to your own published rating'
+      : 'anchored to the manual Target Elo';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);
@@ -3337,6 +3406,11 @@ class WraithPanel {
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
 const PACE_KEY = 'chess-wraith-pace-v1';
+// The account's published rating and the slack it has earned so far are part of
+// the same per-account fingerprint as its pace and its openings.
+const RATING_KEY = 'chess-wraith-rating-v1';
+const GUARD_KEY = 'chess-wraith-guard-v1';
+const RATING_TTL_MS = 6 * 60 * 60 * 1000;
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -3362,7 +3436,16 @@ function paceKey() {
   return `${PACE_KEY}:${currentAccount()}`;
 }
 
+function ratingKey() {
+  return `${RATING_KEY}:${currentAccount()}`;
+}
+
+function guardKey() {
+  return `${GUARD_KEY}:${currentAccount()}`;
+}
+
 const cfg = loadSettings();
+if (settingsNeedsSave) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
 
@@ -3398,6 +3481,13 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  // Learned from this account's games, then carried across reloads.
+  accountRatings: null,
+  ratingAt: 0,
+  ratingError: '',
+  ratingClass: 'blitz',
+  eloSource: 'target',
+  clockPeak: 0,
   passiveTab: false,
   autoMovedGrid: null,
   updateLatest: '',
@@ -3425,10 +3515,81 @@ function plyOf(snap) {
   return 16;
 }
 
+function accountRatingNow() {
+  state.ratingClass = timeClassFromSeconds(state.clockPeak || state.clockSeconds);
+  return pickRating(state.accountRatings, state.ratingClass);
+}
+
 function resolveElo() {
-  const elo = effectiveElo(cfg, { oppElo: state.oppEloEstimate || state.opponentRating });
+  const account = accountRatingNow();
+  const elo = effectiveElo(cfg, {
+    accountElo: account,
+    oppElo: state.oppEloEstimate || state.opponentRating
+  });
   state.effectiveElo = elo;
+  state.eloSource = account ? 'account' : Number(cfg.targetElo) > 0 ? 'target' : 'default';
   return elo;
+}
+
+// The public ratings endpoint is static data about a public profile; nothing
+// about the game leaves the tab. Cached for six hours, per account.
+async function syncAccountRatings() {
+  const user = currentAccount();
+  try {
+    const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
+    if (cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS) {
+      state.accountRatings = cached.ratings;
+      state.ratingAt = Number(cached.at) || 0;
+      resolveElo();
+      refreshPanel();
+      return state.accountRatings;
+    }
+  } catch {
+    /* a broken cache is just a cache miss */
+  }
+  if (user === 'anonymous') return null;
+  try {
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined;
+    const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/stats`, {
+      cache: 'no-store',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal
+    });
+    if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+    const ratings = normalizeRatings(await response.json());
+    if (!ratings) throw new Error('no ratings');
+    state.accountRatings = ratings;
+    state.ratingAt = Date.now();
+    state.ratingError = '';
+    try {
+      localStorage.setItem(ratingKey(), JSON.stringify({ at: state.ratingAt, ratings }));
+    } catch {
+      /* private mode: the session keeps the value */
+    }
+  } catch (error) {
+    state.ratingError = String((error && error.message) || error).slice(0, 40);
+  }
+  resolveElo();
+  refreshPanel();
+  return state.accountRatings;
+}
+
+function readGuard() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(guardKey()) || '{}');
+    return clampInt(raw.boost, 0, 160, 0);
+  } catch {
+    return 0;
+  }
+}
+
+function saveGuard() {
+  try {
+    localStorage.setItem(guardKey(), JSON.stringify({ boost: state.slackBoost, at: Date.now() }));
+  } catch {
+    /* storage can be blocked; the guard still works in this tab */
+  }
 }
 
 // --- opening variety -------------------------------------------------------
@@ -3703,6 +3864,11 @@ function statusView() {
     estimate: state.oppEloEstimate,
     acpl: state.myAcpl,
     elo: state.effectiveElo,
+    eloSource: state.eloSource,
+    accountRating: accountRatingNow(),
+    ratingClass: state.ratingClass,
+    ratingAt: state.ratingAt,
+    ratingError: state.ratingError,
     ply: snap ? plyOf(snap) : 0,
     styleLabel: LEGIT.label,
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
@@ -3868,7 +4034,8 @@ function scheduleAutoMove(result) {
     allowRethink: true,
     clockSeconds: state.clockSeconds,
     oppTempoMs: median(state.tempoSamples),
-    baselineMs: paceBaseline()
+    baselineMs: paceBaseline(),
+    budgetSeconds: state.clockPeak
   });
 
   const targetFen = result.fen;
@@ -3909,7 +4076,10 @@ function applyAcplGuard() {
     elo: state.effectiveElo || cfg.targetElo,
     boost: state.slackBoost
   });
-  if (verdict.verdict === 'raise' || verdict.verdict === 'lower') state.slackBoost = verdict.boost;
+  if (verdict.verdict === 'raise' || verdict.verdict === 'lower') {
+    state.slackBoost = verdict.boost;
+    saveGuard();
+  }
 }
 
 async function playMove(move, targetFen, choice) {
@@ -4014,6 +4184,7 @@ function runScan() {
   }
 
   state.clockSeconds = scanned.clockSeconds;
+  if (Number(scanned.clockSeconds) > state.clockPeak) state.clockPeak = Number(scanned.clockSeconds);
   state.opponentRating = scanned.opponentRating;
 
   const prev = state.snapshot;
@@ -4211,9 +4382,13 @@ function releaseTab() {
 
 function boot() {
   panel.mount();
+  // The guard this account already earned, and its published rating: both are
+  // what makes the script behave like this player and not like a generic bot.
+  state.slackBoost = readGuard();
   heartbeatTab();
   setInterval(heartbeatTab, 3000);
   startUpdateCheck();
+  syncAccountRatings();
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();

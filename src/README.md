@@ -5,7 +5,7 @@ One IIFE, eleven fragments, concatenated in this order by `tools/build.js`.
 | Fragment | Owns | Does not |
 | --- | --- | --- |
 | `00-header.js` | Userscript metadata and the quick-config note. | Implement anything. |
-| `10-config.js` | `VERSION`, `CONFIG`, `STYLES`, the pinned engine mirror. | Read the DOM. |
+| `10-config.js` | `VERSION`, `CONFIG`, `LEGIT`, the pinned engine mirror. | Read the DOM. |
 | `20-utils.js` | clamp/sleep/random, settings persistence, Elo→skill, NNUE cache, search budget. | Touch the page. |
 | `30-chess.js` | Rules, move generation, FEN, SAN, UCI parsing, `ChessStateTracker`, `inferMidgameState`. | Know about chess.com markup. |
 | `35-chess-glue.js` | Exposes the rules engine as `globalThis.ChessBenchLogic`. | Hold state. |

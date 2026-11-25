@@ -128,13 +128,53 @@ function pickEnum(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
 }
 
+// chess.com publishes one rating per time class. Which one the board is asking
+// for is decided by the clock, not by a setting, so the same account plays at
+// 1800 in blitz and 1600 in bullet instead of a single invented number.
+const RATING_CLASSES = { bullet: 'chess_bullet', blitz: 'chess_blitz', rapid: 'chess_rapid', daily: 'chess_daily' };
+
+function timeClassFromSeconds(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s <= 0) return 'blitz';
+  if (s < 180) return 'bullet';
+  if (s < 600) return 'blitz';
+  if (s < 1800) return 'rapid';
+  return 'daily';
+}
+
+// Keeps only the classes the account actually has, as a flat map.
+function normalizeRatings(stats) {
+  const out = {};
+  for (const [cls, key] of Object.entries(RATING_CLASSES)) {
+    const node = stats && stats[key];
+    const rating = node && node.last && Number(node.last.rating);
+    if (Number.isFinite(rating) && rating > 0) out[cls] = Math.round(rating);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function pickRating(ratings, timeClass) {
+  if (!ratings) return null;
+  return ratings[timeClass] || ratings.blitz || ratings.rapid || ratings.bullet || ratings.daily || null;
+}
+
+// Set when the stored settings were rewritten in memory and should be flushed.
+let settingsNeedsSave = false;
+
 function loadSettings() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
     const merged = { ...CONFIG, ...raw };
-    merged.style = pickEnum(merged.style, Object.keys(STYLES), CONFIG.style);
+    // 1650 was this script's own default, not a choice. The first load after
+    // 1.6.0 treats it as "no opinion" and lets the account's rating take over.
+    if (!raw.anchorMigrated) {
+      if (raw.targetElo === undefined || raw.targetElo === 1650) merged.targetElo = 0;
+      settingsNeedsSave = true;
+    }
+    merged.anchorMigrated = true;
     merged.sideOverride = pickEnum(merged.sideOverride, ['auto', 'w', 'b'], 'auto');
-    merged.targetElo = clampInt(merged.targetElo, 1320, 3190, CONFIG.targetElo);
+    // 0 means "the account's own rating"; anything else is a manual ceiling.
+    merged.targetElo = clampInt(merged.targetElo, 0, 3190, CONFIG.targetElo);
     merged.maxDepth = clampInt(merged.maxDepth, 4, 20, CONFIG.maxDepth);
     merged.moveTimeMs = clampInt(merged.moveTimeMs, 150, 5000, CONFIG.moveTimeMs);
     merged.multiPv = clampInt(merged.multiPv, 1, 5, CONFIG.multiPv);

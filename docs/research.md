@@ -51,6 +51,44 @@ paces against the opponent, and it stops when the turn cannot be read instead of
 guessing. What it cannot do is make its own input plausible to a check that asks
 the browser for provenance.
 
+## 2b. The account is the anchor, and the clock picks the class
+
+Chess.com publishes one rating per time class, and the endpoint is readable from
+a chess.com tab: on 2026-11-25 an injected script on `www.chess.com` fetched
+`https://api.chess.com/pub/player/hikaru/stats`, got HTTP 200 with
+`type: "cors"`, and read `chess_blitz.last.rating = 3450`
+([Published-Data API](https://www.chess.com/news/view/published-data-api)).
+The response does not carry an `Access-Control-Allow-Origin` header visible to
+JS, which is normal: CORS response headers are not on the safelisted list, so
+`headers.get` returns `null` while the request still passes.
+
+Which class applies is decided by the clock on the board, not by a setting: the
+peak clock seen in the game maps to bullet (below 3 minutes), blitz (below 10),
+rapid (below 30) and daily. That is why the same account can be anchored at 1650
+in rapid and 1500 in bullet. The anchor is the account's own number, and
+`effectiveElo` lets the engine drift at most 75 below and 25 above it; a
+published 1400 can no longer be told to play like a 2000 by a knob, and an
+account with no readable rating falls back to the manual target and then to 1500.
+
+Why anchor at all: chess.com says its system weighs "over 100 gameplay factors"
+and closes about 85% of cases automatically
+([chess.com/cheating](https://www.chess.com/cheating), June 2025), and the one
+comparison such a system always has is the account's own history. A player who
+suddenly scores two rating bands above their published level is the least
+defensible pattern there is.
+
+Timing follows the same logic. The largest public study of human think time - 519
+million moves from 12.49 million Lichess games - shows time spent tracks the
+value of computation in the position: people think longer where the position is
+sharp and shorter where there is only one move
+([Russek et al. 2025](https://cocosci.princeton.edu/papers/RussekThinking2025.pdf)).
+A model trained on human games allocates more time in the early middle game
+(plies 2-30) than an engine does
+([Rheude et al. 2021](https://ml-research.github.io/papers/rheude2021time.pdf)).
+So the delay here moves with the gap between the top two lines, checks, captures,
+the phase, the time control and the account's own learned median, and a forced
+move is played almost at once. A fixed window is the part that looks like a clock.
+
 ## 3. How this compares with nitro-wraith
 
 | | `nitro-wraith` | `chess-wraith` |
@@ -58,9 +96,9 @@ the browser for provenance.
 | Delivery | Tampermonkey userscript | same |
 | Heavy lifting | none (typing) | Stockfish 19 NNUE in a blob worker |
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
-| Account model | per-account pace ceiling from the account's own top speed | per-account opening memory + learned think-time band |
+| Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 96 files | 78 tests in 10 files |
+| Tests | 96 files | 82 tests in 11 files |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

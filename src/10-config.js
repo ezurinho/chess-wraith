@@ -1,4 +1,4 @@
-const VERSION = '1.5.4';
+const VERSION = '1.6.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -12,7 +12,7 @@ const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 const CONFIG = {
   // Engine
-  targetElo: 1650,
+  targetElo: 0, // 0 = follow the signed-in account's own rating
   maxDepth: 14,
   moveTimeMs: 700,
   multiPv: 4,
@@ -58,11 +58,10 @@ const CONFIG = {
 // "full engine" switch. The engine is capped to a rating a human at this table
 // could plausibly hold, and nothing here ever asks it to play its raw best.
 const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
-const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.4/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

@@ -14,9 +14,19 @@ function sideScore(line) {
 // Stockfish's Skill Level is 0..20 and roughly one step per ~90 Elo at the
 // bottom of the scale, flattening at the top. This is the only strength dial
 // the bundled 2019 build honours, so the styles go through it.
+// The rating this account is allowed to play at. The account's own published
+// rating is the anchor: a 1400 account that suddenly scores like a 2000 is the
+// pattern every fair-play system looks for first, so the ceiling is its own
+// level plus a hair, and the floor is its own level minus a bad day.
 function effectiveElo(cfg, opts = {}) {
-  const base = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : clampInt(cfg.targetElo, 1320, 3190, 1650);
-  return Math.round(clamp(base + 130, 1320, 2600));
+  const account = Number(opts.accountElo) > 0 ? Number(opts.accountElo) : null;
+  const manual = Number(cfg.targetElo) > 0 ? Number(cfg.targetElo) : null;
+  const base = clampInt(account || manual || 1500, 1320, 3190, 1500);
+  const opp = Number(opts.oppElo) > 0 ? Number(opts.oppElo) : null;
+  const anchored = opp ? opp + 130 : base;
+  const hi = Math.min(base + 25, 3190);
+  const lo = Math.min(base - 75, hi);
+  return Math.round(clamp(Math.min(anchored, hi), lo, hi));
 }
 
 // How many centipawns a human at this rating actually loses per move. Rough
@@ -149,9 +159,19 @@ function computeDelay(cfg, opts = {}) {
   const tempo = Number.isFinite(opts.oppTempoMs) && opts.oppTempoMs > 300 ? opts.oppTempoMs : null;
   if (tempo) ms = Math.max(ms, Math.min(tempo * 0.35, 3200));
 
-  if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
+  if (opts.legalMoveCount === 1) ms *= 0.45;
+  else if (opts.legalMoveCount && opts.legalMoveCount <= 3) ms *= 0.8;
   if (opts.isCheck) ms *= 1.12;
   if (opts.isCapture) ms *= 0.92;
+
+  // Time control sets the scale. A 1-minute game is not played with the same
+  // deliberation as a 15+10, and a fixed window is the tell that says so.
+  const budget = Number(opts.budgetSeconds);
+  if (Number.isFinite(budget) && budget > 0) {
+    if (budget < 120) ms *= 0.5;
+    else if (budget < 300) ms *= 0.78;
+    else if (budget >= 600) ms *= 1.15;
+  }
 
   // Rare second thought, outside the normal window. The pattern-breaker a
   // bounded uniform delay does not have.

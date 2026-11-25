@@ -302,7 +302,7 @@ const PANEL_HTML = `
         <div class="view-head"><span>Tune</span><b>legit · engine · panel</b></div>
         <div class="card">
           <div class="card-h"><span class="card-t">Engine</span><span class="card-s">local, no server</span></div>
-          <div class="set"><span class="set-lbl">Target Elo<i>drives Skill Level</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="1320" max="3190" step="10"></span></div>
+          <div class="set"><span class="set-lbl">Target Elo<i>0 = your own rating</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="0" max="3190" step="10"></span></div>
           <div class="set"><span class="set-lbl">Depth</span><span class="set-val"><input class="num" type="number" data-el="depthInput" min="4" max="20" step="1"></span></div>
           <div class="set"><span class="set-lbl">Search ms</span><span class="set-val"><input class="num" type="number" data-el="movetime" min="150" max="5000" step="50"></span></div>
           <div class="set"><span class="set-lbl">Slack cp<i>how far from best it may drift</i></span><span class="set-val"><input class="num" type="number" data-el="slack" min="0" max="300" step="5"></span></div>
@@ -590,9 +590,19 @@ class WraithPanel {
     this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
     this.el.sessionLen.textContent = clockText(v.sessionMs);
     this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
-    this.el.rating.textContent = v.opponent ? String(v.opponent) : '–';
+    this.el.rating.textContent = v.accountRating
+      ? `${v.accountRating} ${v.ratingClass || ''}`.trim()
+      : v.ratingError
+        ? 'offline'
+        : 'anonymous';
+    this.el.rating.title = v.ratingAt
+      ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
+      : 'the public rating of the signed-in account';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? String(v.elo) : 'full';
+    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? ' · acct' : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+    this.el.target.title = v.eloSource === 'account'
+      ? 'anchored to your own published rating'
+      : 'anchored to the manual Target Elo';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);

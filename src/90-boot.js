@@ -2,6 +2,11 @@
 
 const OPENING_KEY = 'chess-wraith-openings-v1';
 const PACE_KEY = 'chess-wraith-pace-v1';
+// The account's published rating and the slack it has earned so far are part of
+// the same per-account fingerprint as its pace and its openings.
+const RATING_KEY = 'chess-wraith-rating-v1';
+const GUARD_KEY = 'chess-wraith-guard-v1';
+const RATING_TTL_MS = 6 * 60 * 60 * 1000;
 // One board per browser: the lease is renewed every few seconds, so a closed
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
@@ -27,7 +32,16 @@ function paceKey() {
   return `${PACE_KEY}:${currentAccount()}`;
 }
 
+function ratingKey() {
+  return `${RATING_KEY}:${currentAccount()}`;
+}
+
+function guardKey() {
+  return `${GUARD_KEY}:${currentAccount()}`;
+}
+
 const cfg = loadSettings();
+if (settingsNeedsSave) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
 
@@ -63,6 +77,13 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  // Learned from this account's games, then carried across reloads.
+  accountRatings: null,
+  ratingAt: 0,
+  ratingError: '',
+  ratingClass: 'blitz',
+  eloSource: 'target',
+  clockPeak: 0,
   passiveTab: false,
   autoMovedGrid: null,
   updateLatest: '',
@@ -90,10 +111,81 @@ function plyOf(snap) {
   return 16;
 }
 
+function accountRatingNow() {
+  state.ratingClass = timeClassFromSeconds(state.clockPeak || state.clockSeconds);
+  return pickRating(state.accountRatings, state.ratingClass);
+}
+
 function resolveElo() {
-  const elo = effectiveElo(cfg, { oppElo: state.oppEloEstimate || state.opponentRating });
+  const account = accountRatingNow();
+  const elo = effectiveElo(cfg, {
+    accountElo: account,
+    oppElo: state.oppEloEstimate || state.opponentRating
+  });
   state.effectiveElo = elo;
+  state.eloSource = account ? 'account' : Number(cfg.targetElo) > 0 ? 'target' : 'default';
   return elo;
+}
+
+// The public ratings endpoint is static data about a public profile; nothing
+// about the game leaves the tab. Cached for six hours, per account.
+async function syncAccountRatings() {
+  const user = currentAccount();
+  try {
+    const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
+    if (cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS) {
+      state.accountRatings = cached.ratings;
+      state.ratingAt = Number(cached.at) || 0;
+      resolveElo();
+      refreshPanel();
+      return state.accountRatings;
+    }
+  } catch {
+    /* a broken cache is just a cache miss */
+  }
+  if (user === 'anonymous') return null;
+  try {
+    const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined;
+    const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/stats`, {
+      cache: 'no-store',
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal
+    });
+    if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+    const ratings = normalizeRatings(await response.json());
+    if (!ratings) throw new Error('no ratings');
+    state.accountRatings = ratings;
+    state.ratingAt = Date.now();
+    state.ratingError = '';
+    try {
+      localStorage.setItem(ratingKey(), JSON.stringify({ at: state.ratingAt, ratings }));
+    } catch {
+      /* private mode: the session keeps the value */
+    }
+  } catch (error) {
+    state.ratingError = String((error && error.message) || error).slice(0, 40);
+  }
+  resolveElo();
+  refreshPanel();
+  return state.accountRatings;
+}
+
+function readGuard() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(guardKey()) || '{}');
+    return clampInt(raw.boost, 0, 160, 0);
+  } catch {
+    return 0;
+  }
+}
+
+function saveGuard() {
+  try {
+    localStorage.setItem(guardKey(), JSON.stringify({ boost: state.slackBoost, at: Date.now() }));
+  } catch {
+    /* storage can be blocked; the guard still works in this tab */
+  }
 }
 
 // --- opening variety -------------------------------------------------------
@@ -368,6 +460,11 @@ function statusView() {
     estimate: state.oppEloEstimate,
     acpl: state.myAcpl,
     elo: state.effectiveElo,
+    eloSource: state.eloSource,
+    accountRating: accountRatingNow(),
+    ratingClass: state.ratingClass,
+    ratingAt: state.ratingAt,
+    ratingError: state.ratingError,
     ply: snap ? plyOf(snap) : 0,
     styleLabel: LEGIT.label,
     keepAlive: cfg.afkKeepAlive ? keepAliveStatus() : 'off',
@@ -533,7 +630,8 @@ function scheduleAutoMove(result) {
     allowRethink: true,
     clockSeconds: state.clockSeconds,
     oppTempoMs: median(state.tempoSamples),
-    baselineMs: paceBaseline()
+    baselineMs: paceBaseline(),
+    budgetSeconds: state.clockPeak
   });
 
   const targetFen = result.fen;
@@ -574,7 +672,10 @@ function applyAcplGuard() {
     elo: state.effectiveElo || cfg.targetElo,
     boost: state.slackBoost
   });
-  if (verdict.verdict === 'raise' || verdict.verdict === 'lower') state.slackBoost = verdict.boost;
+  if (verdict.verdict === 'raise' || verdict.verdict === 'lower') {
+    state.slackBoost = verdict.boost;
+    saveGuard();
+  }
 }
 
 async function playMove(move, targetFen, choice) {
@@ -679,6 +780,7 @@ function runScan() {
   }
 
   state.clockSeconds = scanned.clockSeconds;
+  if (Number(scanned.clockSeconds) > state.clockPeak) state.clockPeak = Number(scanned.clockSeconds);
   state.opponentRating = scanned.opponentRating;
 
   const prev = state.snapshot;
@@ -876,9 +978,13 @@ function releaseTab() {
 
 function boot() {
   panel.mount();
+  // The guard this account already earned, and its published rating: both are
+  // what makes the script behave like this player and not like a generic bot.
+  state.slackBoost = readGuard();
   heartbeatTab();
   setInterval(heartbeatTab, 3000);
   startUpdateCheck();
+  syncAccountRatings();
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();

@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.0 — 2026-11-25
+
+The rating is no longer a number you type. It is the account's own.
+
+- **Anchor: the signed-in account.** Once per six hours the script reads
+  `api.chess.com/pub/player/<user>/stats` (public, CORS-enabled, measured from a
+  chess.com tab on 2026-11-25) and keeps the rating for every time class. The
+  clock on the board picks which one applies, so the same account is anchored at
+  its rapid rating in a 10-minute game and its blitz rating in a 3-minute one.
+  The panel shows `1840 blitz` and `Playing at 1840 · acct`.
+- **The ceiling is the account.** `effectiveElo` lets the engine drift 75 Elo
+  below and 25 above the published rating instead of aiming 130 above whoever is
+  across the board. `Target Elo` in Tune still exists as a manual override; `0`
+  (the new default) means "my own". No rating, a blocked request or a signed-out
+  browser falls back to the manual value, then to 1500.
+- **The guard survives reloads.** The extra slack earned from playing above the
+  account's ACPL band is saved per username, so a fresh tab does not forget it.
+- **The clock sets the pace.** Bullet games play at half the delay, blitz at
+  0.78, rapid and longer at 1.15, on top of the per-account learned median; a
+  forced move (exactly one legal reply) is played at 45% to stop the script from
+  thinking for three seconds in an obvious position.
+- 82 tests (was 78); two new files: the rating normalizer and the account test.
+
 ## 1.5.4 — 2026-11-25
 
 The Info tab's Build card showed `–` for its own version: the new Updates card

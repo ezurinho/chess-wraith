@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, sideScore, clamp, clampInt, median, pushBounded, STYLES }`
+  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, sideScore, clamp, clampInt, median, pushBounded, LEGIT }`
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -19,11 +19,12 @@ const baseCfg = {
 };
 
 test('there is one way to play and there is no switch out of it', () => {
-  assert.deepEqual(Object.keys(api.STYLES), ['legit']);
+  assert.equal(api.LEGIT.miss, 0);
   const profile = api.styleProfile({ humanSlackCp: 40 }, { oppElo: 1200 });
   assert.equal(profile.label, 'Legit');
   assert.equal(profile.miss, 0);
-  assert.equal(profile.elo, 1330);
+  // 1500 is the fallback anchor when the account's rating is not known yet.
+  assert.equal(profile.elo, 1425);
 });
 
 test('the slack is the ceiling on how far a pick may drift from the best', () => {
@@ -86,11 +87,20 @@ test('Skill Level is derived from the target Elo, not left at 20', () => {
 });
 
 test('the rating sits just above the opponent, with no preset to move it', () => {
-  assert.equal(api.effectiveElo({ targetElo: 1650 }, { oppElo: 1200 }), 1330);
-  assert.equal(api.effectiveElo({ targetElo: 1650 }, { oppElo: 2000 }), 2130);
-  assert.equal(api.effectiveElo({ targetElo: 1650 }, {}), 1780);
-  assert.equal(api.effectiveElo({ targetElo: 900 }, {}), 1450);
-  assert.equal(api.effectiveElo({}, { oppElo: 5000 }), 2600);
+  // A manual ceiling still cannot push the account far above its own level.
+  assert.equal(api.effectiveElo({ targetElo: 1650 }, { oppElo: 1200 }), 1575);
+  assert.equal(api.effectiveElo({ targetElo: 1650 }, { oppElo: 2000 }), 1675);
+  assert.equal(api.effectiveElo({ targetElo: 1650 }, {}), 1650);
+  // targetElo 0 follows the account; with no reading there is a neutral anchor.
+  assert.equal(api.effectiveElo({ targetElo: 0 }, {}), 1500);
+  assert.equal(api.effectiveElo({}, { oppElo: 5000 }), 1525);
+  // The published rating wins over the knob, and a 1400 account never plays 2000.
+  assert.equal(api.effectiveElo({ targetElo: 2000 }, { accountElo: 1400, oppElo: 1450 }), 1425);
+  assert.equal(api.effectiveElo({ targetElo: 2000 }, { accountElo: 1400, oppElo: 900 }), 1325);
+  assert.equal(api.effectiveElo({ targetElo: 0 }, { accountElo: 2400, oppElo: 2600 }), 2425);
+  assert.equal(api.effectiveElo({ targetElo: 0 }, { accountElo: 2400 }), 2400);
+  // Above the engine's ceiling the anchor saturates instead of wrapping around.
+  assert.equal(api.effectiveElo({ targetElo: 0 }, { accountElo: 3450 }), 3190);
 });
 
 test('nothing misses on purpose: there is no sloppy preset to fall into', () => {
