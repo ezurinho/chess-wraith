@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.6.4 — 2026-11-25
+
+Two things the panel could not tell you, and one it was lying about.
+
+- **A 1-minute game after a 10-minute one was being played as rapid.** The peak
+  clock only ever grew, so once the session had seen a 600-second game every
+  later game was scaled and anchored as rapid. Both the peak and the opponent
+  tempo now reset when a new game starts, and the anchor is renewed the moment
+  the clock changes time class.
+- **`ChessWraith.selftest()`.** One call returns eight checks - version, board,
+  tracker, engine, panel bindings, storage, rating and update - each with a
+  detail string. A bug report is now a list of facts.
+- **The rating row refreshes.** Clicking it asks the profile again instead of
+  waiting out the six-hour cache, and a request already in flight is not
+  duplicated.
+- 83 tests, unchanged.
+
 ## 1.6.3 — 2026-11-25
 
 `npm run ship` passed each word of the release title through a shell. It now

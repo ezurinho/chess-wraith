@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.6.3
+// @version      1.6.4
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.6.3';
+const VERSION = '1.6.4';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.3/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.6.4/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3496,6 +3496,7 @@ const state = {
   accountRatings: null,
   ratingAt: 0,
   ratingError: '',
+  ratingPending: false,
   ratingClass: 'blitz',
   eloSource: 'target',
   clockPeak: 0,
@@ -3571,6 +3572,8 @@ async function syncAccountRatings(force) {
     /* a broken cache is just a cache miss */
   }
   if (user === 'anonymous') return null;
+  if (state.ratingPending) return state.accountRatings;
+  state.ratingPending = true;
   try {
     const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined;
     const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/stats`, {
@@ -3591,6 +3594,8 @@ async function syncAccountRatings(force) {
     // Fifteen minutes is long enough to stop a reload loop and short enough
     // that a warm start the same evening still gets the real number.
     persistRating({ retryAt: Date.now() + RATING_RETRY_MS, error: state.ratingError });
+  } finally {
+    state.ratingPending = false;
   }
   resolveElo();
   refreshPanel();
@@ -3762,6 +3767,37 @@ function registerButler() {
     ready: () => engine.ready,
     retryEngine: () => engine.retryNnue(),
     checkUpdate,
+    refreshRating: () => syncAccountRatings(true),
+    // One call that answers "is this install actually working", so a report is
+    // a list of facts instead of a screenshot and a guess.
+    selftest: async () => {
+      const checks = [];
+      const add = (name, ok, detail) => checks.push({ name, ok: Boolean(ok), detail: detail == null ? '' : String(detail) });
+      add('version', /^\d+\.\d+\.\d+$/.test(VERSION), VERSION);
+      const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
+      add('board', scan && scan.valid, scan && scan.valid ? `${scan.plyCount || 0} ply` : 'no board on this page');
+      add('tracker', Boolean(state.snapshot) && state.snapshot.turnCertain !== false, state.snapshot ? `${state.snapshot.fen.split(' ')[1]} to move` : 'no snapshot');
+      add('engine', engine.ready, state.engineMode || (engine.ready ? 'ready' : 'booting'));
+      // The panel lives in a shadow root: a plain querySelectorAll would count
+      // zero and call a working panel broken. `panel.host` is the mount point,
+      // so the tree is found from one of the elements the panel bound.
+      const root = panel.el.rating ? panel.el.rating.getRootNode() : panel.host;
+      const names = root && root.querySelectorAll ? Array.from(root.querySelectorAll('[data-el]')).map((node) => node.getAttribute('data-el')) : [];
+      const bound = Object.keys(panel.el || {}).length;
+      add('panel', names.length > 0 && new Set(names).size === names.length && bound >= new Set(names).size, `${new Set(names).size} bindings, ${bound} resolved`);
+      let storage = false;
+      try {
+        localStorage.setItem('chess-wraith-selftest', '1');
+        storage = localStorage.getItem('chess-wraith-selftest') === '1';
+        localStorage.removeItem('chess-wraith-selftest');
+      } catch {
+        storage = false;
+      }
+      add('storage', storage, storage ? 'read-write' : 'blocked');
+      add('rating', state.eloSource !== 'default' || !state.accountRatings, state.accountRatings ? `${accountRatingNow() || '?'} ${state.ratingClass}` : state.ratingError || 'no account');
+      add('update', !state.updateLatest || !versionNewer(state.updateLatest, VERSION), state.updateLatest || 'not checked');
+      return { ok: checks.every((check) => check.ok), checks };
+    },
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
     unload() {
@@ -3853,6 +3889,10 @@ function onNewGame() {
   state.myAcpl = 0;
   state.lossRecordedFen = null;
   state.top1Streak = 0;
+  // A new game is a new clock and a new opponent. Carrying the previous peak
+  // would rate a 1-minute game as rapid and pace it like a 10-minute one.
+  state.clockPeak = 0;
+  state.tempoSamples = [];
   if (cfg.autoRematch) state.autoPlay = true;
 }
 
@@ -4215,7 +4255,14 @@ function runScan() {
   }
 
   state.clockSeconds = scanned.clockSeconds;
-  if (Number(scanned.clockSeconds) > state.clockPeak) state.clockPeak = Number(scanned.clockSeconds);
+  if (Number(scanned.clockSeconds) > state.clockPeak) {
+    state.clockPeak = Number(scanned.clockSeconds);
+    // The clock names the time class, and the time class picks which published
+    // rating anchors the game: a bullet game against the rapid anchor would be
+    // three hundred Elo of drift nobody asked for.
+    const cls = timeClassFromSeconds(state.clockPeak);
+    if (state.accountRatings && cls !== state.ratingClass) resolveElo();
+  }
   state.opponentRating = scanned.opponentRating;
 
   const prev = state.snapshot;
@@ -4420,6 +4467,11 @@ function boot() {
   setInterval(heartbeatTab, 3000);
   startUpdateCheck();
   syncAccountRatings();
+  // Clicking the rating asks again instead of waiting out the six-hour cache.
+  if (panel.el && panel.el.rating) {
+    panel.el.rating.style.cursor = 'pointer';
+    panel.el.rating.addEventListener('click', () => syncAccountRatings(true));
+  }
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());
   refreshPanel();
