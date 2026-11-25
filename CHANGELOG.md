@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.22.0 — 2026-11-25
+
+Strength anchored to a rating that has games behind it.
+
+- The stats endpoint already returned `record { win, loss, draw }` per class and
+  it was being dropped. An account with two rated games was aimed at its rating
+  as if it were settled: a lucky 2100 played like a 2100.
+- `ratingWeight(games)` follows Glicko-2's `1/sqrt(n)` settling from RD 350 and
+  `settledRating(rating, games, prior)` blends the rating with a 1200 prior by
+  that weight. Two games at 2100 aim at 1583; twenty aim at 1905; the weight is
+  capped at 0.9 so the prior never fully disappears.
+- Panel: `· prov` instead of `· acct` under 20 games in the class, with the real
+  published number in the tooltip. The games count rides along in the six-hour
+  cache, so a reload does not un-shrink it.
+- The published rate now also survives a stale cache: the old code only restored
+  `ratings` on a fresh entry, so a stale one fell through to the network.
+- 140 tests: weight monotonic and capped, two games under the settled value, zero
+  games all prior, garbage in null out.
+
 ## 1.21.1 — 2026-11-25
 
 Softened 1.21.0's claim. "Worker timers are not batched the same way page timers

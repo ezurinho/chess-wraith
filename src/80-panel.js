@@ -605,9 +605,11 @@ class WraithPanel {
       ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
       : 'the public rating of the signed-in account';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? ' · acct' : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
     this.el.target.title = v.eloSource === 'account'
-      ? 'anchored to your own published rating'
+      ? v.provisional
+        ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
+        : 'anchored to your own published rating'
       : 'anchored to the manual Target Elo';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 

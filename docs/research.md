@@ -104,6 +104,34 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## A rating with two games behind it
+
+`/pub/player/{u}/stats` returns `record { win, loss, draw }` next to each
+`last.rating`. The games count was being thrown away, so an account with two
+rated games was anchored as if the number were stable. Glicko-2, which chess.com
+uses, starts a rating at RD 350 and settles it by roughly `1/sqrt(n)` while the
+opponents are close and the results even:
+
+```
+games  RD   weight  target when the rating is 2100 and the prior 1200
+    0  350   0.000   1200
+    1  247   0.295   1466
+    2  201   0.425   1583
+    3  174   0.503   1652
+    5  142   0.594   1735
+   10  105   0.700   1830
+   20   76   0.783   1905
+   50   49   0.861   1975
+  100   35   0.900   2010
+```
+
+Weight is `1 - RD/350`, capped at 0.9 so a prior never disappears entirely, and
+below 20 games the panel shows `· prov`. This is a prior derived from the rating
+system, not a measurement of chess.com's internal RD: if a class rating is missing
+the code still borrows the nearest class as it did before, which the earlier
+measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
+says is a guess and not a substitute.
+
 ## Timers in a hidden tab
 
 What is documented: Chrome has throttled timers in hidden pages since 88, in

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.21.1
+// @version      1.22.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.21.1';
+const VERSION = '1.22.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.21.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.22.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -348,6 +348,44 @@ function timeClassFromSeconds(seconds) {
   if (s < 600) return 'blitz';
   if (s < 1800) return 'rapid';
   return 'daily';
+}
+
+// Glicko-2 starts a new rating at RD 350 and settles by about 1/sqrt(n) while the
+// opponents are close and the results even. A 2100 with two games behind it is not
+// a 2100, so the strength anchor weights the rating against a 1200 prior by how
+// much of that uncertainty is actually gone. Derived from the rating system, not
+// from chess.com's private data: it is a prior, not a measurement.
+const RATING_PRIOR_ELO = 1200;
+const RATING_RD0 = 350;
+
+function ratingWeight(games) {
+  const n = Number(games);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const q = Math.log(10) / 400;
+  const d2 = 4 / (q * q);
+  const rd = Math.sqrt(1 / (1 / (RATING_RD0 * RATING_RD0) + n / d2));
+  return clamp(1 - rd / RATING_RD0, 0.05, 0.9);
+}
+
+function settledRating(rating, games, prior) {
+  const r = Number(rating);
+  if (!Number.isFinite(r) || r <= 0) return null;
+  const base = Number(prior) > 0 ? Number(prior) : RATING_PRIOR_ELO;
+  const elo = Math.round(ratingWeight(games) * r + (1 - ratingWeight(games)) * base);
+  return clamp(elo, 400, 3500);
+}
+
+// Games behind each rating class, from the record the stats endpoint already
+// returns. Null means "no idea", and the anchor then trusts the number as is.
+function normalizeGameCounts(stats) {
+  const out = {};
+  for (const [cls, key] of Object.entries(RATING_CLASSES)) {
+    const rec = stats && stats[key] && stats[key].record;
+    if (!rec) continue;
+    const n = (Number(rec.win) || 0) + (Number(rec.loss) || 0) + (Number(rec.draw) || 0);
+    if (n > 0) out[cls] = n;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 // Keeps only the classes the account actually has, as a flat map.
@@ -3816,9 +3854,11 @@ class WraithPanel {
       ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
       : 'the public rating of the signed-in account';
     this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? ' · acct' : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
     this.el.target.title = v.eloSource === 'account'
-      ? 'anchored to your own published rating'
+      ? v.provisional
+        ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
+        : 'anchored to your own published rating'
       : 'anchored to the manual Target Elo';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
@@ -3976,6 +4016,7 @@ const state = {
   paceError: '',
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
+  accountGames: null,
   ratingAt: 0,
   ratingError: '',
   ratingPending: false,
@@ -4023,8 +4064,23 @@ function accountRatingNow() {
   return pickRating(state.accountRatings, state.ratingClass);
 }
 
+// The number the engine is aimed at. A provisional rating is shrunk towards the
+// prior, because twenty games is not the player and two games is not a rating.
+function anchoredRating() {
+  const raw = accountRatingNow();
+  if (!raw) return raw;
+  const games = state.accountGames ? state.accountGames[state.ratingClass] : null;
+  if (!games) return raw;
+  return settledRating(raw, games, Number(cfg.targetElo) > 0 ? cfg.targetElo : RATING_PRIOR_ELO);
+}
+
+function provisionalRating() {
+  const games = state.accountGames ? state.accountGames[state.ratingClass] : null;
+  return Boolean(games && games < 20);
+}
+
 function resolveElo() {
-  const account = accountRatingNow();
+  const account = anchoredRating();
   const elo = effectiveElo(cfg, {
     accountElo: account,
     oppElo: state.oppEloEstimate || state.opponentRating
@@ -4045,9 +4101,13 @@ async function syncAccountRatings(force) {
   try {
     const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
     const fresh = cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS;
-    if (cached && cached.ratings && !fresh) state.accountRatings = cached.ratings;
+    if (cached && cached.ratings && !fresh) {
+      state.accountRatings = cached.ratings;
+      state.accountGames = cached.games || null;
+    }
     if (fresh) {
       state.accountRatings = cached.ratings;
+      state.accountGames = cached.games || null;
       state.ratingAt = Number(cached.at) || 0;
       state.ratingError = '';
       resolveElo();
@@ -4075,12 +4135,14 @@ async function syncAccountRatings(force) {
       signal
     });
     if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
-    const ratings = normalizeRatings(await response.json());
+    const payload = await response.json();
+    const ratings = normalizeRatings(payload);
     if (!ratings) throw new Error('no ratings');
     state.accountRatings = ratings;
+    state.accountGames = normalizeGameCounts(payload);
     state.ratingAt = Date.now();
     state.ratingError = '';
-    persistRating({ at: state.ratingAt, ratings });
+    persistRating({ at: state.ratingAt, ratings, games: state.accountGames });
   } catch (error) {
     state.ratingError = String((error && error.message) || error).slice(0, 40);
     // Fifteen minutes is long enough to stop a reload loop and short enough
@@ -4591,6 +4653,7 @@ function statusView() {
     elo: state.effectiveElo,
     eloSource: state.eloSource,
     accountRating: accountRatingNow(),
+    provisional: provisionalRating(),
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,

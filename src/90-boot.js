@@ -92,6 +92,7 @@ const state = {
   paceError: '',
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
+  accountGames: null,
   ratingAt: 0,
   ratingError: '',
   ratingPending: false,
@@ -139,8 +140,23 @@ function accountRatingNow() {
   return pickRating(state.accountRatings, state.ratingClass);
 }
 
+// The number the engine is aimed at. A provisional rating is shrunk towards the
+// prior, because twenty games is not the player and two games is not a rating.
+function anchoredRating() {
+  const raw = accountRatingNow();
+  if (!raw) return raw;
+  const games = state.accountGames ? state.accountGames[state.ratingClass] : null;
+  if (!games) return raw;
+  return settledRating(raw, games, Number(cfg.targetElo) > 0 ? cfg.targetElo : RATING_PRIOR_ELO);
+}
+
+function provisionalRating() {
+  const games = state.accountGames ? state.accountGames[state.ratingClass] : null;
+  return Boolean(games && games < 20);
+}
+
 function resolveElo() {
-  const account = accountRatingNow();
+  const account = anchoredRating();
   const elo = effectiveElo(cfg, {
     accountElo: account,
     oppElo: state.oppEloEstimate || state.opponentRating
@@ -161,9 +177,13 @@ async function syncAccountRatings(force) {
   try {
     const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
     const fresh = cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS;
-    if (cached && cached.ratings && !fresh) state.accountRatings = cached.ratings;
+    if (cached && cached.ratings && !fresh) {
+      state.accountRatings = cached.ratings;
+      state.accountGames = cached.games || null;
+    }
     if (fresh) {
       state.accountRatings = cached.ratings;
+      state.accountGames = cached.games || null;
       state.ratingAt = Number(cached.at) || 0;
       state.ratingError = '';
       resolveElo();
@@ -191,12 +211,14 @@ async function syncAccountRatings(force) {
       signal
     });
     if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
-    const ratings = normalizeRatings(await response.json());
+    const payload = await response.json();
+    const ratings = normalizeRatings(payload);
     if (!ratings) throw new Error('no ratings');
     state.accountRatings = ratings;
+    state.accountGames = normalizeGameCounts(payload);
     state.ratingAt = Date.now();
     state.ratingError = '';
-    persistRating({ at: state.ratingAt, ratings });
+    persistRating({ at: state.ratingAt, ratings, games: state.accountGames });
   } catch (error) {
     state.ratingError = String((error && error.message) || error).slice(0, 40);
     // Fifteen minutes is long enough to stop a reload loop and short enough
@@ -707,6 +729,7 @@ function statusView() {
     elo: state.effectiveElo,
     eloSource: state.eloSource,
     accountRating: accountRatingNow(),
+    provisional: provisionalRating(),
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,

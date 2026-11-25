@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js'],
-  `{ timeClassFromSeconds, normalizeRatings, pickRating, RATING_CLASSES }`
+  `{ timeClassFromSeconds, normalizeRatings, pickRating, normalizeGameCounts, ratingWeight, settledRating, RATING_CLASSES }`
 );
 
 test('the clock decides which published rating applies', () => {
@@ -45,6 +45,31 @@ test('a missing class falls back to the nearest one the account plays', () => {
   assert.equal(api.pickRating({ bullet: 1200 }, 'daily'), 1200);
   assert.equal(api.pickRating(null, 'blitz'), null);
   assert.equal(api.pickRating({}, 'blitz'), null);
+
+  const counted = api.normalizeGameCounts({
+    chess_rapid: { last: { rating: 1650 }, record: { win: 210, loss: 80, draw: 10 } },
+    chess_bullet: { last: { rating: 1200 }, record: { win: 0, loss: 0, draw: 0 } }
+  });
+  assert.equal(counted.rapid, 300, 'win + loss + draw');
+  assert.equal(counted.bullet, undefined, 'a class with no games is not counted');
+  assert.equal(api.normalizeGameCounts({}), null);
+  assert.equal(api.normalizeGameCounts(null), null);
+
+  // Provisional ratings move the engine target less than settled ones do.
+  assert.ok(api.ratingWeight(2) < api.ratingWeight(20), 'more games, more weight');
+  assert.ok(api.ratingWeight(20) < api.ratingWeight(200), 'settling keeps going');
+  assert.equal(api.ratingWeight(0), 0);
+  assert.equal(api.ratingWeight(NaN), 0);
+  assert.ok(api.ratingWeight(100000) <= 0.9, 'a prior never fully disappears');
+
+  const twoGames = api.settledRating(2100, 2, 1200);
+  const settled = api.settledRating(2100, 200, 1200);
+  assert.ok(twoGames > 1500 && twoGames < 1700, 'two games pull towards the prior: ' + twoGames);
+  assert.ok(settled > 1950 && settled < 2100, 'settled stays under the rating: ' + settled);
+  assert.equal(api.settledRating(2100, 200, 1200), api.settledRating(2100, 500, 1200), 'capped weight');
+  assert.equal(api.settledRating(0, 10), null);
+  assert.equal(api.settledRating('x', 10), null);
+  assert.equal(api.settledRating(2100, 0, 1200), 1200, 'no games is all prior');
 });
 
 test('the published classes map to the public endpoint keys', () => {

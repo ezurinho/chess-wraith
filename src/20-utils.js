@@ -230,6 +230,44 @@ function timeClassFromSeconds(seconds) {
   return 'daily';
 }
 
+// Glicko-2 starts a new rating at RD 350 and settles by about 1/sqrt(n) while the
+// opponents are close and the results even. A 2100 with two games behind it is not
+// a 2100, so the strength anchor weights the rating against a 1200 prior by how
+// much of that uncertainty is actually gone. Derived from the rating system, not
+// from chess.com's private data: it is a prior, not a measurement.
+const RATING_PRIOR_ELO = 1200;
+const RATING_RD0 = 350;
+
+function ratingWeight(games) {
+  const n = Number(games);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const q = Math.log(10) / 400;
+  const d2 = 4 / (q * q);
+  const rd = Math.sqrt(1 / (1 / (RATING_RD0 * RATING_RD0) + n / d2));
+  return clamp(1 - rd / RATING_RD0, 0.05, 0.9);
+}
+
+function settledRating(rating, games, prior) {
+  const r = Number(rating);
+  if (!Number.isFinite(r) || r <= 0) return null;
+  const base = Number(prior) > 0 ? Number(prior) : RATING_PRIOR_ELO;
+  const elo = Math.round(ratingWeight(games) * r + (1 - ratingWeight(games)) * base);
+  return clamp(elo, 400, 3500);
+}
+
+// Games behind each rating class, from the record the stats endpoint already
+// returns. Null means "no idea", and the anchor then trusts the number as is.
+function normalizeGameCounts(stats) {
+  const out = {};
+  for (const [cls, key] of Object.entries(RATING_CLASSES)) {
+    const rec = stats && stats[key] && stats[key].record;
+    if (!rec) continue;
+    const n = (Number(rec.win) || 0) + (Number(rec.loss) || 0) + (Number(rec.draw) || 0);
+    if (n > 0) out[cls] = n;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // Keeps only the classes the account actually has, as a flat map.
 function normalizeRatings(stats) {
   const out = {};
