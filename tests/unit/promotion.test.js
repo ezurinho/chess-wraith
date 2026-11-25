@@ -9,7 +9,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '70-input.js'],
-  `{ awaitPromotionPiece, findPromotionPiece }`
+  `{ awaitPromotionPiece, findPromotionPiece, promotionPollPlan }`
 );
 
 function boardWithPieceAfter(hits) {
@@ -56,6 +56,26 @@ test('one attempt means one look', async () => {
   const found = await api.awaitPromotionPiece(boardEl, 'wq', 1, 120, async () => {});
   assert.equal(found, null);
   assert.equal(calls.lookups, 1);
+});
+
+test('a promoted pawn with two seconds left does not spend them waiting', () => {
+  const full = api.promotionPollPlan(null);
+  assert.equal(full.attempts, 8, 'no clock: the old patience');
+  assert.equal(full.pauseMs, 120);
+  const long = api.promotionPollPlan(300);
+  assert.equal(long.attempts, 8, 'a long clock too');
+  assert.equal(long.pauseMs, 120);
+
+  const short = api.promotionPollPlan(1);
+  assert.ok(short.pauseMs < 120, 'polls faster');
+  assert.ok(short.attempts * short.pauseMs <= 400, 'well under a second of clock');
+
+  const mid = api.promotionPollPlan(6);
+  assert.ok(mid.attempts >= 2 && mid.attempts <= 8);
+  assert.ok(mid.attempts * mid.pauseMs <= 6 * 1000 * 0.4, 'a fraction of the clock');
+
+  assert.equal(api.promotionPollPlan('x').attempts, 8, 'junk falls back to the full poll');
+  assert.equal(api.promotionPollPlan(-4).pauseMs, 120);
 });
 
 test('the class asked for is the colour and the piece', async () => {

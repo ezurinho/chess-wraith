@@ -974,7 +974,8 @@ async function playMove(move, targetFen, choice) {
   state.autoMovedFen = targetFen;
   const firstMode = Math.random() < 0.65 ? 'drag' : 'click';
   const ok = await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, {
-    inputMode: firstMode
+    inputMode: firstMode,
+    clockSeconds: state.clockSeconds
   });
   if (!ok) return false;
 
@@ -1011,7 +1012,7 @@ async function playMove(move, targetFen, choice) {
     state.warn = `move not registered, retrying with ${fallback}`;
     refreshPanel();
     await sleep(450);
-    await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: fallback });
+    await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: fallback, clockSeconds: state.clockSeconds });
     await sleep(cfg.verifyMoveMs);
     const second = scanBoard(mySide(snap.flipped));
     if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {
@@ -1267,6 +1268,7 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
+    `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',

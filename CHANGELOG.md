@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.24.0 — 2026-11-25
+
+Promotion does not spend a low clock waiting.
+
+- The promotion poll was a fixed eight looks at 120 ms: up to 840 ms between
+  the drop and the piece choice. With 1:30 on the clock that is nothing; with
+  two seconds it is the game.
+- `promotionPollPlan(clockSeconds)` scales it: below 8 s the pauses drop to 40 ms
+  and the budget is a third of the clock (`1 s` → 4 looks over 160 ms), above it
+  the old patience is unchanged.
+- The bug report now carries the clock, the last move delay and the search
+  budget, so a "it stopped" report says whether the clock was the cause.
+- Docs: the test table said 106 tests in 14 files; it is 20 files and 141 tests.
+
 ## 1.23.0 — 2026-11-25
 
 Say when the engine cannot be as weak as the account.

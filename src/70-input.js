@@ -118,7 +118,7 @@ async function awaitPromotionPiece(boardEl, promoCls, attempts = 8, pauseMs = 12
   return null;
 }
 
-async function clickPromotion(boardEl, promoCls) {
+async function clickPromotion(boardEl, promoCls, clockSeconds) {
   const press = async (el) => {
     const box = el.getBoundingClientRect();
     await clickPoint(
@@ -129,7 +129,8 @@ async function clickPromotion(boardEl, promoCls) {
       boardEl
     );
   };
-  const piece = await awaitPromotionPiece(boardEl, promoCls);
+  const plan = promotionPollPlan(clockSeconds);
+  const piece = await awaitPromotionPiece(boardEl, promoCls, plan.attempts, plan.pauseMs);
   if (!piece) return false;
   await press(piece);
   // A dialog still on screen means the click missed it. One more press is
@@ -174,6 +175,6 @@ async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options 
     await clickPoint(toPt, boardEl);
   }
 
-  if (promo) await clickPromotion(boardEl, `${turnColor === 'b' ? 'b' : 'w'}${promo}`);
+  if (promo) await clickPromotion(boardEl, `${turnColor === 'b' ? 'b' : 'w'}${promo}`, options.clockSeconds);
   return true;
 }

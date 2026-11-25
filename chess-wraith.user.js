@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.23.0
+// @version      1.24.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.23.0';
+const VERSION = '1.24.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.23.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.24.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -293,6 +293,18 @@ function formatAge(ms) {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+// The promotion dialog appears after the drop, and how late depends on the
+// machine, so it is polled. But a promotion with two seconds left cannot spend
+// most of that poll waiting: the budget scales with the clock, same as the
+// search does.
+function promotionPollPlan(clockSeconds) {
+  const clock = Number(clockSeconds);
+  if (!Number.isFinite(clock) || clock <= 0 || clock > 8) return { attempts: 8, pauseMs: 120 };
+  const pauseMs = clock < 4 ? 40 : 80;
+  const budget = Math.max(150, Math.round(clock * 350));
+  return { attempts: Math.max(2, Math.min(8, Math.round(budget / pauseMs))), pauseMs };
 }
 
 function searchBudgetMs(job) {
@@ -3208,7 +3220,7 @@ async function awaitPromotionPiece(boardEl, promoCls, attempts = 8, pauseMs = 12
   return null;
 }
 
-async function clickPromotion(boardEl, promoCls) {
+async function clickPromotion(boardEl, promoCls, clockSeconds) {
   const press = async (el) => {
     const box = el.getBoundingClientRect();
     await clickPoint(
@@ -3219,7 +3231,8 @@ async function clickPromotion(boardEl, promoCls) {
       boardEl
     );
   };
-  const piece = await awaitPromotionPiece(boardEl, promoCls);
+  const plan = promotionPollPlan(clockSeconds);
+  const piece = await awaitPromotionPiece(boardEl, promoCls, plan.attempts, plan.pauseMs);
   if (!piece) return false;
   await press(piece);
   // A dialog still on screen means the click missed it. One more press is
@@ -3264,7 +3277,7 @@ async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options 
     await clickPoint(toPt, boardEl);
   }
 
-  if (promo) await clickPromotion(boardEl, `${turnColor === 'b' ? 'b' : 'w'}${promo}`);
+  if (promo) await clickPromotion(boardEl, `${turnColor === 'b' ? 'b' : 'w'}${promo}`, options.clockSeconds);
   return true;
 }
 
@@ -4921,7 +4934,8 @@ async function playMove(move, targetFen, choice) {
   state.autoMovedFen = targetFen;
   const firstMode = Math.random() < 0.65 ? 'drag' : 'click';
   const ok = await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, {
-    inputMode: firstMode
+    inputMode: firstMode,
+    clockSeconds: state.clockSeconds
   });
   if (!ok) return false;
 
@@ -4958,7 +4972,7 @@ async function playMove(move, targetFen, choice) {
     state.warn = `move not registered, retrying with ${fallback}`;
     refreshPanel();
     await sleep(450);
-    await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: fallback });
+    await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: fallback, clockSeconds: state.clockSeconds });
     await sleep(cfg.verifyMoveMs);
     const second = scanBoard(mySide(snap.flipped));
     if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {
@@ -5214,6 +5228,7 @@ function reportText() {
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
     `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
+    `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',

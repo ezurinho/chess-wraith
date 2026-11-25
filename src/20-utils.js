@@ -175,6 +175,18 @@ function formatAge(ms) {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+// The promotion dialog appears after the drop, and how late depends on the
+// machine, so it is polled. But a promotion with two seconds left cannot spend
+// most of that poll waiting: the budget scales with the clock, same as the
+// search does.
+function promotionPollPlan(clockSeconds) {
+  const clock = Number(clockSeconds);
+  if (!Number.isFinite(clock) || clock <= 0 || clock > 8) return { attempts: 8, pauseMs: 120 };
+  const pauseMs = clock < 4 ? 40 : 80;
+  const budget = Math.max(150, Math.round(clock * 350));
+  return { attempts: Math.max(2, Math.min(8, Math.round(budget / pauseMs))), pauseMs };
+}
+
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
   const base = movetime * 6 + 6000;
