@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.15.0 — 2026-11-25
+
+Promotion: the one move that used to be clicked blind.
+
+- After the drop, the script slept 95–175 ms, looked **once** for
+  `.promotion-window .promotion-piece` and clicked if it was there. On a slow
+  board the dialog is painted later than that; the click went nowhere, the move
+  never registered, the opposite-gesture retry dragged the pawn again onto the
+  same square and the session ended in a pause. Promotions are rare enough that
+  it never showed up in the games that were tested.
+- `awaitPromotionPiece` polls eight times, 120 ms apart (~1 s), and the click is
+  re-issued once if the dialog is still on screen 220 ms later — cheaper than a
+  whole move retry.
+- The lookup no longer throws when there is no `document` (tests, workers).
+- Five tests for the poll: late dialog, already-open dialog, never-open dialog,
+  single attempt, and the selector it builds. 122 tests.
+
 ## 1.14.0 — 2026-11-25
 
 AFK: the one path that parked a session on a dialog nobody was going to press.

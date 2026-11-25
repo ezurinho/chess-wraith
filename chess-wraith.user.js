@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.14.0
+// @version      1.15.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.14.0';
+const VERSION = '1.15.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.14.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.15.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3008,6 +3008,48 @@ function retryInputMode(mode) {
   return mode === 'drag' ? 'click' : 'drag';
 }
 
+function findPromotionPiece(boardEl, promoCls) {
+  const selector = `.promotion-window .promotion-piece.${promoCls}`;
+  const inside = boardEl && typeof boardEl.querySelector === 'function' ? boardEl.querySelector(selector) : null;
+  if (inside) return inside;
+  return typeof document === 'undefined' ? null : document.querySelector(selector);
+}
+
+// The dialog is painted after the drag, and how late depends on the machine, so
+// one look 100 ms after the drop was a coin flip on a slow board. Poll instead:
+// a promotion left open is a move that never registers and a session that stops.
+async function awaitPromotionPiece(boardEl, promoCls, attempts = 8, pauseMs = 120, sleepFn = sleep) {
+  const tries = Math.max(1, Math.round(attempts));
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const el = findPromotionPiece(boardEl, promoCls);
+    if (el) return el;
+    if (attempt < tries - 1) await sleepFn(pauseMs);
+  }
+  return null;
+}
+
+async function clickPromotion(boardEl, promoCls) {
+  const press = async (el) => {
+    const box = el.getBoundingClientRect();
+    await clickPoint(
+      {
+        x: box.left + box.width * (0.5 + gaussian() * 0.4),
+        y: box.top + box.height * (0.5 + gaussian() * 0.4)
+      },
+      boardEl
+    );
+  };
+  const piece = await awaitPromotionPiece(boardEl, promoCls);
+  if (!piece) return false;
+  await press(piece);
+  // A dialog still on screen means the click missed it. One more press is
+  // cheaper than a whole move retry.
+  await sleep(220);
+  const still = findPromotionPiece(boardEl, promoCls);
+  if (still) await press(still);
+  return true;
+}
+
 async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options = {}) {
   if (!boardEl || !uciMove || uciMove.length < 4) return false;
   const fromSq = uciMove.slice(0, 2);
@@ -3042,23 +3084,7 @@ async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options 
     await clickPoint(toPt, boardEl);
   }
 
-  if (promo) {
-    await sleep(rand(95, 175));
-    const promoCls = `${turnColor === 'b' ? 'b' : 'w'}${promo}`;
-    const promoEl =
-      boardEl.querySelector(`.promotion-window .promotion-piece.${promoCls}`) ||
-      document.querySelector(`.promotion-window .promotion-piece.${promoCls}`);
-    if (promoEl) {
-      const pr = promoEl.getBoundingClientRect();
-      await clickPoint(
-        {
-          x: pr.left + pr.width * (0.5 + gaussian() * 0.4),
-          y: pr.top + pr.height * (0.5 + gaussian() * 0.4)
-        },
-        boardEl
-      );
-    }
-  }
+  if (promo) await clickPromotion(boardEl, `${turnColor === 'b' ? 'b' : 'w'}${promo}`);
   return true;
 }
 
