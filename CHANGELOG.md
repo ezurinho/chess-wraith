@@ -30,7 +30,7 @@ on the account and the opponent instead of only on a fixed window.
   `paused: your hand is on the board`.
 - Panel: the Session card shows the account and your learned pace next to the
   opponent's tempo.
-- 46 tests (was 37): the wasm shim against the real garbage URL, the pace band,
+- 49 tests (was 37): the wasm shim against the real garbage URL, the pace band,
   the opponent floor, and the board parser's pure helpers.
 - `tools/release.js` now also moves `ENGINE_MIRROR` to the new tag and CI fails
   when the mirror, the package, the header, the README badge and the CHANGELOG
