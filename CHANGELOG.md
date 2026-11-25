@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.19.2 — 2026-11-25
+
+Measured the thing 1.19.0 assumed: a destroyed NNUE worker is ready again in
+206, 205 and 306 ms on the live analysis page, shim fetch and wasm compile
+included. Recovery is cheaper than a stalled search by two orders of magnitude,
+and `docs/research.md` now records it.
+
 ## 1.19.1 — 2026-11-25
 
 `destroy()` left `ready: true` behind. The next search posted into a null worker

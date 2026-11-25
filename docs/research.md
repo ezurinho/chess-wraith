@@ -104,6 +104,14 @@ values confirm the boundaries the code uses: 60 s and 30 s games are bullet, 180
 and 300 s are blitz, 600 and 900 s are rapid.
 
 
+## What a rebuild costs
+
+Measured in the live tab on the analysis page, three times in a row, each one
+after `destroy()`: the NNUE worker is ready again in **206, 205 and 306 ms**,
+counting the shim fetch and the wasm compile. That is the number 1.19.0 needed:
+a recovery fits inside a bullet move, so rebuilding on the spot beats waiting out
+a 6–40 s search budget for an answer that is never coming.
+
 ## Most games end without moving a piece
 
 661 games from the October 2026 rapid leaderboard, sorted by how they ended:
