@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.9.1
+// @version      1.10.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.9.1';
+const VERSION = '1.10.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.9.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.10.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2940,6 +2940,14 @@ async function clickPoint(pt, boardEl) {
   return true;
 }
 
+// A drag and a click are not interchangeable on chess.com: click-to-move can be
+// switched off in the site's own settings, and a drag can be lost to an overlay.
+// The retry therefore has to use the gesture that just failed the least: the
+// other one.
+function retryInputMode(mode) {
+  return mode === 'drag' ? 'click' : 'drag';
+}
+
 async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options = {}) {
   if (!boardEl || !uciMove || uciMove.length < 4) return false;
   const fromSq = uciMove.slice(0, 2);
@@ -4445,15 +4453,21 @@ async function playMove(move, targetFen, choice) {
   const snap = state.snapshot;
   if (!snap || !state.boardEl) return false;
   state.autoMovedFen = targetFen;
+  const firstMode = Math.random() < 0.65 ? 'drag' : 'click';
   const ok = await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, {
-    inputMode: 'mixed'
+    inputMode: firstMode
   });
   if (!ok) return false;
 
   // The click can be swallowed by an ad overlay, a promotion dialog or a slow
-  // board. Look at the board before assuming the move landed.
-  await sleep(cfg.verifyMoveMs);
-  const after = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
+  // board. Look at the board before assuming the move landed, and look twice:
+  // a board that paints 400 ms late is a landed move, not a failed one.
+  let after = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await sleep(attempt === 0 ? cfg.verifyMoveMs : Math.max(160, Math.round(cfg.verifyMoveMs * 0.7)));
+    after = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
+    if (after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid)) break;
+  }
   const landed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
   if (landed) {
     state.autoMovedGrid = after.grid;
@@ -4473,10 +4487,11 @@ async function playMove(move, targetFen, choice) {
   }
 
   if (cfg.retryMoveOnce) {
-    state.warn = 'move not registered, retrying';
+    const fallback = retryInputMode(firstMode);
+    state.warn = `move not registered, retrying with ${fallback}`;
     refreshPanel();
     await sleep(450);
-    await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: 'click' });
+    await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: fallback });
     await sleep(cfg.verifyMoveMs);
     const second = scanBoard(mySide(snap.flipped));
     if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {

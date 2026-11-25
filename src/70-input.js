@@ -90,6 +90,14 @@ async function clickPoint(pt, boardEl) {
   return true;
 }
 
+// A drag and a click are not interchangeable on chess.com: click-to-move can be
+// switched off in the site's own settings, and a drag can be lost to an overlay.
+// The retry therefore has to use the gesture that just failed the least: the
+// other one.
+function retryInputMode(mode) {
+  return mode === 'drag' ? 'click' : 'drag';
+}
+
 async function executeMoveOnBoard(boardEl, uciMove, flipped, turnColor, options = {}) {
   if (!boardEl || !uciMove || uciMove.length < 4) return false;
   const fromSq = uciMove.slice(0, 2);

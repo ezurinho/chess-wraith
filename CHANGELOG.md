@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.10.0 — 2026-11-25
+
+Review of the input path: one real failure mode, one timing assumption.
+
+- **The move retry always clicked.** Chess.com has a Move Method setting (drag,
+  click or both), so an account set to drag-only loses every click: the first
+  attempt had a 35 % chance of being a click, and when it failed the retry
+  clicked again. Now the first gesture is chosen as before and the retry uses
+  the other one, which is what makes drag-only and click-only accounts work.
+- **The board was checked once.** A board that paints 400 ms late was read as a
+  failed move and got retried, which is the one path where a second gesture
+  could be sent to a board that already moved. It now looks twice before
+  calling the move lost.
+- `tests/unit/input.test.js`: square geometry (both orientations, jitter staying
+  inside its own 100 px cell), a board too small to click returning nothing, and
+  the retry invariant. 109 tests.
+
 ## 1.9.1 — 2026-11-25
 
 - `docs/research.md`: the PubAPI rate-limit rule quoted, and why the pace fetch is
