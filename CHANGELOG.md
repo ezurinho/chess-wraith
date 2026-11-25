@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.6 — 2026-11-25
+
+A move that failed to register used to fail silently.
+
+- **A rejected `playMove` promise is caught.** When chess.com ignored a click
+  the rejection was unhandled: auto-play stayed on, no timer was armed, and the
+  panel said "playing" while nothing played. The failure now surfaces in the
+  status line and the scan loop resumes.
+- `ChessWraith.step()` and the hotkey path no longer leak an unhandled rejection.
+
 ## 1.6.5 — 2026-11-25
 
 The selector layer stops being the untested part.

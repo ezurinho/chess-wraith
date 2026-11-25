@@ -722,7 +722,13 @@ function armAutoMove(move, targetFen, choice, delay) {
       return;
     }
     state.defers = 0;
-    playMove(move, targetFen, choice);
+    // A rejected promise here used to leave auto-play on with no timer and no
+    // message: the panel said "playing" while nothing was playing.
+    playMove(move, targetFen, choice).catch((error) => {
+      state.warn = `move failed: ${String((error && error.message) || error).slice(0, 40)}`;
+      refreshPanel();
+      scheduleScan(400);
+    });
   }, delay);
 }
 
@@ -934,7 +940,7 @@ function onKeyDown(event) {
     toggleAuto();
   } else if (key === 'm') {
     event.preventDefault();
-    playNow();
+    playNow().catch(() => {});
   } else if (key === 'h') {
     event.preventDefault();
     panel.toggleHidden();
@@ -977,7 +983,7 @@ function settingsApplied(next) {
 const panel = new WraithPanel(cfg, {
   toggleAuto,
   toggleAfk,
-  step: () => playNow(),
+  step: () => playNow().catch(() => false),
   scan: () => {
     state.analyzedFen = null;
     runScan();

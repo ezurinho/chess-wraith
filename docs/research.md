@@ -91,6 +91,26 @@ move is played almost at once. A long session also drifts 2% slower per hour,
 capped at 6% after three hours - the same time-on-task effect the typing model in
 `nitro-wraith` carries. A fixed window is the part that looks like a clock.
 
+## 2c. Move-level detection is now a benchmark, not a vibe
+
+ChessFraud (ACM, 2026) is the first public benchmark for move-level cheating
+detection: 505 tournament games where engine use was explicitly logged, plus
+12,000 Lichess games with one move swapped for an engine or human-aligned
+model suggestion. Its point is that human-aligned models - the ones that play
+like a 1800 rather than like Stockfish - complicate detection precisely because
+move choice stops separating them from a person.
+
+That is the design our ACPL band imitates, and it is also why the band is not a
+defence: the paper trains detectors on the same signal we optimise. Treat the
+guard as a way to not look absurd, not as cover.
+
+Chess.com's own [Fair Play policy](https://www.chess.com/legal/fair-play)
+(last updated 2026-03-25) forbids "chess engines, software of any kind, bots,
+plugins, browser extensions, or any tools that analyze positions during play" and
+states "We can detect if you are using any of these programs". Their
+[fair-play explainer](https://www.chess.com/cheating) says about 85% of closures
+are automated and lists 100+ gameplay factors.
+
 ## 3. How this compares with nitro-wraith
 
 | | `nitro-wraith` | `chess-wraith` |
