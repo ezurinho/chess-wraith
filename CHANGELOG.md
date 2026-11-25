@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.7.2 — 2026-11-25
+
+Settings stop belonging to the browser and start belonging to the account.
+
+- **Per-account settings**: `chess-wraith-settings-v1:<username>`. A second
+  account on the same machine no longer inherits the first one's depth, slack,
+  delay or theme. One-time migration copies the old global key into the account
+  that is signed in, so an existing install keeps its tuning. Anonymous keeps
+  the global key.
+- **The signed-in name no longer depends on the navbar having painted**: it is
+  read from `#user-username-component` / `.user-username` / `.profile-username`
+  and, failing that, from `window.chesscom.user.username` (or the navigation
+  config). A late name is adopted mid-session instead of leaving everything on
+  anonymous.
+- The pace row is clickable: it re-reads the account's public games instead of
+  waiting out the six-hour cache, the same way the rating row already did.
+- Five tests: key scoping, name sanitization, navbar vs session-object detection,
+  isolation between two accounts, and the migration. 100 tests.
+
 ## 1.7.1 — 2026-11-25
 
 A six second pace is honest until the clock is not.

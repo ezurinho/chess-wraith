@@ -22,15 +22,17 @@ const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // what it is.
 const TOUCH_GUARD_MS = 2000;
 
-// Two accounts on the same browser should not share a pace fingerprint or an
-// opening habit, so everything adaptive is keyed by whoever is signed in.
-function currentAccount() {
-  for (const sel of ['#user-username-component', '.user-username', '.profile-username']) {
-    const el = document.querySelector(sel);
-    const text = el ? (el.textContent || '').trim() : '';
-    if (text) return text.toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'anonymous';
-  }
-  return 'anonymous';
+// The boot pass reads settings as early as it can, but the navbar can paint
+// after that, and chess.com swaps accounts inside one tab. A late name must not
+// leave the whole session on the anonymous settings set.
+function adoptAccountSettings(user) {
+  const name = normalizeAccountName(user || currentAccount());
+  if (!name || name === 'anonymous' || name === state.settingsAccount) return false;
+  const adopted = loadSettings(name);
+  Object.assign(cfg, adopted);
+  state.settingsAccount = name;
+  refreshPanel();
+  return true;
 }
 
 function paceKey() {
@@ -45,7 +47,7 @@ function guardKey() {
   return `${GUARD_KEY}:${currentAccount()}`;
 }
 
-const cfg = loadSettings();
+const cfg = loadSettings(currentAccount());
 if (settingsNeedsSave) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
@@ -82,6 +84,8 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  // Which account the loaded settings belong to; see adoptAccountSettings().
+  settingsAccount: '',
   paceProfile: null,
   pacePending: false,
   paceError: '',
@@ -143,6 +147,7 @@ function resolveElo() {
 // tab must not turn one bad minute into a request per page load.
 async function syncAccountRatings(force) {
   const user = currentAccount();
+  if (user !== 'anonymous') adoptAccountSettings(user);
   try {
     const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
     const fresh = cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS;
@@ -1136,6 +1141,12 @@ function boot() {
   if (panel.el && panel.el.rating) {
     panel.el.rating.style.cursor = 'pointer';
     panel.el.rating.addEventListener('click', () => syncAccountRatings(true));
+  }
+  // Same idea for the pace: clicking it re-reads the account's public games
+  // instead of waiting out the six-hour cache.
+  if (panel.el && panel.el.pace) {
+    panel.el.pace.style.cursor = 'pointer';
+    panel.el.pace.addEventListener('click', () => syncPaceProfile(true));
   }
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());

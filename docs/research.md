@@ -117,6 +117,17 @@ and is used before the locally learned one exists. A 1800 blitz account whose
 games average 3 s a move now moves at 3 s from move one, not after ten moves of
 defaults.
 
+## What the fair-play policy actually says
+
+chess.com's Fair Play Policy (last updated 2026-03-25) forbids, in its own
+words: *"chess engines, software of any kind, bots, plugins, browser extensions,
+or any tools that analyze positions during play. We can detect if you are using
+any of these programs."* It also forbids tablebases and "automated analysis or
+blunder checking of your games in progress". There is no exemption for a
+tool that only paces a human move, so the honest reading is that a userscript
+that plays ranked games is a violation whatever its pacing. The pacing work
+below is about not looking like a machine, not about being allowed.
+
 ## Why the lite single-threaded build, and not the strong one
 
 Stockfish.js 19 ships five builds. The multi-threaded ones need the page to be

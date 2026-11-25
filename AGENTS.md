@@ -55,8 +55,8 @@ only version anyone installs.
 - `src/55-pace.js` — `%clk` parsing from public PGN and the per-account pace
   median. Chess.com splits the clock comment across tokens; the parser knows.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic, jsdom board tests, a fake-worker engine test and
-  the pace parser (95 tests). The real wasm download and compile still need a
+- `tests/unit/` — pure logic, jsdom board tests, a fake-worker engine test, the
+  pace parser and account-scoped settings (100 tests). The real wasm download and compile still need a
   browser; the UCI protocol, options, queued searches and fallback are covered.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the
   selector layer is tested, not just eyeballed.

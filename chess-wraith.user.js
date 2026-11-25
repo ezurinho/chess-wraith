@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.7.1
+// @version      1.7.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.7.1';
+const VERSION = '1.7.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -104,7 +104,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.7.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.7.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -272,12 +272,72 @@ function pickRating(ratings, timeClass) {
   return ratings[timeClass] || ratings.blitz || ratings.rapid || ratings.bullet || ratings.daily || null;
 }
 
+// Who is signed in. The navbar is the reliable place, but chess.com also puts the
+// session on window.chesscom, and a page that has not painted its navbar yet used
+// to be treated as anonymous: wrong rating, wrong pace, and now wrong settings.
+function normalizeAccountName(value) {
+  const name = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  return name.slice(0, 32);
+}
+
+function currentAccount() {
+  const doc = typeof document !== 'undefined' ? document : null;
+  if (doc) {
+    for (const sel of ['#user-username-component', '.user-username', '.profile-username']) {
+      let el = null;
+      try {
+        el = doc.querySelector(sel);
+      } catch {
+        el = null;
+      }
+      const fromDom = el ? normalizeAccountName(el.textContent) : '';
+      if (fromDom) return fromDom;
+    }
+  }
+  const win = typeof window !== 'undefined' ? window : null;
+  const site = win && win.chesscom;
+  const candidates = [
+    site && site.user && site.user.username,
+    site && site.userNavigationConfig && site.userNavigationConfig.username
+  ];
+  for (const candidate of candidates) {
+    const name = normalizeAccountName(candidate);
+    // A logged-out page can still carry a placeholder name; it is not a player.
+    if (name && name !== 'guest' && name !== 'anonymous') return name;
+  }
+  return 'anonymous';
+}
+
+// Settings belong to the account, not to the browser: a second account on the
+// same machine used to inherit the first one's depth and theme, which is how a
+// 900-rated profile ends up calibrated like a 2400 one. Anonymous keeps the
+// legacy global key so a logged-out tab still has somewhere to write.
+function settingsKeyFor(user) {
+  const name = normalizeAccountName(user === undefined ? currentAccount() : user);
+  return name && name !== 'anonymous' ? `${STORAGE_KEY}:${name}` : STORAGE_KEY;
+}
+
 // Set when the stored settings were rewritten in memory and should be flushed.
 let settingsNeedsSave = false;
 
-function loadSettings() {
+function loadSettings(user) {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const key = settingsKeyFor(user);
+    let stored = localStorage.getItem(key);
+    // One-time migration from the single global key: an existing install keeps
+    // the tuning it had, then diverges per account.
+    if (!stored && key !== STORAGE_KEY) {
+      const legacy = localStorage.getItem(STORAGE_KEY);
+      if (legacy) {
+        stored = legacy;
+        try {
+          localStorage.setItem(key, legacy);
+        } catch {
+          /* storage can be full; the value is still used below */
+        }
+      }
+    }
+    const raw = JSON.parse(stored || '{}');
     const merged = { ...CONFIG, ...raw };
     // 1650 was this script's own default, not a choice. The first load after
     // 1.6.0 treats it as "no opinion" and lets the account's rating take over.
@@ -315,9 +375,9 @@ function loadSettings() {
   }
 }
 
-function saveSettings(cfg) {
+function saveSettings(cfg, user) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    localStorage.setItem(settingsKeyFor(user), JSON.stringify(cfg));
   } catch {
     /* storage can be blocked; the panel keeps the in-memory value */
   }
@@ -3586,15 +3646,17 @@ const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // what it is.
 const TOUCH_GUARD_MS = 2000;
 
-// Two accounts on the same browser should not share a pace fingerprint or an
-// opening habit, so everything adaptive is keyed by whoever is signed in.
-function currentAccount() {
-  for (const sel of ['#user-username-component', '.user-username', '.profile-username']) {
-    const el = document.querySelector(sel);
-    const text = el ? (el.textContent || '').trim() : '';
-    if (text) return text.toLowerCase().replace(/[^a-z0-9_-]/g, '') || 'anonymous';
-  }
-  return 'anonymous';
+// The boot pass reads settings as early as it can, but the navbar can paint
+// after that, and chess.com swaps accounts inside one tab. A late name must not
+// leave the whole session on the anonymous settings set.
+function adoptAccountSettings(user) {
+  const name = normalizeAccountName(user || currentAccount());
+  if (!name || name === 'anonymous' || name === state.settingsAccount) return false;
+  const adopted = loadSettings(name);
+  Object.assign(cfg, adopted);
+  state.settingsAccount = name;
+  refreshPanel();
+  return true;
 }
 
 function paceKey() {
@@ -3609,7 +3671,7 @@ function guardKey() {
   return `${GUARD_KEY}:${currentAccount()}`;
 }
 
-const cfg = loadSettings();
+const cfg = loadSettings(currentAccount());
 if (settingsNeedsSave) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
@@ -3646,6 +3708,8 @@ const state = {
   sessionStart: Date.now(),
   gamesPlayed: 1,
   slackBoost: 0,
+  // Which account the loaded settings belong to; see adoptAccountSettings().
+  settingsAccount: '',
   paceProfile: null,
   pacePending: false,
   paceError: '',
@@ -3707,6 +3771,7 @@ function resolveElo() {
 // tab must not turn one bad minute into a request per page load.
 async function syncAccountRatings(force) {
   const user = currentAccount();
+  if (user !== 'anonymous') adoptAccountSettings(user);
   try {
     const cached = JSON.parse(localStorage.getItem(ratingKey()) || '{}');
     const fresh = cached && cached.ratings && Date.now() - Number(cached.at || 0) < RATING_TTL_MS;
@@ -4700,6 +4765,12 @@ function boot() {
   if (panel.el && panel.el.rating) {
     panel.el.rating.style.cursor = 'pointer';
     panel.el.rating.addEventListener('click', () => syncAccountRatings(true));
+  }
+  // Same idea for the pace: clicking it re-reads the account's public games
+  // instead of waiting out the six-hour cache.
+  if (panel.el && panel.el.pace) {
+    panel.el.pace.style.cursor = 'pointer';
+    panel.el.pace.addEventListener('click', () => syncPaceProfile(true));
   }
   window.addEventListener('pagehide', releaseTab);
   panel.render(statusView());

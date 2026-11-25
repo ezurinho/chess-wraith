@@ -158,12 +158,72 @@ function pickRating(ratings, timeClass) {
   return ratings[timeClass] || ratings.blitz || ratings.rapid || ratings.bullet || ratings.daily || null;
 }
 
+// Who is signed in. The navbar is the reliable place, but chess.com also puts the
+// session on window.chesscom, and a page that has not painted its navbar yet used
+// to be treated as anonymous: wrong rating, wrong pace, and now wrong settings.
+function normalizeAccountName(value) {
+  const name = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  return name.slice(0, 32);
+}
+
+function currentAccount() {
+  const doc = typeof document !== 'undefined' ? document : null;
+  if (doc) {
+    for (const sel of ['#user-username-component', '.user-username', '.profile-username']) {
+      let el = null;
+      try {
+        el = doc.querySelector(sel);
+      } catch {
+        el = null;
+      }
+      const fromDom = el ? normalizeAccountName(el.textContent) : '';
+      if (fromDom) return fromDom;
+    }
+  }
+  const win = typeof window !== 'undefined' ? window : null;
+  const site = win && win.chesscom;
+  const candidates = [
+    site && site.user && site.user.username,
+    site && site.userNavigationConfig && site.userNavigationConfig.username
+  ];
+  for (const candidate of candidates) {
+    const name = normalizeAccountName(candidate);
+    // A logged-out page can still carry a placeholder name; it is not a player.
+    if (name && name !== 'guest' && name !== 'anonymous') return name;
+  }
+  return 'anonymous';
+}
+
+// Settings belong to the account, not to the browser: a second account on the
+// same machine used to inherit the first one's depth and theme, which is how a
+// 900-rated profile ends up calibrated like a 2400 one. Anonymous keeps the
+// legacy global key so a logged-out tab still has somewhere to write.
+function settingsKeyFor(user) {
+  const name = normalizeAccountName(user === undefined ? currentAccount() : user);
+  return name && name !== 'anonymous' ? `${STORAGE_KEY}:${name}` : STORAGE_KEY;
+}
+
 // Set when the stored settings were rewritten in memory and should be flushed.
 let settingsNeedsSave = false;
 
-function loadSettings() {
+function loadSettings(user) {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const key = settingsKeyFor(user);
+    let stored = localStorage.getItem(key);
+    // One-time migration from the single global key: an existing install keeps
+    // the tuning it had, then diverges per account.
+    if (!stored && key !== STORAGE_KEY) {
+      const legacy = localStorage.getItem(STORAGE_KEY);
+      if (legacy) {
+        stored = legacy;
+        try {
+          localStorage.setItem(key, legacy);
+        } catch {
+          /* storage can be full; the value is still used below */
+        }
+      }
+    }
+    const raw = JSON.parse(stored || '{}');
     const merged = { ...CONFIG, ...raw };
     // 1650 was this script's own default, not a choice. The first load after
     // 1.6.0 treats it as "no opinion" and lets the account's rating take over.
@@ -201,9 +261,9 @@ function loadSettings() {
   }
 }
 
-function saveSettings(cfg) {
+function saveSettings(cfg, user) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    localStorage.setItem(settingsKeyFor(user), JSON.stringify(cfg));
   } catch {
     /* storage can be blocked; the panel keeps the in-memory value */
   }
