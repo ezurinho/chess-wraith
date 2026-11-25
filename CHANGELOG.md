@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.25.0 — 2026-11-25
+
+The bench that starts the script.
+
+Every other test loaded a slice. Boot was never run outside a browser, so the
+one failure that ends a session first — the script throwing on page load — had
+no test at all.
+
+- `tests/unit/session.test.js` loads all twelve fragments into jsdom and lets
+  boot run against chess.com-shaped markup, a protocol-level fake worker
+  (`uci`/`uciok`, `isready`/`readyok`, one `info` + `bestmove`) and a stubbed
+  account API.
+- Three cases: boot reads the start position and brings the engine up; the
+  engine answer reaches `state.analysis`; and a finished game with AFK on
+  presses Rematch once, without a human.
+- Timers are tracked and the page is closed in a `finally`, so the suite still
+  exits on its own.
+- 144 tests, 21 files.
+
 ## 1.24.0 — 2026-11-25
 
 Promotion does not spend a low clock waiting.

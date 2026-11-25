@@ -56,11 +56,14 @@ only version anyone installs.
   median. Chess.com splits the clock comment across tokens; the parser knows.
 - `src/90-boot.js` — orchestration and the debug API.
 - `tests/unit/` — pure logic, jsdom board tests, a fake-worker engine test, the
-  pace parser, account-scoped settings and the input geometry and the promotion poll, the pace class defaults and the move retry plan and the game-over transition and engine recovery and the clock bounds and timer throttling (144 tests). The real wasm download and compile still
+  pace parser, account-scoped settings and the input geometry and the promotion poll, the pace class defaults and the move retry plan and the game-over transition and engine recovery and the clock bounds and timer throttling (144 tests). `session.test.js` loads every fragment into jsdom with a protocol-level fake worker, so boot, the board reader, the engine handshake, the panel mount and the AFK rematch are exercised together. The real wasm download and compile still
   need a browser; the UCI protocol, options, queued searches and fallback are
   covered.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the
   selector layer is tested, not just eyeballed.
+- `tests/unit/session.test.js` — the whole script in one jsdom page: boot, board
+  read, engine handshake, panel host, and a finished game whose rematch button
+  is pressed. It owns real timers, so each test stops the page in a `finally`.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,
   and the comparison with `nitro-wraith`. Update the numbers when they change;
   they are claims, and claims rot.
