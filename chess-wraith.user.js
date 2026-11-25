@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.5.3
+// @version      1.5.4
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.5.3';
+const VERSION = '1.5.4';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -105,7 +105,7 @@ const STYLES = { legit: LEGIT };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.3/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.5.4/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2981,7 +2981,7 @@ const PANEL_HTML = `
         <div class="card">
           <div class="card-h"><span class="card-t">Engine</span><span class="card-s">local, no server</span></div>
           <div class="set"><span class="set-lbl">Target Elo<i>drives Skill Level</i></span><span class="set-val"><input class="num" type="number" data-el="elo" min="1320" max="3190" step="10"></span></div>
-          <div class="set"><span class="set-lbl">Depth</span><span class="set-val"><input class="num" type="number" data-el="depth" min="4" max="20" step="1"></span></div>
+          <div class="set"><span class="set-lbl">Depth</span><span class="set-val"><input class="num" type="number" data-el="depthInput" min="4" max="20" step="1"></span></div>
           <div class="set"><span class="set-lbl">Search ms</span><span class="set-val"><input class="num" type="number" data-el="movetime" min="150" max="5000" step="50"></span></div>
           <div class="set"><span class="set-lbl">Slack cp<i>how far from best it may drift</i></span><span class="set-val"><input class="num" type="number" data-el="slack" min="0" max="300" step="5"></span></div>
         </div>
@@ -3020,7 +3020,7 @@ const PANEL_HTML = `
         <div class="card">
           <div class="card-h"><span class="card-t">Updates</span><span class="card-s" data-el="updateState">checking…</span></div>
           <div class="rows">
-            <div class="row"><span>Installed</span><b data-el="build">–</b></div>
+            <div class="row"><span>Installed</span><b data-el="installed">–</b></div>
             <div class="row"><span>Latest</span><b data-el="latest">–</b></div>
             <div class="row"><span>Checked</span><b data-el="checked">never</b></div>
           </div>
@@ -3141,7 +3141,7 @@ class WraithPanel {
     // Only the four knobs that change the search restart it; the rest are
     // display or pacing and must not throw away the running analysis.
     for (const key of ['targetElo', 'maxDepth', 'moveTimeMs']) {
-      bindNumber(this.el[{ targetElo: 'elo', maxDepth: 'depth', moveTimeMs: 'movetime' }[key]], key, true);
+      bindNumber(this.el[{ targetElo: 'elo', maxDepth: 'depthInput', moveTimeMs: 'movetime' }[key]], key, true);
     }
     for (const [el, key] of [[this.el.mint, 'minThinkMs'], [this.el.maxt, 'maxThinkMs'], [this.el.slack, 'humanSlackCp'], [this.el.showLines, 'showLines']]) {
       bindNumber(el, key, false);
@@ -3295,6 +3295,7 @@ class WraithPanel {
           ? 'auto play armed'
           : 'idle';
     this.el.build.textContent = v.version || VERSION;
+    this.el.installed.textContent = v.version || VERSION;
     const latest = String(v.updateLatest || '');
     const newer = versionNewer(latest, v.version || VERSION);
     this.el.update.hidden = !newer;

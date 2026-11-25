@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.4 — 2026-11-25
+
+The Info tab's Build card showed `–` for its own version: the new Updates card
+reused `data-el="build"`, and the second binding won.
+
+- The Updates card row is `installed`, and a unit test now fails when any two
+  elements in the panel share a `data-el` name.
+- 78 tests (was 76).
+
 ## 1.5.3 — 2026-11-25
 
 Two things that only show up on a release day.

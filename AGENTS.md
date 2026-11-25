@@ -43,7 +43,7 @@ node tools/release.js check    # package/header/README badge/CHANGELOG agree
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
 - `src/90-boot.js` — orchestration and the debug API.
-- `tests/unit/` — pure logic (76 tests). There is no DOM test harness: the board
+- `tests/unit/` — pure logic (78 tests). There is no DOM test harness: the board
   reader and the worker boot are verified by hand against the live site, which is
   the known weak point.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,
