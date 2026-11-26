@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.68.0 — 2026-11-27
+
+Review of 1.67.0, with the sources behind the claims.
+
+- The fair-play number now comes from chess.com's own Fair Play Update for
+  November 2025: 126,000 accounts closed in one month, 16 titled bans.
+- The ACPL band is documented as an extrapolation past the end of the measured
+  data, with the sample table and its flat blunder rate printed next to it.
+- The flipped board is verified live: the FEN is identical after the flip and a
+  move lands on the right squares.
+- Four games at a 133 account now published together: 185.8, 118.2, 62.0, 104.5.
+
 ## 1.67.0 — 2026-11-27
 
 The second attempt is not a different rule.

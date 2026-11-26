@@ -829,6 +829,36 @@ states "We can detect if you are using any of these programs". Their
 [fair-play explainer](https://www.chess.com/cheating) says about 85% of closures
 are automated and lists 100+ gameplay factors.
 
+Volume, from the primary source rather than a summary: the
+[Fair Play Update for November 2025](https://www.chess.com/blog/FairPlay/fair-play-update-november-2025)
+(19 December 2025) reports **126,000 accounts closed in that month** and 16
+titled players banned, "relatively consistent with previous months". That is about
+4,200 closures a day, which is the number this project's own cost-benefit
+argument rests on: the base rate is high enough that a run of clean games is not
+evidence of safety, and low enough that most accounts are never touched.
+
+## 2d. The ACPL band is an extrapolation, and the data says so
+
+The band (270-320 cp/move at a 133 account) has no direct dataset behind it. The
+nearest public one is a per-band sample of Lichess blitz games analysed in bulk
+(`chessanalysis.co`):
+
+| Chess.com band | Games | Average CPL | Blunder rate |
+| --- | --- | --- | --- |
+| 500-700 | 68,678 | 181.9 | 19.2% |
+| 700-900 | 68,203 | 177.2 | 19.3% |
+| 800-1100 | 68,351 | 169.0 | 19.0% |
+| 1100-1300 | 69,081 | 161.2 | 18.5% |
+| 1300-1600 | 66,704 | 155.7 | 18.3% |
+| 1600-1800 | 75,412 | 149.7 | 18.2% |
+
+Two things follow. First, every band measured is below 133's 270-320, so the band
+is an extrapolation past the end of the data, not a measurement. Second, the
+blunder rate barely moves from 600 to 1700 (19.2% to 18.2%): a sample that cannot
+separate those two players cannot be used to place a 133. The band stays as a
+design parameter, and the review says so next to the numbers it produces.
+Source: [chessanalysis.co CPL by rating](https://chessanalysis.co/research/lichess-blitz-accuracy-by-rating).
+
 ## What the 2026 public scripts ship, and what none of them does
 
 Read on 2026-11-26 from GreasyFork and GitHub, not from their screenshots:
