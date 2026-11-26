@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.64.0 — 2026-11-27
+
+A click can move a piece I did not ask for.
+
+- The live game of 1.63.3 lost black's a8 rook out of the position: the click
+  selected the wrong piece, the board moved it, the grid changed, and `playMove`
+  called that a success because it only compared "changed" with "not changed".
+- The landed position is now compared with the position the rules say that move
+  produces (`generateLegalMoves` → `nextState.grid`). A different move is
+  reported as such and is not counted as played.
+
 ## 1.63.3 — 2026-11-27
 
 A hanging move is chosen, not weighed.

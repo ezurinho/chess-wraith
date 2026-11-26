@@ -1455,7 +1455,23 @@ async function playMove(move, targetFen, choice) {
     after = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
     if (after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid)) break;
   }
-  const landed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
+  // "The board changed" is not "the move I asked for landed": a click that
+  // selects the wrong piece moves that piece and the grid still changes. The
+  // expected position is computed from the rules, not from the eye.
+  let expected = null;
+  try {
+    const wanted = Chess.generateLegalMoves(snap).find((m) => Chess.moveToUci(m) === move);
+    expected = wanted ? wanted.nextState.grid : null;
+  } catch {
+    expected = null;
+  }
+  const changed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
+  const landed = changed && (!expected || Chess.gridsEqual(after.grid, expected));
+  if (changed && !landed) {
+    state.warn = 'the board played a different move';
+    state.moveMisses = (state.moveMisses || 0) + 1;
+    refreshPanel();
+  }
   if (landed) {
     state.autoMovedGrid = after.grid;
     state.moveMisses = 0;
