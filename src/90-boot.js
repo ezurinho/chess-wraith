@@ -1093,7 +1093,8 @@ function probeOpeningMove(probe, result) {
     depth: Math.min(cfg.maxDepth, 12),
     // A fixed 400 ms is a rapid budget: on 1+0 the probe would spend most of the
     // move's search on a move the account plays without thinking.
-    moveTimeMs: Math.min(400, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6)))
+    // The 180 ms floor must never outlast a search the user set shorter than that.
+    moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6))))
   };
   engine
     .analyze(request)

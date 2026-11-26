@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.51.4 — 2026-11-26
+
+The probe never outlasts the search the user chose.
+
+- The 180 ms floor could exceed `cfg.moveTimeMs` when that was set below it, so the
+  subsidary search ran longer than the main one. The budget is now
+  `min(400, cfg.moveTimeMs, max(180, 0.6 x searchBudget))` ms with an 80 ms floor.
+
 ## 1.51.3 — 2026-11-26
 
 The probe's budget follows the clock.
