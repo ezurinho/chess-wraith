@@ -110,7 +110,7 @@ sampled 400 binomial draws with a 0.55-0.65 window, about two sigma wide. It is
 
 | Account | Band (cp/move) | Delivered, live | Spread |
 | --- | --- | --- | --- |
-| 133 | 270–320 | 339–343 (ACPL definition) | two games of 20 plies; the earlier 82 was measured after the reply |
+| 133 | 270–320 | 339–343, then 261 after 1.82.0 | 14-20 plies; earlier 82 was measured after the reply |
 | 600 | 200 | 159, then 236 after 1.81.0 | 20 plies each; the rate was the cause, the residual is one game's spread |
 | 1320 | 60 | 2 | 18 plies against an engine-best opponent, no improvised move at all |
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.83.0 — 2026-11-27
+
+Review of 1.82.0: the 133 rung landed on the band's floor.
+
+- Same fixture, 14 plies: 261 cp/move against a 270-320 band, 13 of 14 moves
+  improvised. It used to be 339 with 71% improvisation, which was the band plus a
+  game's worth of spread on top.
+- Two rungs, one method: 133 delivers 261 (band 270-320), 600 delivers 236
+  (band 200). Both inside one game's spread of their band.
+
 ## 1.82.0 — 2026-11-27
 
 Review of 1.81.0: the 600 rung moved from 159 to 236 on a 200 band.
