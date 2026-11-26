@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  '{ acplBand, levelPlayTarget, improvisationChance, styleProfile, chooseMove, LEGIT }'
+  '{ acplBand, levelPlayTarget, improvisationChance, beginnerWeight, pickImprovised, styleProfile, chooseMove, LEGIT }'
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -71,6 +71,29 @@ test('an improvised move comes from the legal list, not from the engine', () => 
   const engine = api.chooseMove(lines, cfg, { accountElo: 133, improvise: pool, rng: () => 0.99 });
   assert.notEqual(engine.improvised, true);
   assert.ok(['e2e4', 'd2d4', 'g1f3'].includes(engine.line.bestUci));
+});
+
+test('an improvised move grabs material instead of wandering', () => {
+  assert.ok(api.beginnerWeight({ capture: 9 }) > api.beginnerWeight({ capture: 0 }));
+  assert.ok(api.beginnerWeight({ check: true }) > api.beginnerWeight({}));
+  assert.ok(api.beginnerWeight({ piece: 'K' }) < api.beginnerWeight({ piece: 'N' }));
+  const pool = [
+    { uci: 'qx', capture: 9 },
+    { uci: 'px', capture: 1 },
+    { uci: 'nd' },
+    { uci: 'kg', piece: 'K' },
+    { uci: 'qe', piece: 'Q', ply: 6 },
+    { uci: 'pp' }
+  ];
+  let queens = 0;
+  let kings = 0;
+  for (let i = 0; i < 600; i += 1) {
+    const pick = api.pickImprovised(pool, Math.random);
+    if (pick.uci === 'qx') queens += 1;
+    if (pick.uci === 'kg') kings += 1;
+  }
+  assert.ok(queens > 300, `took the free queen ${queens} times of 600`);
+  assert.ok(kings < 60, `walked the king ${kings} times of 600`);
 });
 
 test('fourteen lines put the delivered loss in the account range', () => {

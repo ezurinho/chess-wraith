@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.61.0 — 2026-11-27
+
+Bad moves that look like a beginner, not like a dice roll.
+
+- The improvised move was a uniform draw over the legal moves. That is not how a
+  133 plays: it walks the king into the open and ignores a free queen, which is
+  the one way the account's moves could still look like a machine. It is weighted
+  now — material first, then checks, then castling, with king moves cut to 15%
+  and an early queen halved — so the miss is a human miss.
+- The chooser learns what the move does (`capture`, `check`, `castle`, `piece`)
+  from the board in `90-boot.js`; the taste stays in `60-analysis.js` and is
+  testable on its own.
+
 ## 1.60.1 — 2026-11-27
 
 The card's rating stops lying about beginners.

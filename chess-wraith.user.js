@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.60.1
+// @version      1.61.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.60.1';
+const VERSION = '1.61.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.60.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.61.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3467,6 +3467,35 @@ function improvisationChance(target) {
   return clamp((t - 120) / 420, 0, 0.5);
 }
 
+// A uniform draw over the legal moves is not a beginner, it is a random number
+// generator: it walks the king into the open and ignores a free queen. A
+// beginner's move is bad in a specific way — it grabs material, gives a check,
+// develops, and rarely touches the king. This is the weight that makes the
+// improvised move look like that kind of bad instead of any kind of bad.
+function beginnerWeight(cand) {
+  if (!cand) return 0;
+  const capture = Number(cand.capture) || 0;
+  let weight = 1 + capture * 1.5;
+  if (cand.check) weight += 1.5;
+  if (cand.castle) weight += 1.2;
+  if (cand.piece === 'K' && !cand.castle) weight *= 0.15;
+  if (cand.piece === 'Q' && Number(cand.ply) < 12) weight *= 0.5;
+  return weight;
+}
+
+function pickImprovised(pool, rnd) {
+  const rollWith = typeof rnd === 'function' ? rnd : Math.random;
+  let total = 0;
+  for (const cand of pool) total += beginnerWeight(cand);
+  if (!(total > 0)) return pool[0];
+  let roll = rollWith() * total;
+  for (const cand of pool) {
+    roll -= beginnerWeight(cand);
+    if (roll <= 0) return cand;
+  }
+  return pool[pool.length - 1];
+}
+
 // The throttle nothing else has: when the account is playing far above its own
 // rating, hand it more slack until the numbers look human again. It only ever
 // moves in small steps, and only after 15 moves of evidence.
@@ -3565,7 +3594,7 @@ function chooseMove(lines, cfg, opts = {}) {
     if (rnd() < improvisationChance(target)) {
       const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);
       if (pool.length) {
-        const pick = pool[Math.min(pool.length - 1, Math.floor(rnd() * pool.length))];
+        const pick = pickImprovised(pool, rnd);
         return {
           line: { bestUci: pick.uci, bestSan: pick.san || '' },
           cpLoss: target,
@@ -6423,7 +6452,7 @@ function scheduleAutoMove(result) {
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: shares,
-    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
+    improvise: improvisedCandidates(legal, snap, ply)
   });
   let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
@@ -6482,6 +6511,26 @@ function scheduleAutoMove(result) {
   armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
 
   refreshPanel();
+}
+
+const PIECE_WORTH = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+// What an improvised move needs to know about itself: what it takes, whether it
+// checks, what it moves. The chooser owns the taste; the board owns the facts.
+function improvisedCandidates(legal, snap, ply) {
+  return legal.map((m) => {
+    const target = snap.grid[m.toRank] && snap.grid[m.toRank][m.toFile];
+    const from = snap.grid[m.fromRank] && snap.grid[m.fromRank][m.fromFile];
+    const piece = (from || '').toUpperCase();
+    return {
+      uci: Chess.moveToUci(m),
+      capture: PIECE_WORTH[(target || '').toLowerCase()] || 0,
+      check: Chess.isKingInCheck(m.nextState.grid, m.nextState.turn),
+      piece,
+      castle: piece === 'K' && Math.abs(m.toFile - m.fromFile) === 2,
+      ply: Number(ply) || 0
+    };
+  });
 }
 
 // Mate in one is the one loss the promise does not allow. A move that hands one
@@ -6643,7 +6692,7 @@ async function playNow() {
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: ply < OPENING_PLIES ? openingShares() : null,
-    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
+    improvise: improvisedCandidates(legal, snap, ply)
   });
   let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;

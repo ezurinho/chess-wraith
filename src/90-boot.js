@@ -1227,7 +1227,7 @@ function scheduleAutoMove(result) {
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: shares,
-    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
+    improvise: improvisedCandidates(legal, snap, ply)
   });
   let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
@@ -1286,6 +1286,26 @@ function scheduleAutoMove(result) {
   armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
 
   refreshPanel();
+}
+
+const PIECE_WORTH = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+// What an improvised move needs to know about itself: what it takes, whether it
+// checks, what it moves. The chooser owns the taste; the board owns the facts.
+function improvisedCandidates(legal, snap, ply) {
+  return legal.map((m) => {
+    const target = snap.grid[m.toRank] && snap.grid[m.toRank][m.toFile];
+    const from = snap.grid[m.fromRank] && snap.grid[m.fromRank][m.fromFile];
+    const piece = (from || '').toUpperCase();
+    return {
+      uci: Chess.moveToUci(m),
+      capture: PIECE_WORTH[(target || '').toLowerCase()] || 0,
+      check: Chess.isKingInCheck(m.nextState.grid, m.nextState.turn),
+      piece,
+      castle: piece === 'K' && Math.abs(m.toFile - m.fromFile) === 2,
+      ply: Number(ply) || 0
+    };
+  });
 }
 
 // Mate in one is the one loss the promise does not allow. A move that hands one
@@ -1447,7 +1467,7 @@ async function playNow() {
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: ply < OPENING_PLIES ? openingShares() : null,
-    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
+    improvise: improvisedCandidates(legal, snap, ply)
   });
   let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;

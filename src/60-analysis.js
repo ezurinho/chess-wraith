@@ -68,6 +68,35 @@ function improvisationChance(target) {
   return clamp((t - 120) / 420, 0, 0.5);
 }
 
+// A uniform draw over the legal moves is not a beginner, it is a random number
+// generator: it walks the king into the open and ignores a free queen. A
+// beginner's move is bad in a specific way — it grabs material, gives a check,
+// develops, and rarely touches the king. This is the weight that makes the
+// improvised move look like that kind of bad instead of any kind of bad.
+function beginnerWeight(cand) {
+  if (!cand) return 0;
+  const capture = Number(cand.capture) || 0;
+  let weight = 1 + capture * 1.5;
+  if (cand.check) weight += 1.5;
+  if (cand.castle) weight += 1.2;
+  if (cand.piece === 'K' && !cand.castle) weight *= 0.15;
+  if (cand.piece === 'Q' && Number(cand.ply) < 12) weight *= 0.5;
+  return weight;
+}
+
+function pickImprovised(pool, rnd) {
+  const rollWith = typeof rnd === 'function' ? rnd : Math.random;
+  let total = 0;
+  for (const cand of pool) total += beginnerWeight(cand);
+  if (!(total > 0)) return pool[0];
+  let roll = rollWith() * total;
+  for (const cand of pool) {
+    roll -= beginnerWeight(cand);
+    if (roll <= 0) return cand;
+  }
+  return pool[pool.length - 1];
+}
+
 // The throttle nothing else has: when the account is playing far above its own
 // rating, hand it more slack until the numbers look human again. It only ever
 // moves in small steps, and only after 15 moves of evidence.
@@ -166,7 +195,7 @@ function chooseMove(lines, cfg, opts = {}) {
     if (rnd() < improvisationChance(target)) {
       const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);
       if (pool.length) {
-        const pick = pool[Math.min(pool.length - 1, Math.floor(rnd() * pool.length))];
+        const pick = pickImprovised(pool, rnd);
         return {
           line: { bestUci: pick.uci, bestSan: pick.san || '' },
           cpLoss: target,
