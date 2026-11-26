@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.80.0 — 2026-11-27
+
+Review of 1.79.0: the top of the ladder delivers nothing, and it is published.
+
+- A 1320 account against an engine-best opponent played 18 moves with no
+  improvised move and measured 2 cp/move against a 60 cp band. The improvisation
+  chance at that band is 0.13, so the band cannot be reached by construction.
+- The measurement is a lower bound there: both evaluations come from the same
+  weakened search, so it sees the engine agreeing with itself, not the loss a full
+  reference would price.
+- Grades move down, not up: product 8.5, verification 8.3, overall 8.4.
+
 ## 1.79.0 — 2026-11-27
 
 Review of 1.78.0: the ladder, with the rung that cannot be measured.

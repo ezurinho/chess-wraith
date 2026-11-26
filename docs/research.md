@@ -846,12 +846,18 @@ the model was given, the delivery is what the panel measured at the move.
 | --- | --- | --- | --- | --- |
 | 133 | 270-320 | 339-343 | 20 | two runs; improvised share 0.71 |
 | 600 | 200 | 159 | 20 | one run; improvised share 0.48 |
-| 1320 | 60 | not measured | 4 | a 1320 account mates a random opponent in seven plies |
+| 1320 | 60 | **2** | 18 | engine-best opponent; zero improvised moves in the game |
 
 The random opponent is only a stand-in at the bottom of the ladder: it takes
 material, which is what a 133 does, and it hands the game over, which is what a
-1320 does not. Measuring the top rungs needs an opponent that survives, and until
-that exists the 60 cp band is a design parameter with no measurement behind it.
+1320 does not. Against an engine-best opponent instead, a 1320 account delivered
+**2 cp/move** over 18 plies, against a 60 cp band, with **no improvised move at
+all**: the improvisation chance at that band is (60-8)/400 = 0.13, so the game
+was 18 near-optimal moves. Two defects fall out of that: the band is unreachable
+by construction at the top (13% of moves cannot carry a 60 cp average unless each
+costs 460), and the subtraction is self-consistent — both evaluations come from
+the same weakened search, so a loss measured against the engine's own limited
+view is a lower bound, not the loss against a full-strength reference.
 
 The 600 rung is 20% under its band for a structural reason: only 48% of the moves
 are improvised at that rating and the rest are near-best, so the mean is diluted
