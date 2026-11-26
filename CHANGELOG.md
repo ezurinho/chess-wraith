@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.32.0 — 2026-11-25
+
+Offline at boot is no longer permanent.
+
+- Boot happened once. If both the NNUE fetch and the JS fallback threw — a
+  laptop waking from sleep, a CDN edge without the new tag, a captive portal —
+  the engine stayed `offline` until the tab was reloaded, with AFK armed and
+  nothing playing.
+- The engine now retries on a backoff: 5 s, 20 s, 60 s, then every 5 minutes,
+  and a `readyok` resets the ladder. The panel's warning line says which attempt
+  and when the next one is.
+- Fixed underneath it: `rememberNnueSkip()` was writing a seven-day verdict on
+  *any* NNUE failure, `TypeError: Failed to fetch` included. One bad minute of
+  Wi-Fi downgraded every load for a week to the 2019 build. The skip is now
+  written only when the failure is not a network error (5xx counts as network, a
+  404 does not).
+- 157 tests: the backoff, the network-vs-build distinction, and the 404 case.
+
 ## 1.31.0 — 2026-11-25
 
 A key that stops the session, not just the panel.

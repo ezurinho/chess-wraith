@@ -17,7 +17,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, 'src', rel), 'utf8');
 const FRAGMENTS = ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '40-board.js', '50-engine.js'];
 
-function harness({ nnueSkip = true } = {}) {
+function harness({ nnueSkip = true, fetchImpl = null } = {}) {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://www.chess.com/play/online' });
   const workers = [];
   class FakeWorker {
@@ -63,7 +63,7 @@ function harness({ nnueSkip = true } = {}) {
     Blob: dom.window.Blob,
     Worker: FakeWorker,
     URL: { createObjectURL: () => 'blob:fake', revokeObjectURL: () => {} },
-    fetch: async () => ({ ok: true, status: 200, text: async () => '/* engine */' }),
+    fetch: fetchImpl || (async () => ({ ok: true, status: 200, text: async () => '/* engine */' })),
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
       setItem: (k, v) => storage.set(k, String(v)),
@@ -315,5 +315,89 @@ test('a search that never answers is stopped, the worker is dropped and the prom
   assert.equal(finals.length, 1);
   assert.equal(finals[0].bestmove, null);
   assert.equal(finals[0].final, true);
+  engine.destroy();
+});
+// The panel could say "offline" for eight hours and nothing ever asked again.
+// Boot failures are now retried on a backoff, and a network failure is not
+// allowed to poison the NNUE skip cache: one bad minute of Wi-Fi used to
+// downgrade the next week of loads.
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+test('an offline boot is retried on a backoff instead of staying dead', async () => {
+  let calls = 0;
+  const { api, workers, advance } = harness({
+    nnueSkip: false,
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls <= 2) throw new TypeError('Failed to fetch');
+      return { ok: true, status: 200, text: async () => '/* engine */' };
+    }
+  });
+  const engine = new api.WraithEngine();
+  const errors = [];
+  engine.onError = (message) => errors.push(message);
+  await assert.rejects(() => engine.boot());
+  assert.equal(engine.mode, 'offline');
+  assert.equal(engine.retryAttempt, 1, 'the first failure schedules a retry');
+  assert.equal(engine.retryDelay, 5000, 'after five seconds');
+  assert.ok(errors.some((line) => /retrying in 5s/.test(line)), 'and says so');
+  assert.equal(workers.length, 0, 'nothing was spawned while offline');
+
+  advance(5000);
+  await flush();
+  await flush();
+  assert.equal(workers.length, 1, 'the retry spawned a worker');
+  const worker = workers[0];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  assert.equal(engine.ready, true);
+  assert.equal(engine.retryAttempt, 0, 'a ready engine resets the backoff');
+  engine.destroy();
+});
+
+test('a network failure does not remember the NNUE skip for a week', async () => {
+  let calls = 0;
+  const { api, workers, storage } = harness({
+    nnueSkip: false,
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError('Failed to fetch');
+      return { ok: true, status: 200, text: async () => '/* engine */' };
+    }
+  });
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await flush();
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+  assert.equal(engine.nnue, false, 'this load fell back to the JS engine');
+  assert.equal(
+    storage.has('chess-wraith-nnue-skip-v1'),
+    false,
+    'but the next load still tries NNUE: the failure was the network, not the build'
+  );
+  engine.destroy();
+});
+
+test('a 404 on the NNUE script still remembers the skip', async () => {
+  let calls = 0;
+  const { api, workers, storage } = harness({
+    nnueSkip: false,
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('HTTP 404 for nnue.js');
+      return { ok: true, status: 200, text: async () => '/* engine */' };
+    }
+  });
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await flush();
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+  assert.equal(storage.has('chess-wraith-nnue-skip-v1'), true, 'a real 404 is a verdict');
   engine.destroy();
 });

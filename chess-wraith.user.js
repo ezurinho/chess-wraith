@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.31.0
+// @version      1.32.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.31.0';
+const VERSION = '1.32.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.31.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.32.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2122,6 +2122,18 @@ function buildNnueShim(wasmUrl, engineJsUrl) {
   );
 }
 
+// 5 s, 20 s, 60 s, then every five minutes.
+const RETRY_BACKOFF_MS = [5000, 20000, 60000, 300000];
+
+// A fetch that never left the machine throws TypeError; an edge that is not
+// ready answers 5xx. Both mean "try again" and neither is a verdict about the
+// build, so neither may poison the NNUE skip cache.
+function isNetworkError(err) {
+  if (!err) return false;
+  if (err.name === 'TypeError') return true;
+  return /^HTTP 5\d\d/.test(String(err.message || ''));
+}
+
 class WraithEngine {
   constructor() {
     this.worker = null;
@@ -2142,6 +2154,13 @@ class WraithEngine {
     this.nnueRetried = false;
     this.recovering = false;
     this.recoveries = 0;
+    // Boot can fail for reasons that outlive a page load: no network, a CDN
+    // edge that has not warmed, a captive portal. Retrying is the difference
+    // between a script that recovers and one that stays offline until reload.
+    this.retryTimer = null;
+    this.retryAttempt = 0;
+    this.retryDelay = 0;
+    this.retryAt = 0;
   }
 
   async boot() {
@@ -2176,12 +2195,43 @@ class WraithEngine {
       return;
     }
     try {
-      await this.#spawn(true);
-    } catch (err) {
-      rememberNnueSkip();
-      this.onError && this.onError(`NNUE engine unavailable (${err.message}); using the JS engine`);
+      try {
+        await this.#spawn(true);
+        return;
+      } catch (err) {
+        // Only a failed *fallback* proves the build is the problem. A fetch
+        // that dies on the way to the CDN says nothing about NNUE, and
+        // remembering that verdict for a week would downgrade every later
+        // load because of one bad minute of Wi-Fi.
+        this.nnueFailure = err;
+        this.onError && this.onError(`NNUE engine unavailable (${err.message}); trying the JS engine`);
+      }
       await this.#spawn(false);
+      if (!isNetworkError(this.nnueFailure)) rememberNnueSkip();
+    } catch (err) {
+      this.#scheduleRetry(err);
+      throw err;
     }
+  }
+
+  // 5 s, 20 s, 60 s, then every 5 minutes. A laptop that slept through a
+  // Wi-Fi blip recovers on its own; one that is genuinely offline costs a
+  // timer every five minutes and nothing else.
+  #scheduleRetry(err) {
+    this.mode = 'offline';
+    this.ready = false;
+    if (this.retryTimer) return;
+    this.retryAttempt += 1;
+    const delay = RETRY_BACKOFF_MS[Math.min(this.retryAttempt - 1, RETRY_BACKOFF_MS.length - 1)];
+    this.retryDelay = delay;
+    this.retryAt = Date.now() + delay;
+    const seconds = Math.round(delay / 1000);
+    this.onError && this.onError(`engine offline (${err && err.message ? err.message : 'boot failed'}); retrying in ${seconds}s`);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.booted = null;
+      this.boot().catch(() => {});
+    }, delay);
   }
 
   // Kill the worker, unblock whoever is waiting on it, and boot a fresh one in
@@ -2321,6 +2371,12 @@ class WraithEngine {
     if (line === 'readyok') {
       this.ready = true;
       this.recoveries = 0;
+      // It came back: the backoff starts over, so the next outage retries fast.
+      this.retryAttempt = 0;
+      this.retryDelay = 0;
+      this.retryAt = 0;
+      if (this.retryTimer) clearTimeout(this.retryTimer);
+      this.retryTimer = null;
       // It booted: whatever we remembered about this mirror is wrong now.
       if (this.nnue) forgetNnueSkip();
       if (this.handshakeTimer) clearTimeout(this.handshakeTimer);
@@ -2511,6 +2567,8 @@ class WraithEngine {
   destroy() {
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = null;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
     try {
       this.#send('quit');
       this.worker && this.worker.terminate();

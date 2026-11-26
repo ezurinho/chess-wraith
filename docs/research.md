@@ -195,6 +195,24 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## Offline at boot used to be permanent
+
+`#bootInner` had one failure path nobody had taken: if both the NNUE fetch and
+the JS fallback fetch threw, the promise rejected, the caller swallowed it, and
+`mode` stayed `'offline'` until the tab was reloaded. On a laptop that is the
+normal ending of a Wi-Fi blip — and with AFK armed, eight hours of nothing.
+
+Two things were wrong in that path.
+
+1. **No retry.** Boot happens once. It now schedules 5 s, 20 s, 60 s, then every
+   five minutes, and a `readyok` resets the ladder. A genuinely offline machine
+   pays a timer every five minutes; a machine that came back plays.
+2. **A network blip was remembered as a broken build.** `rememberNnueSkip()`
+   wrote seven days of `NNUE_SKIP_TTL_MS` on *any* NNUE failure, including
+   `TypeError: Failed to fetch`. One bad minute of Wi-Fi downgraded every load for
+   a week, silently, to the 2019 build. The skip is now written only when the
+   fallback also fails to fetch or the error is not a network error (5xx counts as
+   network; a 404 does not — that is a real verdict about the mirror).
 ## Hide is not stop
 
 `panel.toggleHidden()` sets `style.display = 'none'` and flips a boolean. Nothing
@@ -353,7 +371,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 154 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 157 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
