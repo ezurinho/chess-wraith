@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.52.1 — 2026-11-26
+
+The button's probe obeys the same budget as the timer's.
+
+- 1.52.0 gave `playNow` a fixed `min(400, cfg.moveTimeMs)` probe, which on a short
+  clock let the manual path think longer than the auto path. Both now use
+  `min(400, cfg.moveTimeMs, max(180, 0.6 x searchBudget))`.
+
 ## 1.52.0 — 2026-11-26
 
 The play button plays the account's move too.

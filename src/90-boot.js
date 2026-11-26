@@ -1346,7 +1346,9 @@ async function playNow() {
       multiPv: 1,
       searchmoves: probe,
       depth: Math.min(cfg.maxDepth, 12),
-      moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs))
+      // Same budget the timer uses: the manual path must not think harder than
+      // the clock allows just because a human pressed the button.
+      moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6))))
     });
     state.probeSpentMs = Date.now() - started;
     if (!state.snapshot || state.snapshot.fen !== snap.fen) return false;
