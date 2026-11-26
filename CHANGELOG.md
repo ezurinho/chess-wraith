@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.62.0 — 2026-11-27
+
+A review with the live board behind it.
+
+- New `docs/review.md`: grade per area, the comparison with A.C.A.S., chesshook
+  and Game Review, and the primary sources (Stockfish 1320–3190, chess.com's
+  closure numbers and the sentence about analysing games in progress).
+- The review records what the live run proved — quiet move, castling, en passant
+  and promotion through real pointer events — and what it broke: the arrows.
+
 ## 1.61.2 — 2026-11-27
 
 The board arrows never drew.

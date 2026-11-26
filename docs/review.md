@@ -1,63 +1,103 @@
-# Review, 1.58.0
+# Review, 1.62.0
 
-Written after the 1.58.0 arrow overlay. Evidence is the suite output and the
-files, not a feeling; where the evidence is thin it says so.
+Evidence: the suite output (221 tests, 0 failures), the committed bundle, and a
+live session on `chess.com/analysis` where the shipped file was evaluated in the
+page and driven with real pointer events against chess.com's own handlers. Where
+the evidence is thin, it says so. Numbers are from 2026-11-27.
 
 ## Grade
 
 | Area | Grade | Why |
 | --- | --- | --- |
-| Product | 8.0 | It does what almost no public script does: strength anchored to the account's own published rating, per-account pacing, AFK rematch, a report and a stats tab. The overlay closed the last visible gap against the 2026 scripts. |
-| Engineering | 8.5 | One IIFE, 15 fragments, 210 tests over 24 files, a jsdom bench that boots the whole bundle, a release script that refuses to tag a red check. The weak spot is that the live path is not exercised. |
-| Verification | 6.5 | Unit and boot coverage are real. There is no automated run against a live rated game, and `session.test.js` failed twice in six full-suite runs under load at the `gameOverSeen` assertion, then passed in isolation and in the next two full runs. An intermittent failure with no root cause is a debt, not a detail. |
-| Honesty | 9.0 | The README states the floor, the risk and the limits; no telemetry, no remote engine, no deliberate-miss dice. The new review keeps that tone. |
-| UX | 7.5 | Dense but legible at 300 px; four tabs now. The board overlay is the first thing that reads without the panel. No mobile layout. |
-| Risk (as a cheating tool) | 3.0 | chess.com reports ~314,000 closure decisions in one quarter and says most are automated, over 100 gameplay factors. Pacing and a rating-matched band lower the obvious signals; they do not make the account safe. |
+| Product | 8.5 | Strength anchored to the account's published rating, pacing learned from its own games, AFK rematch, a report and a stats tab. Level play now misses the way a beginner misses (captures and checks first). No variants, no second site. |
+| Engineering | 8.5 | One IIFE, 15 fragments, 221 tests over 25 files, a boot bench that runs the whole bundle, a release gate that refuses a red check. Three versions shipped an arrow that never drew because one line read a field that does not exist; that costs the point it would take to reach 9. |
+| Verification | 7.5 | A normal move, castling, en passant and promotion are now proven on the real board, not in jsdom. Still no rated game with an opponent, clocks and a rematch, and nothing equivalent runs in CI. |
+| Honesty | 9.0 | The floor, the risk and the limits are stated; the 1.58.0 review claimed the overlay closed the last visible gap and the overlay had never drawn. This one corrects that instead of deleting it. |
+| UX | 8.0 | Arrows draw now, the panel exposes every link of the rating chain, four tabs. 300 px wide, no compact or mobile layout. |
+| Risk (as a cheating tool) | 3.0 | chess.com closed ~314,000 accounts in one quarter, ~85% of them without a human, over 100 gameplay factors. Pacing lowers the timing signal; it cannot hide live analysis, which the Fair Play page names explicitly. |
 
-**Overall: 7.6/10.** A well-built tool with unusually honest documentation, held
-back by unverified live behaviour and a test that used to flake.
+**Overall: 8.0/10.** Up from 7.6: the live path exists now and it found a
+bug that three releases of tests did not.
 
-## What is strong
+## What the live run found
 
-- The rating chain has a single owner (`resolveElo`) and the panel exposes every
-  link: page, account, prior, floor, default. The 133-vs-1245 case is now a
-  documented outcome instead of a mystery number.
-- The loss ledger is measured when the position after the move is evaluated, not
-  guessed when the move lands, so the report cannot count the same swing twice.
-- One place paints the overlay (`refreshPanel`), so the toggle, a new game and a
-  re-analysis all converge on the same state.
-- The release process is a gate, not a checklist.
+The 1.61.2/1.62.0 session injected the release from jsDelivr into
+`/analysis?cw=1`, waited for the wasm engine, and called `ChessWraith.playMove`.
+Every move below was made by synthetic pointer events on chess.com's board and
+confirmed by re-reading the FEN afterwards.
 
-## What is weak, in priority order
+| Shape | Move | Result |
+| --- | --- | --- |
+| Quiet, auto-played | Nf3, e4, Ne5 | FEN advanced each time |
+| Castling | `e1g1` | `RNBQ1RK1` — king g1, rook f1 |
+| En passant | `e5d6` after `d7d5` | white pawn on d6, d5 empty |
+| Promotion | `e7e8q` | dialog appeared, queen on e8, `4Q3/8/...` |
 
-1. **No live-game verification.** Nothing in CI loads chess.com and plays a
-   rated move. The selectors, the modal, the arrow geometry and the pacing are
-   proven in jsdom, which is not the same page.
-2. **The `gameOverSeen` flake — closed in 1.60.0.** Twice in six loaded runs the
-   rematch press succeeded and the flag was already false at the next assertion.
-   The reason is the obvious one once it is written down: pressing Rematch starts
-   the next game, and `onNewGame` resets the flag and the counters. The test now
-   asserts the observable outcome — one press, the score in the session, the
-   history entry — instead of flags two timers race to clear, and passed six runs
-   in a row. The state machine did not change.
-3. **Overlay geometry assumes the board element is exactly the eight-by-eight
-   grid.** chess.com draws its coordinates inside the same box, so this is true
-   today. A theme that adds a margin would shift every arrow by the margin.
-4. **The overlay is not clipped.** `overflow: visible` is deliberate for the
-   head, but a bad cell would draw outside the board instead of being cut.
-5. **`refreshPanel` is called from many paths.** The overlay's signature check
-   makes it cheap, but the function now does rendering and page mutation; a
-   future caller that expects it to be pure will be surprised.
-6. **History is capped at 20 with no export.** The copy-report text carries the
-   last game only.
-7. **The panel is 300 px wide by default and has no compact mode below that.**
-8. **First run still downloads 1.2 MB of engine.** Cached afterwards, but the
-   first game on a cold profile waits.
+**The bug it found:** `refreshPanel` passed `state.snapshot.boardEl` to
+`paintBoardOverlay`. `boardEl` lives on `state`; the snapshot never carried it, so
+the function returned on its first line and the arrows shipped in 1.58.0 have
+never appeared on a real page. Fixed in 1.61.2; the boot test now asserts the
+shaft and the head exist after the engine answers.
+
+## How it compares
+
+Checked 2026-11-27 with the GitHub API (`/search/repositories`) and each project's
+README. Stars as returned that day.
+
+| | chess-wraith 1.62.0 | A.C.A.S | chesshook | chess.com Game Review |
+| --- | --- | --- | --- | --- |
+| Stars | 0 | 195 | 24 | closed source |
+| Engine | Stockfish 19 NNUE wasm, one 304 KB userscript, no server | many wasm engines plus an optional localhost engine server | userscript with a local engine server | cloud, no engine on the page |
+| Sites | chess.com | chess.com, lichess, pychess, more | chess.com | chess.com |
+| Strength model | account rating → cp/move band → weighted improvisation; `UCI_Elo` floor documented | engine options exposed (Elo, depth, MultiPV, Skill) | not stated in the README | fixed cloud depth |
+| Human pacing | yes, median from the account's own public clocks | no pacing claim | no | n/a |
+| AFK rematch + session caps | yes | no | no | no |
+| Arrows / multi-line | yes, arrow + reply, toggle | yes, multiple suggestions, variants | overlay | yes |
+| Variants | no | chess960 and Fairy variants | no | no |
+| Languages | English only | 30+ | English | 50+ |
+| Tests in the repo | 221, boots the bundle | not visible in the README | none visible | n/a |
+
+The two things no one else here has: the strength target comes from the account's
+own rating and the delay comes from the account's own games. A.C.A.S. is the
+broader tool — variants, sites, languages — and a different product: it shows
+moves, it does not try to look like a person playing.
+
+## Research notes
+
+- Stockfish's `UCI_Elo` is a clamped option, not a continuous one:
+  `LowestElo = 1320`, `HighestElo = 3190` in
+  [`src/search.h`](https://github.com/official-stockfish/Stockfish/blob/master/src/search.h),
+  wired in
+  [`src/engine.cpp`](https://github.com/official-stockfish/Stockfish/blob/master/src/engine.cpp).
+  A 133 account cannot be played by the engine at 133; the band and the chooser
+  have to do it, which is why `ELO_FLOOR` exists.
+- chess.com's [Fair Play page](https://www.chess.com/cheating) reports ~314,000
+  closures for January–March 2025 (~3,500/day, ~105,000/month), ~85% automated,
+  over 100 gameplay factors, and fewer than 1% of monthly users cheating. The same
+  page says: do not perform automated analysis or blunder-checking of games in
+  progress. That sentence describes this script's core loop, and no pacing change
+  changes it.
+- A.C.A.S. describes itself as "not a chess cheat" while warning that use may
+  lead to disqualification. The disclaimer and the behaviour disagree the same way
+  they do here.
+
+## What is still weak, in priority order
+
+1. **No opponent in the live loop.** Moves land on the real board; a clocked game
+   with a human, a rematch and a rating change has still not been run.
+2. **Live analysis is the risk.** It is the behavior chess.com names in writing.
+   Delay and pacing are the only levers, and they are not enough.
+3. **No variants, no second site, one language.** A.C.A.S. is three years of
+   breadth ahead there.
+4. **The overlay assumes the eight-by-eight grid is the board element.** A theme
+   with a margin shifts every arrow.
+5. **Panel is 300 px and desktop-only.**
+6. **First run downloads 1.2 MB of engine.** Cached afterwards.
 
 ## What the next release should do
 
-- Turn the flake into a reproduction: log the board FEN and `gamesPlayed` at the
-  assertion, run the session test ten times in a loop in CI.
-- Add one manual live checklist to `docs/` with the exact page states to try.
-- Clip the overlay to the board and derive the cell size from the board rect
-  rather than assuming 1/8.
+- Use the analysis board's play mode to get an opponent: it is the missing half
+  of the live test and the only one that can exercise the clock and the rematch.
+- Clip the overlay to the board and derive the cell size from the board rect.
+- A live checklist in `docs/` with the exact page states, so the next agent
+  repeats the session instead of inventing it.

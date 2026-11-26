@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.61.2-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.62.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -110,6 +110,16 @@ until jsDelivr serves the new tag. A failing check never reaches a tag.
 | **Pauses** | Game over, promotion dialog, premove on the board, low clock, hidden tab while AFK is off. |
 | **Updates** | The panel checks `cdn.jsdelivr.net/gh/ezurinho/chess-wraith@latest/package.json` on boot and every six hours (GitHub's release API as fallback), and again whenever you come back to the tab, the window regains focus or the network returns, at most once every five minutes. The last answer is cached, so a reload paints the `UPDATE vX.Y.Z` pill immediately instead of four seconds later. Both requests are public static files; nothing about the account leaves the tab. |
 | **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. A target strip with the accuracy band and a fill bar, live ACPL, the opponent estimate, your pace, their tempo, games played, time left and an account card with the signed-in user. |
+
+## Verified on the real board
+
+On 2026-11-27 the released file was evaluated inside `chess.com/analysis`, the
+wasm engine answered, and the script played through chess.com's own handlers: a
+quiet move, castling (`e1g1`), en passant (`e5d6`) and a promotion (`e7e8q`, the
+dialog included), each confirmed by re-reading the FEN afterwards. The same
+session is how the board arrows were found to have never drawn. `docs/review.md`
+has the grade, the comparison with A.C.A.S., chesshook and Game Review, and the
+primary sources.
 
 ## Honest limits
 
