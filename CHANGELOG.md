@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.66.1 — 2026-11-27
+
+Review of 1.66.0: three games, three numbers, and the spread is the finding.
+
+- 185.8, 118.2 and 62.0 cp/move at the same 133 account, three releases, three
+  24–26 ply sessions. Thirteen white moves is not a sample.
+- The band is a design, not a result. `docs/review.md` says so, next to the
+  measurements and the defect that produced each release.
+
 ## 1.66.0 — 2026-11-27
 
 Half the moves wrong is not a 133.
