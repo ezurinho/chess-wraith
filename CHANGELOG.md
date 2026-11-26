@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.74.0 — 2026-11-27
+
+Review of 1.73.0: the first calibration against a same-level opponent.
+
+- Seven games at a 133 account, two kinds of opponent, one method. Delivered:
+  82 cp/move against a same-level opponent, 105 against perfect play, band 270-320.
+- Published as it is: the script plays like a careful beginner, not like the rating
+  it is given, and the review says so next to the number.
+- Two more invented measurements are gone from the panel: the loss sample that
+  vanished when the opponent was fast, and the restricted price that called a move
+  293 when it cost 0.
+
 ## 1.73.0 — 2026-11-27
 
 The restricted search proposes, a real search disposes.

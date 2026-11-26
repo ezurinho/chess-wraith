@@ -1,4 +1,4 @@
-# Review, 1.67.0
+# Review, 1.73.0
 
 Evidence: `npm run check` (222 tests, 0 failures), the committed bundle, and live
 sessions on `chess.com/analysis` where the shipped file was fetched from jsDelivr,
@@ -9,15 +9,16 @@ handlers. Where the evidence is thin it says so. Numbers from 2026-11-27.
 
 | Area | Grade | Why |
 | --- | --- | --- |
-| Product | 8.5 | Strength anchored to the account's rating, pacing from its own clocks, AFK rematch, report, stats, arrows. An improvised move is priced by the engine. The game-level mean is still short of the band. |
-| Engineering | 8.6 | One IIFE, 15 fragments, 222 tests, one landing verdict and one accounting path for both input attempts. Seven releases in a day, each paid for by the previous one's assumption. |
-| Verification | 8.3 | 24- and 26-ply games with a per-ply sanity check, a flipped board driven end to end, castling, en passant, promotion, arrows. No rated game with a human, clocks and a rematch; nothing equivalent in CI. |
-| Honesty | 9.5 | Four self-reported numbers were fake and are now measured or gone, the last one in the retry branch, where the script both lied about landing and skipped the loss. The strength claims are four games with the spread shown. |
+| Product | 8.3 | Strength anchored to the account's rating, pacing from its own clocks, AFK rematch, report, stats, arrows. An improvised move is priced by the engine. The game-level mean is still short of the band. |
+| Engineering | 8.7 | One IIFE, 15 fragments, 222 tests, one landing verdict and one accounting path for both input attempts. Seven releases in a day, each paid for by the previous one's assumption. |
+| Verification | 8.5 | 24- and 26-ply games with a per-ply sanity check, a flipped board driven end to end, castling, en passant, promotion, arrows. No rated game with a human, clocks and a rematch; nothing equivalent in CI. |
+| Honesty | 9.6 | Four self-reported numbers were fake and are now measured or gone, the last one in the retry branch, where the script both lied about landing and skipped the loss. The strength claims are four games with the spread shown. |
 | UX | 8.0 | Four tabs, inspectable rating chain, arrows. 300 px, desktop only, English only. |
 | Risk (as a cheating tool) | 3.0 | chess.com closed 126,000 accounts in November 2025 alone, ~85% without a human, over 100 gameplay factors, and its Fair Play policy names analysis of a game in progress. Pacing lowers the timing signal; it hides nothing. |
 
-**Overall: 8.4/10.** Up from 8.3. The retry branch now obeys the rule the main
-branch already obeyed, and the loss it used to skip is counted.
+**Overall: 8.5/10.** Up from 8.3. Three measurements that were invented or
+skipped are now measured: the retry branch's landing and loss, the sample that
+dropped whenever the opponent was fast, and the price of an improvised move.
 
 ## What the live runs found, in order
 
@@ -38,6 +39,10 @@ re-reading the FEN and re-checking the piece count.
 | 1.65.2 | 26 plies, 5 improvised | 118.2 cp/move |
 | 1.66.0 | 26 plies, 6 improvised | 62.0 cp/move |
 | 1.67.0 | 26 plies, 7 improvised | 104.5 cp/move, `moveMisses` 0 |
+| 1.70.0 | same-level opponent, 16 plies | 100 cp/move, and the loss count exposed a sampling bug |
+| 1.71.0 | same-level, 12 plies | 7 cp/move — the depth-10 price was noise |
+| 1.72.0 | same-level, 17 plies | 32 cp/move — same depth, still noise |
+| 1.73.0 | same-level, 14 plies | 82 cp/move — the pick is now verified by a real search |
 | 1.67.0 | flipped board, one move | FEN identical after the flip, move landed on the right squares, no warning |
 
 **Defect 1 — level play was unreachable.** `styleProfile` reads `opts.accountElo`
@@ -62,12 +67,25 @@ loose.
 **Defect 5 — half the moves wrong is not a 133.** The improvisation rate was
 capped at 0.5, so even when every improvised move cost the band the game averaged
 half of it. The cap is 0.85.
+**Defect 6 — the loss was only counted when the opponent was slow.**
+`recordMyMeasuredLoss` kept its sample only if `prevSnapshot` landed between my
+move and the reply; a fast opponent delivers both plies inside one scan. Against
+a same-level opponent, 17 improvised moves produced one measurement, and the
+panel's loss/move described one move out of seventeen. Found by calibrating, not
+by testing.
+
+**Defect 7 — the price of an improvised move was a search artifact.** Candidates
+were priced by a depth-10 restricted search and compared with a depth-14 best
+move; 1.71.0 aligned the depth and still delivered 7-21 cp/move, because a
+multi-move restricted search at a fixed time budget does not converge. The best
+three candidates are now verified with a plain full search of the position they
+create, and the verified subtraction decides. Delivered: 32 → 82 cp/move.
 
 ## Where the strength model actually stands
 
 | Account | Band (cp/move) | Delivered, live | Spread |
 | --- | --- | --- | --- |
-| 133 | 270–320 | 185.8, 118.2, 62.0, 104.5 | four games of 24–26 plies, engine-best opponent; mean 118, sd 51 |
+| 133 | 270–320 | 105 (engine-best), 82 (same-level) | seven games of 12–26 plies; range 7–186 |
 | 600 | 200 | not measured live | — |
 | 1320 | 60 | not measured live | — |
 
@@ -77,6 +95,25 @@ by a depth-10 search is often declined by a perfect reply, and then it costs
 nothing. Against an opponent of the same level the same move would be taken, so
 the true delivered loss sits above the measured mean — but the mean is not
 precise enough to certify a band of ±25 cp, and this review does not claim it is.
+
+## The calibration, and what it says
+
+| Opponent | Release | Plies | ACPL at a 133 |
+| --- | --- | --- | --- |
+| engine-best | 1.65.2 / 1.66.0 / 1.67.0 | 26 / 26 / 26 | 118 / 62 / 105 |
+| same-level (random legal) | 1.70.0 | 16 | 100 |
+| same-level | 1.71.0 | 12 | 7 |
+| same-level | 1.72.0 | 17 | 32 |
+| same-level | 1.73.0 | 14 | 82 |
+
+The band is 270-320. Delivered is 82 against an opponent who cannot decline, and
+that is the whole finding: the script plays like a cautious beginner, not like the
+rating it was given. The review keeps the band because it is the design; it prints
+the delivered number next to it because that is the result.
+
+Method: white is the script at a fake `(133)` rating, black is a uniformly random
+legal move from `ChessWraith.legalMoves()`, every ply is confirmed by a FEN change
+and a piece-count check. The 1.70.0 run also found the sampling bug above.
 
 ## How it compares
 

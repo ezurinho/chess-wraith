@@ -837,6 +837,42 @@ titled players banned, "relatively consistent with previous months". That is abo
 argument rests on: the base rate is high enough that a run of clean games is not
 evidence of safety, and low enough that most accounts are never touched.
 
+## 2e. Measured delivery, against two kinds of opponent
+
+Apology first: until 1.70.0 the panel's loss/move was only recorded when the
+opponent was slow, because the sample was keyed on `prevSnapshot` landing between
+the two plies. Against a fast opponent, 17 improvised moves produced one
+measurement. The numbers below are from after that fix.
+
+Two opponents, both on the real analysis board, script driven through synthetic
+pointer events on chess.com's handlers:
+
+- **Engine-best**: the position is analysed and the opponent plays Stockfish's
+  first choice. It declines most of the material a beginner move offers.
+- **Same-level**: the opponent plays a uniformly random legal move, which is a
+  stand-in for a 133 account rather than a model of it. It takes material, and it
+  takes nothing back.
+
+| Release | Opponent | Plies measured | Delivered ACPL at a 133 |
+| --- | --- | --- | --- |
+| 1.65.2 | engine-best | 26 | 118 |
+| 1.66.0 | engine-best | 26 | 62 |
+| 1.67.0 | engine-best | 26 | 105 |
+| 1.70.0 | same-level | 16 | 100 |
+| 1.71.0 | same-level | 12 | 7 |
+| 1.72.0 | same-level | 17 | 32 |
+| 1.73.0 | same-level | 14 | 82 |
+
+Band for a 133 account: 270-320 cp/move. The best measured delivery with a
+relevant opponent is 82, about a third of it, across 14 plies; that is short, and
+it is the honest state of the pitch. What the table does show is the direction of
+travel and where it came from: the restricted multi-move search was pricing moves
+inaccurately (a candidate priced 293 realised 0), 1.72.0 used the same depth and
+1.73.0 verifies each of the three best candidates with a plain full search before
+committing, which nearly tripled the delivered number.
+
+Reproducing this needs `?cw=1`, a fake `(133)` rating node, and a loop that
+alternates `playNow()` with a random legal move from `ChessWraith.legalMoves()`.
 ## 2d. The ACPL band is an extrapolation, and the data says so
 
 The band (270-320 cp/move at a 133 account) has no direct dataset behind it. The
