@@ -195,6 +195,29 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The archive page has no move list at all
+
+Probed 2026-11-25 on `https://www.chess.com/game/live/168072860134`, signed out:
+
+| Selector | Nodes |
+|---|---|
+| `wc-simple-move-list` | 0 |
+| `wc-move-list` | 0 |
+| `.move-list` `.node` `[data-ply]` `.vertical-move-list` | 0 |
+| any element whose text starts `1.` | 0 |
+| custom elements other than `wc-chess-board` | 0 |
+
+The archived game page renders the result, the clock and the buttons, and no
+move list in the light DOM. So `readPlyCount` returns `null` there — not because
+the selector is wrong, but because there is nothing to read. That makes the
+`ply < 2` guard from 1.35.0 inert on exactly the page where the score is read.
+
+A finished game also cannot end on the starting position: chess.com aborts a
+game that never really started, and aborted games are not scored. So the stale
+dialog guard now leads with the board itself — `placement === Chess.START_PLACEMENT`
+is a no-count — and keeps the ply check for pages that do expose a list. The
+regression test for the score fixture had to move two pawns: a start-position
+fixture under a finished dialog is a state chess.com never produces.
 ## The snapshot never knew which side we were on
 
 `tracker.updateFromDomSnapshot(grid, hints)` reads `hints.flipped` and

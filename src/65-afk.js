@@ -198,13 +198,15 @@ function readGameResult(myColor) {
 
 // A rematch paints a fresh board under the old dialog for a second, so the same
 // modal can be scanned twice: once for the game it belongs to and once for the
-// one that just started. A game with fewer than two plies is not that game —
-// chess.com aborts anything that never reached two moves, so nothing is lost.
+// one that just started. Two things tell them apart, and the first one does not
+// need a move list: a scored game never ends on the starting position (chess.com
+// aborts those), and a game with fewer than two plies is too young to be scored.
 function resultCounts(job) {
-  const { result, ply, gamesPlayed, resultGame } = job || {};
+  const { result, ply, placement, gamesPlayed, resultGame } = job || {};
   if (!result) return false;
   if (!(Number(gamesPlayed) > 0)) return false;
   if (Number(resultGame) === Number(gamesPlayed)) return false;
+  if (Chess && placement === Chess.START_PLACEMENT) return false;
   if (ply !== null && ply !== undefined && Number(ply) < 2) return false;
   return true;
 }

@@ -5,8 +5,8 @@ const assert = require('node:assert/strict');
 const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
-  ['10-config.js', '20-utils.js', '65-afk.js'],
-  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resultCounts, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS }`
+  ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '65-afk.js'],
+  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resultCounts, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS, Chess }`
 );
 
 test('rematch wins over a new game when both are offered', () => {
@@ -153,6 +153,8 @@ test('a dialog that outlives its game is not counted for the next one', () => {
   assert.equal(api.resultCounts({ ...base, ply: 0 }), false, 'a fresh board under an old dialog');
   assert.equal(api.resultCounts({ ...base, ply: 1 }), false);
   assert.equal(api.resultCounts({ ...base, ply: null }), true, 'no move list: the dialog is all we have');
+  assert.equal(api.resultCounts({ ...base, ply: null, placement: api.Chess.START_PLACEMENT }), false, 'a finished game is never at the start');
+  assert.equal(api.resultCounts({ ...base, ply: null, placement: '8/8/8/8/8/8/8/K6k w - - 0 1' }), true, 'an endgame position counts');
   assert.equal(api.resultCounts({ ...base, ply: 24, resultGame: 7 }), false, 'the same game twice');
   assert.equal(api.resultCounts({ ...base, ply: 24, result: null }), false, 'no result, nothing to count');
   assert.equal(api.resultCounts({ ...base, ply: 24, gamesPlayed: 0 }), false, 'no game played');

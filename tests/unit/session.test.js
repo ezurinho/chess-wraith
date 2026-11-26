@@ -24,6 +24,12 @@ function boot(html = PAGE, seed = null) {
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// A scored game never ends on the starting position, so the fixture after a
+// game over is a position two plies in: 1. e4 d5.
+const MIDGAME = PAGE
+  .replace('<div class="piece wp square-12"></div>', '<div class="piece wp square-14"></div>')
+  .replace('<div class="piece bp square-27"></div>', '<div class="piece bp square-25"></div>');
+
 
 async function until(check, budgetMs = 9000, stepMs = 100) {
   const deadline = Date.now() + budgetMs;
@@ -50,7 +56,7 @@ test('the whole script boots on a real board without throwing', async () => {
 });
 
 test('a finished game with AFK on presses the button a person would press', async () => {
-  const { window, api, stop } = boot(PAGE +
+  const { window, api, stop } = boot(MIDGAME +
     // The markup from a real finished game page, class for class.
     '<div class="board-modal-container-container" style="position:fixed">' +
     '<div class="board-modal-component"><div class="game-over-modal-shell-container">' +
@@ -150,7 +156,7 @@ test('a game played as black scores from the colour on screen, not a default', a
   // The board is flipped because we are Black. The dialog says White won, so
   // this is a loss. Before the snapshot carried `flipped`, everything downstream
   // answered "white" and this counted as a win.
-  const html = PAGE.replace('class="board"', 'class="board flipped"') +
+  const html = MIDGAME.replace('class="board"', 'class="board flipped"') +
     '<div class="board-modal-container-container" style="position:fixed">' +
     '<div class="board-modal-component"><div class="game-over-modal-shell-container">' +
     '<div class="game-over-modal-header-component"><div class="game-over-modal-title-component">White Won</div>' +

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.37.0
+// @version      1.38.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.37.0';
+const VERSION = '1.38.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.37.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.38.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3264,13 +3264,15 @@ function readGameResult(myColor) {
 
 // A rematch paints a fresh board under the old dialog for a second, so the same
 // modal can be scanned twice: once for the game it belongs to and once for the
-// one that just started. A game with fewer than two plies is not that game —
-// chess.com aborts anything that never reached two moves, so nothing is lost.
+// one that just started. Two things tell them apart, and the first one does not
+// need a move list: a scored game never ends on the starting position (chess.com
+// aborts those), and a game with fewer than two plies is too young to be scored.
 function resultCounts(job) {
-  const { result, ply, gamesPlayed, resultGame } = job || {};
+  const { result, ply, placement, gamesPlayed, resultGame } = job || {};
   if (!result) return false;
   if (!(Number(gamesPlayed) > 0)) return false;
   if (Number(resultGame) === Number(gamesPlayed)) return false;
+  if (Chess && placement === Chess.START_PLACEMENT) return false;
   if (ply !== null && ply !== undefined && Number(ply) < 2) return false;
   return true;
 }
@@ -5448,7 +5450,7 @@ function runScan() {
       // One result per game: a lingering dialog that is scanned twice must not
       // count twice, so the game number that produced a result is remembered.
       const result = readGameResult(mySide(snapshot.flipped));
-      if (resultCounts({ result, ply: snapshot.plyCount, gamesPlayed: state.gamesPlayed, resultGame: state.resultGame })) {
+      if (resultCounts({ result, ply: snapshot.plyCount, placement: snapshot.placement, gamesPlayed: state.gamesPlayed, resultGame: state.resultGame })) {
         state.resultGame = state.gamesPlayed;
         state.results[result] += 1;
         saveSession();

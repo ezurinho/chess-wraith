@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.38.0 — 2026-11-25
+
+The score no longer depends on a move list that the page does not render.
+
+- The archived game page has no move list in the light DOM (nine selectors,
+  all zero), so `plyCount` is `null` there and the "fewer than two plies"
+  guard never ran. The stale-dialog guard now leads with the board: a finished
+  game is never sitting on the starting position, and an aborted game is not
+  scored, so that placement cannot be counted.
+- The score fixtures now start from a position two plies in, because a start
+  position under a finished dialog is a state the site never produces.
+
 ## 1.37.0 — 2026-11-25
 
 Playing as Black is no longer treated as playing as White.

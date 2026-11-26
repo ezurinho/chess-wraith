@@ -1227,7 +1227,7 @@ function runScan() {
       // One result per game: a lingering dialog that is scanned twice must not
       // count twice, so the game number that produced a result is remembered.
       const result = readGameResult(mySide(snapshot.flipped));
-      if (resultCounts({ result, ply: snapshot.plyCount, gamesPlayed: state.gamesPlayed, resultGame: state.resultGame })) {
+      if (resultCounts({ result, ply: snapshot.plyCount, placement: snapshot.placement, gamesPlayed: state.gamesPlayed, resultGame: state.resultGame })) {
         state.resultGame = state.gamesPlayed;
         state.results[result] += 1;
         saveSession();
