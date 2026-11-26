@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.64.1 — 2026-11-27
+
+The review is the release note.
+
+- `docs/review.md` rewritten for 1.64.0: the three measurement defects the live
+  sessions found, the strength table (133 asks 270–320 cp/move, 66.5 delivered),
+  the competitor table, and the next release named.
+- No code change.
+
 ## 1.64.0 — 2026-11-27
 
 A click can move a piece I did not ask for.
