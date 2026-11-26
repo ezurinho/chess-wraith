@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.89.0
+// @version      1.89.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -42,7 +42,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.89.0';
+const VERSION = '1.89.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -134,7 +134,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6440,8 +6440,8 @@ function statusView() {
     myTurn: Boolean(snap && snap.turn === side),
     turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
-    warn: state.warn
-      || (cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '')
+    warn: (cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '')
+      || state.warn
       || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
     events: state.events,
     clock: state.clockSeconds,
@@ -7664,11 +7664,15 @@ function heartbeatTab() {
   }
   const wasPassive = state.passiveTab;
   state.passiveTab = false;
-  // Handing the lease back must restore AUTO: a passive tab had paused it, and
-  // without this the first tab stayed idle after the second one closed.
-  if (wasPassive && cfg.autoPlayOnLoad) {
-    state.autoPlay = true;
-    if (/another tab/.test(state.warn)) state.warn = '';
+  // Handing the lease back must restore AUTO, unless the account hit the hard
+  // cap: a passive tab coming back must not rearm a stopped session.
+  if (wasPassive) {
+    if (cfg.sessionStopped) {
+      state.warn = cfg.sessionStopReason || 'stopped: session limit';
+    } else if (cfg.autoPlayOnLoad) {
+      state.autoPlay = true;
+      if (/another tab/.test(state.warn)) state.warn = '';
+    }
   }
   try {
     localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));

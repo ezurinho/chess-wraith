@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.89.1 — 2026-11-26
+
+A passive tab can no longer rearm a stopped session.
+
+- `heartbeatTab()` restored AUTO whenever a passive tab got the lease back,
+  without checking the hard stop. It now keeps `state.autoPlay` off and restores
+  the stop reason when `sessionStopped` is set.
+- `statusView()` shows the stop reason before any transient warning, so the panel
+  always explains why AUTO is off.
+- One boot regression holds the lease in another tab, seeds a stopped account,
+  takes the lease back and checks AUTO stays off.
+
 ## 1.89.0 — 2026-11-26
 
 The session cap is a stop, not a rollover.

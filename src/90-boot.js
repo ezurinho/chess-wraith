@@ -991,8 +991,8 @@ function statusView() {
     myTurn: Boolean(snap && snap.turn === side),
     turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
-    warn: state.warn
-      || (cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '')
+    warn: (cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '')
+      || state.warn
       || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
     events: state.events,
     clock: state.clockSeconds,
@@ -2215,11 +2215,15 @@ function heartbeatTab() {
   }
   const wasPassive = state.passiveTab;
   state.passiveTab = false;
-  // Handing the lease back must restore AUTO: a passive tab had paused it, and
-  // without this the first tab stayed idle after the second one closed.
-  if (wasPassive && cfg.autoPlayOnLoad) {
-    state.autoPlay = true;
-    if (/another tab/.test(state.warn)) state.warn = '';
+  // Handing the lease back must restore AUTO, unless the account hit the hard
+  // cap: a passive tab coming back must not rearm a stopped session.
+  if (wasPassive) {
+    if (cfg.sessionStopped) {
+      state.warn = cfg.sessionStopReason || 'stopped: session limit';
+    } else if (cfg.autoPlayOnLoad) {
+      state.autoPlay = true;
+      if (/another tab/.test(state.warn)) state.warn = '';
+    }
   }
   try {
     localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));

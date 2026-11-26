@@ -151,6 +151,29 @@ test('a hard session stop survives a reload until AUTO is resumed', async () => 
   }
 });
 
+test('a passive tab taking the lease back does not rearm a stopped session', async () => {
+  const { window, api, stop } = boot(PAGE, (store) => {
+    store.setItem('chess-wraith-settings-v1:tester', JSON.stringify({
+      sessionStopped: true,
+      sessionStopReason: 'session limit: 15 games'
+    }));
+    store.setItem('chess-wraith-tab-v1', JSON.stringify({ id: 'other', at: Date.now() }));
+  });
+  try {
+    await wait(300);
+    assert.equal(api.state.passiveTab, true, 'the other tab owns the board');
+    assert.equal(api.state.autoPlay, false);
+
+    window.localStorage.removeItem('chess-wraith-tab-v1');
+    api.heartbeatTab();
+    assert.equal(api.state.passiveTab, false, 'this tab owns the board again');
+    assert.equal(api.state.autoPlay, false, 'the stopped account stays stopped');
+    assert.match(api.state.warn, /session limit: 15 games/);
+  } finally {
+    stop();
+  }
+});
+
 test('the history is per account, so a second login does not inherit the night', async () => {
   const { window, api, stop } = boot();
   try {

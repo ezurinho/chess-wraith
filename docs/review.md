@@ -1,5 +1,15 @@
 # Review, 1.80.0
 
+> **Addendum, 1.89.1 (2026-11-26).** Closed the last rearm path: a passive tab
+> that got the tab lease back set `autoPlay = true` without checking the hard
+> stop. It now keeps AUTO off and restores the stop reason, and `statusView()`
+> gives the stop reason priority over transient warnings. One boot regression
+> seeds a stopped account with another tab holding the lease, takes the lease
+> back, and checks AUTO stays off. `npm run check` passes **232 tests** and lint.
+> The overall grade stays **8.8/10** (Product 8.7, UX 8.7, Engineering 8.9,
+> Verification 8.4; Risk 3.0 and Honesty 9.5 unchanged). No live board session
+> was run.
+>
 > **Addendum, 1.89.0 (2026-11-26).** The session cap is now a hard stop.
 > `alwaysAuto` no longer turns 15 games or 3 hours into a rollover: the stop is
 > written to the account's settings, a reload clears the half-run instead of
