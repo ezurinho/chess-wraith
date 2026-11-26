@@ -1451,21 +1451,46 @@ async function improveImprovised(snap, result, legal, choice) {
     || lines.filter((line) => line && Number.isFinite(line.whiteCp)).sort((x, y) => y.whiteCp - x.whiteCp)[0];
   if (!base || !Number.isFinite(base.whiteCp)) return null;
   const aim = Math.min(600, Math.round(target));
-  let pick = null;
-  let bestErr = Infinity;
+  const floor = Math.round(target * 0.35);
+  const ranked = [];
   for (const line of lines) {
     if (!line || !line.bestUci || line.mateIn != null) continue;
     if (line.bestUci === base.bestUci) continue;
     const loss = myLossFromWhiteCp(snap.turn, base.whiteCp, line.whiteCp);
     // A near-zero loss is the same lie in the other direction: the move must
     // cost something like the band, not be a good move that happens to be legal.
-    if (loss == null || loss < Math.round(target * 0.35)) continue;
+    if (loss == null || loss < floor) continue;
     if (allowsMateInOne(legal, line.bestUci)) continue;
-    const err = Math.abs(loss - aim);
-    if (err < bestErr) {
-      bestErr = err;
-      pick = { line, loss };
+    ranked.push({ line, loss });
+  }
+  ranked.sort((x, y) => Math.abs(x.loss - aim) - Math.abs(y.loss - aim));
+  // The restricted search proposes; a plain full search of the position after the
+  // move disposes. Measured against a same-level opponent, the restricted price
+  // was off by hundreds: a move it called 293 realised at 0. The verified number
+  // is the same subtraction the panel uses afterwards, so the promise and the
+  // measurement share a method.
+  let pick = null;
+  for (const cand of ranked.slice(0, 3)) {
+    const move = legal.find((m) => Chess.moveToUci(m) === cand.line.bestUci);
+    if (!move || !move.nextState) continue;
+    let after = null;
+    try {
+      after = await engine.analyze({
+        fen: Chess.buildFen(move.nextState),
+        turn: move.nextState.turn,
+        flipped: snap.flipped,
+        depth: cfg.maxDepth,
+        moveTimeMs: 700
+      });
+    } catch {
+      after = null;
     }
+    const white = after && after[0] && after[0].whiteCp;
+    if (!Number.isFinite(white)) continue;
+    const real = myLossFromWhiteCp(snap.turn, best.whiteCp, white);
+    if (real == null || real < floor) continue;
+    const err = Math.abs(real - aim);
+    if (!pick || err < pick.err) pick = { line: cand.line, loss: real, err };
   }
   if (!pick) return null;
   return {

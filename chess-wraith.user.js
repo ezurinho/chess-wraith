@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.72.0
+// @version      1.73.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.72.0';
+const VERSION = '1.73.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.72.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.73.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6725,21 +6725,46 @@ async function improveImprovised(snap, result, legal, choice) {
     || lines.filter((line) => line && Number.isFinite(line.whiteCp)).sort((x, y) => y.whiteCp - x.whiteCp)[0];
   if (!base || !Number.isFinite(base.whiteCp)) return null;
   const aim = Math.min(600, Math.round(target));
-  let pick = null;
-  let bestErr = Infinity;
+  const floor = Math.round(target * 0.35);
+  const ranked = [];
   for (const line of lines) {
     if (!line || !line.bestUci || line.mateIn != null) continue;
     if (line.bestUci === base.bestUci) continue;
     const loss = myLossFromWhiteCp(snap.turn, base.whiteCp, line.whiteCp);
     // A near-zero loss is the same lie in the other direction: the move must
     // cost something like the band, not be a good move that happens to be legal.
-    if (loss == null || loss < Math.round(target * 0.35)) continue;
+    if (loss == null || loss < floor) continue;
     if (allowsMateInOne(legal, line.bestUci)) continue;
-    const err = Math.abs(loss - aim);
-    if (err < bestErr) {
-      bestErr = err;
-      pick = { line, loss };
+    ranked.push({ line, loss });
+  }
+  ranked.sort((x, y) => Math.abs(x.loss - aim) - Math.abs(y.loss - aim));
+  // The restricted search proposes; a plain full search of the position after the
+  // move disposes. Measured against a same-level opponent, the restricted price
+  // was off by hundreds: a move it called 293 realised at 0. The verified number
+  // is the same subtraction the panel uses afterwards, so the promise and the
+  // measurement share a method.
+  let pick = null;
+  for (const cand of ranked.slice(0, 3)) {
+    const move = legal.find((m) => Chess.moveToUci(m) === cand.line.bestUci);
+    if (!move || !move.nextState) continue;
+    let after = null;
+    try {
+      after = await engine.analyze({
+        fen: Chess.buildFen(move.nextState),
+        turn: move.nextState.turn,
+        flipped: snap.flipped,
+        depth: cfg.maxDepth,
+        moveTimeMs: 700
+      });
+    } catch {
+      after = null;
     }
+    const white = after && after[0] && after[0].whiteCp;
+    if (!Number.isFinite(white)) continue;
+    const real = myLossFromWhiteCp(snap.turn, best.whiteCp, white);
+    if (real == null || real < floor) continue;
+    const err = Math.abs(real - aim);
+    if (!pick || err < pick.err) pick = { line: cand.line, loss: real, err };
   }
   if (!pick) return null;
   return {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.73.0 — 2026-11-27
+
+The restricted search proposes, a real search disposes.
+
+- 1.72.0 aligned the depth and still delivered 32 cp/move against a 293 band at
+  a 133 account: the multi-move restricted search priced a candidate at 293 and
+  the position after it evaluated 0 worse.
+- The three best-ranked candidates are now each verified with a plain full search
+  of the position the move creates, and the verified difference — the same
+  subtraction the panel uses afterwards — decides which one is played.
+
 ## 1.72.0 — 2026-11-27
 
 Priced at the depth the loss is measured at.
