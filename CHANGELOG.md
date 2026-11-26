@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.75.0 — 2026-11-27
+
+The loss was measured after the opponent's reply, which refunded it.
+
+- The ACPL convention is the eval before my move against the eval of the position
+  my move creates. The panel measured after the reply, so when the opponent gave
+  the material back the loss became 0: a move verified at 293 cp reported 82.
+- Improvised moves now carry the position they create and the eval they came from,
+  and the panel re-measures that position itself — independent of the search that
+  chose the move — as soon as the move lands.
+- `recordMyMeasuredLoss`, its `pendingMyLoss` field and the scan-timing guard are
+  gone: one definition, measured in one place.
+
 ## 1.74.0 — 2026-11-27
 
 Review of 1.73.0: the first calibration against a same-level opponent.
