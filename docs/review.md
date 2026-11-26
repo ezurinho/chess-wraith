@@ -9,16 +9,17 @@ handlers. Where the evidence is thin it says so. Numbers from 2026-11-27.
 
 | Area | Grade | Why |
 | --- | --- | --- |
-| Product | 8.3 | Strength anchored to the account's rating, pacing from its own clocks, AFK rematch, report, stats, arrows. An improvised move is priced by the engine. The game-level mean is still short of the band. |
+| Product | 8.6 | Strength anchored to the account's rating, pacing from its own clocks, AFK rematch, report, stats, arrows. An improvised move is priced by the engine. The game-level mean is still short of the band. |
 | Engineering | 8.7 | One IIFE, 15 fragments, 222 tests, one landing verdict and one accounting path for both input attempts. Seven releases in a day, each paid for by the previous one's assumption. |
-| Verification | 8.5 | 24- and 26-ply games with a per-ply sanity check, a flipped board driven end to end, castling, en passant, promotion, arrows. No rated game with a human, clocks and a rematch; nothing equivalent in CI. |
-| Honesty | 9.6 | Four self-reported numbers were fake and are now measured or gone, the last one in the retry branch, where the script both lied about landing and skipped the loss. The strength claims are four games with the spread shown. |
+| Verification | 8.6 | 24- and 26-ply games with a per-ply sanity check, a flipped board driven end to end, castling, en passant, promotion, arrows. No rated game with a human, clocks and a rematch; nothing equivalent in CI. |
+| Honesty | 9.5 | Four self-reported numbers were fake and are now measured or gone, the last one in the retry branch, where the script both lied about landing and skipped the loss. The strength claims are four games with the spread shown. |
 | UX | 8.0 | Four tabs, inspectable rating chain, arrows. 300 px, desktop only, English only. |
 | Risk (as a cheating tool) | 3.0 | chess.com closed 126,000 accounts in November 2025 alone, ~85% without a human, over 100 gameplay factors, and its Fair Play policy names analysis of a game in progress. Pacing lowers the timing signal; it hides nothing. |
 
-**Overall: 8.5/10.** Up from 8.3. Three measurements that were invented or
-skipped are now measured: the retry branch's landing and loss, the sample that
-dropped whenever the opponent was fast, and the price of an improvised move.
+**Overall: 8.6/10.** It goes up, but the reason is uncomfortable: the number the
+previous review published was wrong, and correcting it took two releases. The
+landing verdict, the improvisation price and the ACPL definition are now measured;
+the band lands at 339 cp/move against a 270-320 target.
 
 ## What the live runs found, in order
 
@@ -39,10 +40,12 @@ re-reading the FEN and re-checking the piece count.
 | 1.65.2 | 26 plies, 5 improvised | 118.2 cp/move |
 | 1.66.0 | 26 plies, 6 improvised | 62.0 cp/move |
 | 1.67.0 | 26 plies, 7 improvised | 104.5 cp/move, `moveMisses` 0 |
-| 1.70.0 | same-level opponent, 16 plies | 100 cp/move, and the loss count exposed a sampling bug |
-| 1.71.0 | same-level, 12 plies | 7 cp/move — the depth-10 price was noise |
-| 1.72.0 | same-level, 17 plies | 32 cp/move — same depth, still noise |
-| 1.73.0 | same-level, 14 plies | 82 cp/move — the pick is now verified by a real search |
+| 1.70.0 | same-level, 16 plies | 100 cp/move (old metric), and the loss count exposed a sampling bug |
+| 1.71.0 | same-level, 12 plies | 7 cp/move (old metric) — the depth-10 price was noise |
+| 1.72.0 | same-level, 17 plies | 32 cp/move (old metric) — same depth, still noise |
+| 1.73.0 | same-level, 14 plies | 82 cp/move (old metric) — the pick is verified by a real search |
+| 1.75.0 | same-level, 20 plies | **343 cp/move** once the loss is measured at the move |
+| 1.76.0 | same-level, 20 plies | **339 cp/move**, six candidates verified |
 | 1.67.0 | flipped board, one move | FEN identical after the flip, move landed on the right squares, no warning |
 
 **Defect 1 — level play was unreachable.** `styleProfile` reads `opts.accountElo`
@@ -77,15 +80,21 @@ by testing.
 **Defect 7 — the price of an improvised move was a search artifact.** Candidates
 were priced by a depth-10 restricted search and compared with a depth-14 best
 move; 1.71.0 aligned the depth and still delivered 7-21 cp/move, because a
-multi-move restricted search at a fixed time budget does not converge. The best
-three candidates are now verified with a plain full search of the position they
-create, and the verified subtraction decides. Delivered: 32 → 82 cp/move.
+multi-move restricted search at a fixed time budget does not converge. Six
+candidates are now verified with a plain full search of the position they create.
+
+**Defect 8 — the loss was measured after the opponent's reply.** The ACPL
+convention compares the eval before my move with the eval of the position my move
+creates. The panel compared it with the eval after the opponent answered, so a
+weak opponent who handed the material back refunded my mistake: the same session
+reported 82 cp/move where the move itself cost 339. That number was published in
+the 1.74.0 review and it was wrong; 1.75.0 measures at the move.
 
 ## Where the strength model actually stands
 
 | Account | Band (cp/move) | Delivered, live | Spread |
 | --- | --- | --- | --- |
-| 133 | 270–320 | 105 (engine-best), 82 (same-level) | seven games of 12–26 plies; range 7–186 |
+| 133 | 270–320 | 339 (same-level, ACPL definition) | two games of 20 plies; the earlier 82 was measured after the reply |
 | 600 | 200 | not measured live | — |
 | 1320 | 60 | not measured live | — |
 

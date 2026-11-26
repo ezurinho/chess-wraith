@@ -862,10 +862,18 @@ pointer events on chess.com's handlers:
 | 1.71.0 | same-level | 12 | 7 |
 | 1.72.0 | same-level | 17 | 32 |
 | 1.73.0 | same-level | 14 | 82 |
+| 1.75.0 | same-level | 20 | **343** |
+| 1.76.0 | same-level | 20 | **339** |
 
-Band for a 133 account: 270-320 cp/move. The best measured delivery with a
-relevant opponent is 82, about a third of it, across 14 plies; that is short, and
-it is the honest state of the pitch. What the table does show is the direction of
+**The measurement changed on 2026-11-27 and the numbers with it.** Everything
+above that is labelled "old metric" measured my loss after the opponent's reply,
+which refunds the mistake whenever the opponent errs; the ACPL convention compares
+the eval before the move with the eval of the position it creates. Two runs of the
+new definition at a 133 account: **343 and 339 cp/move**.
+
+Band for a 133 account: 270-320 cp/move. Under the ACPL definition the delivery
+is 339-343, inside the band's ceiling rather than a third of it — and the 82 was a
+measurement error, not a strength result. What the table does show is the direction of
 travel and where it came from: the restricted multi-move search was pricing moves
 inaccurately (a candidate priced 293 realised 0), 1.72.0 used the same depth and
 1.73.0 verifies each of the three best candidates with a plain full search before

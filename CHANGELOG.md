@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.77.0 — 2026-11-27
+
+Review of 1.76.0: the published 82 was a measurement error.
+
+- A 133 account delivers 339-343 cp/move under the ACPL definition, against a band
+  of 270-320. The 82 published two releases ago measured the loss after the
+  opponent's reply and refunded the mistake.
+- The correction is in `docs/review.md` next to the number it replaces, and
+  `docs/research.md` marks which figures use the old metric.
+
 ## 1.76.0 — 2026-11-27
 
 Measured properly, the band was overshot: six candidates, not three.
