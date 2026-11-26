@@ -837,6 +837,27 @@ titled players banned, "relatively consistent with previous months". That is abo
 argument rests on: the base rate is high enough that a run of clean games is not
 evidence of safety, and low enough that most accounts are never touched.
 
+## 2f. The ladder, and where it cannot be measured yet
+
+Same method, three account ratings. Each run is one game; the band is the target
+the model was given, the delivery is what the panel measured at the move.
+
+| Account | Band (cp/move) | Delivered | Moves measured | Note |
+| --- | --- | --- | --- | --- |
+| 133 | 270-320 | 339-343 | 20 | two runs; improvised share 0.71 |
+| 600 | 200 | 159 | 20 | one run; improvised share 0.48 |
+| 1320 | 60 | not measured | 4 | a 1320 account mates a random opponent in seven plies |
+
+The random opponent is only a stand-in at the bottom of the ladder: it takes
+material, which is what a 133 does, and it hands the game over, which is what a
+1320 does not. Measuring the top rungs needs an opponent that survives, and until
+that exists the 60 cp band is a design parameter with no measurement behind it.
+
+The 600 rung is 20% under its band for a structural reason: only 48% of the moves
+are improvised at that rating and the rest are near-best, so the mean is diluted
+below the per-move target. Whether to compensate by scaling the per-move target is
+a decision for the next release, not a number to invent now.
+
 ## 2e. Measured delivery, against two kinds of opponent
 
 Apology first: until 1.70.0 the panel's loss/move was only recorded when the

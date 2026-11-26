@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.79.0 — 2026-11-27
+
+Review of 1.78.0: the ladder, with the rung that cannot be measured.
+
+- Three account ratings, one method: 133 delivers 339-343 cp/move against a
+  270-320 band, 600 delivers 159 against 200, and 1320 cannot be measured with a
+  random opponent because it mates it in seven plies.
+- The 600 rung is under for a structural reason that is written down instead of
+  hidden: only 48% of its moves are improvised, so the mean is diluted.
+- Defect 9 (the model graded its own non-improvised moves) and defect 10 (a test
+  that failed one full run in twenty) are in the review with the numbers.
+
 ## 1.78.0 — 2026-11-27
 
 Every move is measured, not just the improvised ones.

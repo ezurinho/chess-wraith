@@ -1,4 +1,4 @@
-# Review, 1.73.0
+# Review, 1.78.0
 
 Evidence: `npm run check` (222 tests, 0 failures), the committed bundle, and live
 sessions on `chess.com/analysis` where the shipped file was fetched from jsDelivr,
@@ -11,12 +11,12 @@ handlers. Where the evidence is thin it says so. Numbers from 2026-11-27.
 | --- | --- | --- |
 | Product | 8.6 | Strength anchored to the account's rating, pacing from its own clocks, AFK rematch, report, stats, arrows. An improvised move is priced by the engine. The game-level mean is still short of the band. |
 | Engineering | 8.7 | One IIFE, 15 fragments, 222 tests, one landing verdict and one accounting path for both input attempts. Seven releases in a day, each paid for by the previous one's assumption. |
-| Verification | 8.6 | 24- and 26-ply games with a per-ply sanity check, a flipped board driven end to end, castling, en passant, promotion, arrows. No rated game with a human, clocks and a rematch; nothing equivalent in CI. |
+| Verification | 8.4 | 24- and 26-ply games with a per-ply sanity check, a flipped board driven end to end, castling, en passant, promotion, arrows. No rated game with a human, clocks and a rematch; nothing equivalent in CI. |
 | Honesty | 9.5 | Four self-reported numbers were fake and are now measured or gone, the last one in the retry branch, where the script both lied about landing and skipped the loss. The strength claims are four games with the spread shown. |
 | UX | 8.0 | Four tabs, inspectable rating chain, arrows. 300 px, desktop only, English only. |
 | Risk (as a cheating tool) | 3.0 | chess.com closed 126,000 accounts in November 2025 alone, ~85% without a human, over 100 gameplay factors, and its Fair Play policy names analysis of a game in progress. Pacing lowers the timing signal; it hides nothing. |
 
-**Overall: 8.6/10.** It goes up, but the reason is uncomfortable: the number the
+**Overall: 8.5/10.** It goes up, but the reason is uncomfortable: the number the
 previous review published was wrong, and correcting it took two releases. The
 landing verdict, the improvisation price and the ACPL definition are now measured;
 the band lands at 339 cp/move against a 270-320 target.
@@ -90,13 +90,22 @@ weak opponent who handed the material back refunded my mistake: the same session
 reported 82 cp/move where the move itself cost 339. That number was published in
 the 1.74.0 review and it was wrong; 1.75.0 measures at the move.
 
+**Defect 9 — only the improvised moves were measured.** The rest pushed the
+engine's own slack figure, so a 1320 account reported 0 cp/move for thirteen moves
+in a row: the model marking its own homework. Every move now goes through the same
+before-eval against after-eval, by a fresh search.
+
+**Defect 10 — a test that failed one run in twenty.** The 60/40 habit check
+sampled 400 binomial draws with a 0.55-0.65 window, about two sigma wide. It is
+1000 draws now, and the release gate stopped going red for no reason.
+
 ## Where the strength model actually stands
 
 | Account | Band (cp/move) | Delivered, live | Spread |
 | --- | --- | --- | --- |
-| 133 | 270–320 | 339 (same-level, ACPL definition) | two games of 20 plies; the earlier 82 was measured after the reply |
-| 600 | 200 | not measured live | — |
-| 1320 | 60 | not measured live | — |
+| 133 | 270–320 | 339–343 (ACPL definition) | two games of 20 plies; the earlier 82 was measured after the reply |
+| 600 | 200 | 159 | one game of 20 plies, same-level opponent, 20% under |
+| 1320 | 60 | not measurable yet | the random opponent is mated in seven plies |
 
 The spread is the finding. Thirteen white moves per game is a small sample, and
 the realised loss of a priced move depends on the opponent: a move priced at 470
