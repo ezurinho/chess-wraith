@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.63.1
+// @version      1.63.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.63.1';
+const VERSION = '1.63.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.63.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.63.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -1805,6 +1805,7 @@ function saveSettings(cfg, user) {
     buildFen,
     isValidBoardSnapshot,
     isKingInCheck,
+    isSquareAttacked,
     generateLegalMoves,
     moveToUci,
     pvToSan,
@@ -3477,6 +3478,10 @@ function beginnerWeight(cand) {
   if (!cand) return 0;
   const capture = Number(cand.capture) || 0;
   let weight = 1 + capture * 1.5;
+  // Leaving a piece where it can be taken for free is the other half of the
+  // beginner: a 133 grabs material and then hangs the queen recapturing.
+  const hanging = Number(cand.hanging) || 0;
+  if (hanging > 0) weight += hanging * 2.5;
   if (cand.check) weight += 1.5;
   if (cand.castle) weight += 1.2;
   if (cand.piece === 'K' && !cand.castle) weight *= 0.15;
@@ -6572,7 +6577,28 @@ function scheduleAutoMove(result) {
 const PIECE_WORTH = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
 // What an improvised move needs to know about itself: what it takes, whether it
-// checks, what it moves. The chooser owns the taste; the board owns the facts.
+// checks, what it leaves hanging. The chooser owns the taste; the board owns the
+// facts.
+// The worst piece of `color` that the opponent attacks and nobody defends. A
+// 133-rated move is usually this: the queen goes to a square a pawn covers.
+function hangingAfter(grid, color) {
+  const opp = color === 'w' ? 'b' : 'w';
+  let worst = 0;
+  for (let r = 0; r < 8; r += 1) {
+    for (let f = 0; f < 8; f += 1) {
+      const piece = grid[r][f];
+      if (!piece || Chess.pieceColor(piece) !== color) continue;
+      const kind = piece.toLowerCase();
+      if (kind === 'k') continue;
+      if (!Chess.isSquareAttacked(grid, f, r, opp)) continue;
+      if (!Chess.isSquareAttacked(grid, f, r, color)) {
+        worst = Math.max(worst, PIECE_WORTH[kind] || 0);
+      }
+    }
+  }
+  return worst;
+}
+
 function improvisedCandidates(legal, snap, ply) {
   return legal.map((m) => {
     const target = snap.grid[m.toRank] && snap.grid[m.toRank][m.toFile];
@@ -6584,7 +6610,8 @@ function improvisedCandidates(legal, snap, ply) {
       check: Chess.isKingInCheck(m.nextState.grid, m.nextState.turn),
       piece,
       castle: piece === 'K' && Math.abs(m.toFile - m.fromFile) === 2,
-      ply: Number(ply) || 0
+      ply: Number(ply) || 0,
+      hanging: hangingAfter(m.nextState.grid, snap.turn)
     };
   });
 }

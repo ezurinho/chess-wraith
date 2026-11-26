@@ -1335,7 +1335,28 @@ function scheduleAutoMove(result) {
 const PIECE_WORTH = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
 // What an improvised move needs to know about itself: what it takes, whether it
-// checks, what it moves. The chooser owns the taste; the board owns the facts.
+// checks, what it leaves hanging. The chooser owns the taste; the board owns the
+// facts.
+// The worst piece of `color` that the opponent attacks and nobody defends. A
+// 133-rated move is usually this: the queen goes to a square a pawn covers.
+function hangingAfter(grid, color) {
+  const opp = color === 'w' ? 'b' : 'w';
+  let worst = 0;
+  for (let r = 0; r < 8; r += 1) {
+    for (let f = 0; f < 8; f += 1) {
+      const piece = grid[r][f];
+      if (!piece || Chess.pieceColor(piece) !== color) continue;
+      const kind = piece.toLowerCase();
+      if (kind === 'k') continue;
+      if (!Chess.isSquareAttacked(grid, f, r, opp)) continue;
+      if (!Chess.isSquareAttacked(grid, f, r, color)) {
+        worst = Math.max(worst, PIECE_WORTH[kind] || 0);
+      }
+    }
+  }
+  return worst;
+}
+
 function improvisedCandidates(legal, snap, ply) {
   return legal.map((m) => {
     const target = snap.grid[m.toRank] && snap.grid[m.toRank][m.toFile];
@@ -1347,7 +1368,8 @@ function improvisedCandidates(legal, snap, ply) {
       check: Chess.isKingInCheck(m.nextState.grid, m.nextState.turn),
       piece,
       castle: piece === 'K' && Math.abs(m.toFile - m.fromFile) === 2,
-      ply: Number(ply) || 0
+      ply: Number(ply) || 0,
+      hanging: hangingAfter(m.nextState.grid, snap.turn)
     };
   });
 }

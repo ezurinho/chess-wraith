@@ -86,6 +86,10 @@ test('an improvised move grabs material instead of wandering', () => {
   assert.ok(api.beginnerWeight({ capture: 9 }) > api.beginnerWeight({ capture: 0 }));
   assert.ok(api.beginnerWeight({ check: true }) > api.beginnerWeight({}));
   assert.ok(api.beginnerWeight({ piece: 'K' }) < api.beginnerWeight({ piece: 'N' }));
+  // And it hangs the queen: a move that leaves nine points on a covered square
+  // weighs more than a pawn capture, which is how the 133 blunders arrive.
+  assert.ok(api.beginnerWeight({ hanging: 9 }) > api.beginnerWeight({ capture: 1 }));
+  assert.ok(api.beginnerWeight({ hanging: 0, capture: 0 }) < api.beginnerWeight({ hanging: 3 }));
   const pool = [
     { uci: 'qx', capture: 9 },
     { uci: 'px', capture: 1 },

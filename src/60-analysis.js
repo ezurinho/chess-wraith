@@ -78,6 +78,10 @@ function beginnerWeight(cand) {
   if (!cand) return 0;
   const capture = Number(cand.capture) || 0;
   let weight = 1 + capture * 1.5;
+  // Leaving a piece where it can be taken for free is the other half of the
+  // beginner: a 133 grabs material and then hangs the queen recapturing.
+  const hanging = Number(cand.hanging) || 0;
+  if (hanging > 0) weight += hanging * 2.5;
   if (cand.check) weight += 1.5;
   if (cand.castle) weight += 1.2;
   if (cand.piece === 'K' && !cand.castle) weight *= 0.15;

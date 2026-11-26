@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.63.2 — 2026-11-27
+
+The improvised move hung nothing.
+
+- Measured on 1.63.1, live, at a 133 account: ten moves, three of them
+  improvised, 40 cp/move against a 293 band. The capture-first weighting was
+  the problem — taking a free piece is a good move, so the "beginner" played
+  well and the band was never reachable.
+- `hangingAfter` reads the board after each candidate: the worst of the account's
+  pieces the opponent attacks and nobody defends. `beginnerWeight` adds 2.5 per
+  point, so leaving the queen on a covered square outweighs a pawn capture. That
+  is the shape of a 133's move: material first, then the piece back.
+- `isSquareAttacked` is exported for it.
+
 ## 1.63.1 — 2026-11-27
 
 The loss of an improvised move was the target, not a measurement.

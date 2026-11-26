@@ -1137,6 +1137,7 @@
     buildFen,
     isValidBoardSnapshot,
     isKingInCheck,
+    isSquareAttacked,
     generateLegalMoves,
     moveToUci,
     pvToSan,
