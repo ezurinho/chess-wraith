@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.84.0 — 2026-11-27
+
+The panel was watching the engine agree with itself.
+
+- Both sides of the loss subtraction now run with the strength limit off (`elo: 0`,
+  full strength), and both are searched fresh. Before, the before-eval came from
+  the limited search the move was chosen in, so a 1320 account measured 2 cp/move:
+  the engine's own view on both sides of the minus sign.
+- Costs one extra search per move. Not measured live yet; the 1320 rung is the run
+  that will show it.
+
 ## 1.83.0 — 2026-11-27
 
 Review of 1.82.0: the 133 rung landed on the band's floor.

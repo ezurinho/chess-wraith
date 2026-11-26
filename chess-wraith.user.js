@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.83.0
+// @version      1.84.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.83.0';
+const VERSION = '1.84.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.83.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.84.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6366,21 +6366,31 @@ function pushMyLoss(cp) {
 // Measuring after the opponent's reply refunded my mistake whenever they erred,
 // which is how a 293 band reported 82 against a weak opponent.
 async function measureLanded(info) {
-  let lines = null;
+  // Both sides of the subtraction at full strength: `elo: 0` turns the strength
+  // limit off for the search. With the limited engine on both sides the panel was
+  // watching the engine agree with itself - a 1320 account measured 2 cp/move and
+  // that number could not tell a strong move from a lucky one.
+  const opts = { depth: cfg.maxDepth, moveTimeMs: 700, elo: 0 };
+  let before = null;
+  let after = null;
   try {
-    lines = await engine.analyze({
+    if (info.fenBefore) {
+      const pre = await engine.analyze({ fen: info.fenBefore, turn: info.turn, flipped: info.flipped, ...opts });
+      before = pre && pre[0] ? pre[0].whiteCp : null;
+    }
+    const post = await engine.analyze({
       fen: info.fen,
       turn: info.turn === 'w' ? 'b' : 'w',
       flipped: info.flipped,
-      depth: cfg.maxDepth,
-      moveTimeMs: 700
+      ...opts
     });
+    after = post && post[0] ? post[0].whiteCp : null;
   } catch {
     return;
   }
-  const white = lines && lines[0] && lines[0].whiteCp;
-  if (!Number.isFinite(white) || !Number.isFinite(info.before)) return;
-  const loss = myLossFromWhiteCp(info.turn, info.before, white);
+  const start = Number.isFinite(before) ? before : info.before;
+  if (!Number.isFinite(start) || !Number.isFinite(after)) return;
+  const loss = myLossFromWhiteCp(info.turn, start, after);
   if (loss !== null) pushMyLoss(loss);
 }
 
@@ -6875,7 +6885,7 @@ function settleLandedMove(grid, snap, choice, move) {
         ? state.analysis.lines[0].whiteCp
         : null);
     if (afterFen && Number.isFinite(beforeCp)) {
-      measureLanded({ fen: afterFen, before: beforeCp, turn: snap.turn, flipped: snap.flipped });
+      measureLanded({ fen: afterFen, fenBefore: snap.fen, before: beforeCp, turn: snap.turn, flipped: snap.flipped });
     } else {
       pushMyLoss(choice.cpLoss);
     }
