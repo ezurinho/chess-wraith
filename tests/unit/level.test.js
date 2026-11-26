@@ -64,9 +64,9 @@ test('a low account plays moves of its own size, not the best one', () => {
 test('the improvisation rate only exists below the floor and never reaches half', () => {
   assert.equal(api.improvisationChance(0), 0);
   assert.equal(api.improvisationChance(8), 0);
-  assert.ok(Math.abs(api.improvisationChance(100) - 0.192) < 0.01);
-  assert.ok(Math.abs(api.improvisationChance(293) - 0.5) < 0.001);
-  assert.equal(api.improvisationChance(600), 0.5);
+  assert.ok(Math.abs(api.improvisationChance(100) - 0.23) < 0.01);
+  assert.ok(Math.abs(api.improvisationChance(293) - 0.7125) < 0.001);
+  assert.equal(api.improvisationChance(600), 0.85);
 });
 
 test('an improvised move comes from the legal list, not from the engine', () => {

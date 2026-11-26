@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.66.0 — 2026-11-27
+
+Half the moves wrong is not a 133.
+
+- Measured on 1.65.2, live, 26 plies: 118 cp/move. The improvised moves were
+  right on the band — 247, 555, 215, 265, 147 — but only five of thirteen moves
+  were improvised, so the game averaged half the band.
+- The rate cap goes from 0.5 to 0.85 and the denominator from 480 to 400: at 293
+  it is now one move in 1.4 rather than one in two. A 133 does not play half its
+  moves well.
+
 ## 1.65.2 — 2026-11-27
 
 A random list of candidates misses the expensive move.
