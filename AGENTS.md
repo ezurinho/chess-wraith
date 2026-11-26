@@ -61,9 +61,16 @@ only version anyone installs.
   covered.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the
   selector layer is tested, not just eyeballed.
-- `tests/unit/session.test.js` — the whole script in one jsdom page: boot, board
-  read, engine handshake, panel host, and a finished game whose rematch button
-  is pressed. It owns real timers, so each test stops the page in a `finally`.
+- `tests/unit/harness.js` — the jsdom bench both boot tests share: chess.com-shaped
+  markup, a protocol-level fake worker, and a tracked timer set so a test can
+  close the page the way a tab close would.
+- `tests/unit/session.test.js` — the whole script from `src/`, one jsdom page:
+  boot, board read, engine handshake, panel host, a finished game whose rematch
+  button is pressed, and the session limit surviving a reload.
+- `tests/unit/bundle.test.js` — five static checks on the committed artifact
+  (build freshness, header/version/badge agreement, IIFE shape, vendored wasm)
+  plus one that boots `chess-wraith.user.js` itself and runs its selftest. A
+  fragment dropped by `tools/build.js` passes the other five and fails this one.
 - `docs/research.md` — measured engine numbers, what a fair-play system can see,
   and the comparison with `nitro-wraith`. Update the numbers when they change;
   they are claims, and claims rot.

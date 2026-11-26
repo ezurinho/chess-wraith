@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.29.0 — 2026-11-25
+
+The artifact is tested, not just the source.
+
+- Every boot test read `src/`. The file people install is
+  `chess-wraith.user.js`, built by a manual `MODULES` order in
+  `tools/build.js`; a fragment dropped from that list kept every unit test green
+  and shipped a script that throws on load.
+- `bundle.test.js` now boots the committed bundle in jsdom — chess.com-shaped
+  board, protocol-level fake worker, stubbed public API and storage — and runs
+  the script's own `selftest`: engine up, board read as the start position, 11
+  checks green. It sits next to the five static checks that were already there.
+- `tests/unit/harness.js` holds the page, the fake worker and the timer tracking
+  so the fragments test and the bundle test cannot drift apart.
+- While adding it I overwrote the existing `bundle.test.js` instead of extending
+  it; the test count (150 → 146) is what caught it. The five checks are back,
+  byte for byte, with the boot test appended.
+- 151 tests, 22 files.
+
 ## 1.28.0 — 2026-11-25
 
 A limit that resets itself is not a limit.
