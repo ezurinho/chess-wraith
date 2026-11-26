@@ -137,7 +137,7 @@ function chooseMove(lines, cfg, opts = {}) {
     // The account's own opening habits, counted from its published games. A
     // repertoire is the most stable thing about a player's games, and four first
     // moves at 25% each is the opposite of a repertoire.
-    const share = opts.openingShares ? Number(opts.openingShares[cand.line.bestSan]) || 0 : 0;
+    const share = opts.openingShares ? Number(opts.openingShares[sanKey(cand.line.bestSan)]) || 0 : 0;
     if (opts.openingShares) weight *= 0.2 + 4.5 * share;
     // The same first move every game is its own tell, separate from move choice
     // — unless it is the move this account actually plays that often.

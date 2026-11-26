@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.47.0
+// @version      1.48.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.47.0';
+const VERSION = '1.48.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.47.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.48.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -640,6 +640,12 @@ function loadSettings(user) {
   } catch {
     return { ...CONFIG };
   }
+}
+
+// The suffix is where two sources disagree (a PGN says 'Nf3+', the engine says
+// 'Nf3+'); the move is not. Two different moves never differ only by a suffix.
+function sanKey(san) {
+  return String(san || '').replace(/[+#]+$/, '');
 }
 
 function saveSettings(cfg, user) {
@@ -2878,10 +2884,26 @@ function firstMoveUci(san) {
   return pawn ? `${pawn[1]}2${pawn[1]}${pawn[2]}` : null;
 }
 
+// The first move was only the start of it: a repertoire is a tree. The same
+// PGNs give what the account plays at every opening ply, keyed by the moves that
+// lead there, and the picker follows the deepest node the account has.
+const OPENING_PLIES = 8;
+const OPENING_MIN_GAMES = 2;
+
+function openingMoves(pgn) {
+  if (typeof pgn !== 'string') return [];
+  const body = pgn.replace(/\[[^\]]*\]/g, ' ').replace(/\{[^}]*\}/g, ' ').replace(/\([^)]*\)/g, ' ');
+  return body
+    .replace(/\d+\.(\.\.)?/g, ' ')
+    .split(/\s+/)
+    .filter((t) => /^[a-hRNBQKO]/.test(t))
+    .map((t) => sanKey(t.replace(/[!?]+$/, '')));
+}
+
 // Shares, not counts: the picker compares a candidate's SAN against them.
 function repertoireFromGames(games, user) {
   const list = Array.isArray(games) ? games : [];
-  const counts = { w: new Map(), b: new Map(), byFirst: new Map() };
+  const counts = { w: new Map(), b: new Map(), byFirst: new Map(), tree: new Map() };
   let used = 0;
   for (let i = list.length - 1; i >= 0 && used < 60; i--) {
     const game = list[i];
@@ -2897,6 +2919,18 @@ function repertoireFromGames(games, user) {
         if (!counts.byFirst.has(answer)) counts.byFirst.set(answer, new Map());
         const bucket = counts.byFirst.get(answer);
         bucket.set(move, (bucket.get(move) || 0) + 1);
+      }
+    }
+    // A game that starts from a FEN has no opening to key on. Both sides of the
+    // prefix are kept: the account's move is what to play at the end of it.
+    if (!/\b1\s*\.\s*\.\s*\./.test(game.pgn)) {
+      const moves = openingMoves(game.pgn);
+      const offset = side === 'w' ? 0 : 1;
+      for (let ply = offset; ply < moves.length && ply < OPENING_PLIES; ply += 2) {
+        const key = moves.slice(0, ply).join(' ');
+        if (!counts.tree.has(key)) counts.tree.set(key, new Map());
+        const bucket = counts.tree.get(key);
+        bucket.set(moves[ply], (bucket.get(moves[ply]) || 0) + 1);
       }
     }
     used += 1;
@@ -2917,8 +2951,14 @@ function repertoireFromGames(games, user) {
     const parsed = shares(bucket);
     if (parsed.games >= 2) blackByFirst[first] = parsed.shares;
   }
+  const tree = {};
+  for (const [key, bucket] of counts.tree) {
+    const parsed = shares(bucket);
+    // One game is an anecdote; two games on the same prefix is a habit.
+    if (parsed.games >= OPENING_MIN_GAMES) tree[key] = parsed.shares;
+  }
   // Both colours: a repertoire is two habits, and five games is the floor either way.
-  return { white: white.shares, black: black.shares, blackByFirst, games: white.games + black.games };
+  return { white: white.shares, black: black.shares, blackByFirst, tree, games: white.games + black.games };
 }
 
 // One entry per account and time class: a player who alternates bullet and
@@ -3231,7 +3271,7 @@ function chooseMove(lines, cfg, opts = {}) {
     // The account's own opening habits, counted from its published games. A
     // repertoire is the most stable thing about a player's games, and four first
     // moves at 25% each is the opposite of a repertoire.
-    const share = opts.openingShares ? Number(opts.openingShares[cand.line.bestSan]) || 0 : 0;
+    const share = opts.openingShares ? Number(opts.openingShares[sanKey(cand.line.bestSan)]) || 0 : 0;
     if (opts.openingShares) weight *= 0.2 + 4.5 * share;
     // The same first move every game is its own tell, separate from move choice
     // — unless it is the move this account actually plays that often.
@@ -4913,11 +4953,32 @@ function openingFor() {
   return state.repertoire && Number(state.repertoire.games) >= 5 ? state.repertoire : null;
 }
 
+// The moves already played, as SAN from the start position: the tree is keyed by
+// what was played, and the tracker only has UCI.
+function openingPrefix(snap) {
+  const uci = snap && Array.isArray(snap.uciMoves) ? snap.uciMoves.slice(0, OPENING_PLIES) : [];
+  if (!uci.length || typeof Chess === 'undefined' || !Chess.pvToSan) return [];
+  const start = Chess.START_FEN || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  return (Chess.pvToSan(start, uci) || []).map(sanKey);
+}
+
 function openingShares() {
   const opening = openingFor();
   if (!opening) return null;
   const snap = state.snapshot;
   if (!snap) return null;
+  const played = Array.isArray(snap.uciMoves) ? snap.uciMoves.length : 0;
+  // Past the tree the engine has the position; an opening table would be wrong.
+  if (played >= OPENING_PLIES) return null;
+  if (opening.tree) {
+    const prefix = openingPrefix(snap);
+    // The deepest node the account has: the point of a tree is that the third
+    // move is conditioned on the first two.
+    for (let n = prefix.length; n >= 0; n--) {
+      const table = opening.tree[prefix.slice(0, n).join(' ')];
+      if (table && Object.keys(table).length) return table;
+    }
+  }
   if (snap.turn === 'b') {
     // The answer depends on the question: a table of black's moves averaged over
     // every white first move recommends replies this account never plays.
@@ -5079,7 +5140,8 @@ function registerButler() {
     config: cfg,
     engine,
     panel,
-    chooseMove: (lines, opts) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate, ...(opts || {}) }),
+    openingShares: () => openingShares(),
+  chooseMove: (lines, opts) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate, ...(opts || {}) }),
     computeDelay: (opts) => computeDelay(cfg, opts),
     phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
     // "Why did it not rematch?" answered without reading the source: what the
@@ -5541,7 +5603,7 @@ function scheduleAutoMove(result) {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply <= 1 ? openingShares() : null
+    openingShares: ply < OPENING_PLIES ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
@@ -5714,7 +5776,7 @@ async function playNow() {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply <= 1 ? openingShares() : null
+    openingShares: ply < OPENING_PLIES ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;

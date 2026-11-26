@@ -209,7 +209,7 @@ test('the repertoire is shares of the games, not a vote for one move', () => {
   // The marginal table, kept for the report.
   assert.deepEqual(JSON.parse(JSON.stringify(out.black)), { e5: 0.5, d5: 0.5 });
   // Nothing to copy from an empty archive or a player who is not in it.
-  assert.deepEqual(JSON.parse(JSON.stringify(api.repertoireFromGames([], 'hikaru'))), { white: {}, black: {}, blackByFirst: {}, games: 0 });
+  assert.deepEqual(JSON.parse(JSON.stringify(api.repertoireFromGames([], 'hikaru'))), { white: {}, black: {}, blackByFirst: {}, tree: {}, games: 0 });
 });
 
 test('a reply is counted against the move it answers, not averaged', () => {
@@ -276,4 +276,36 @@ test('an archive with no games backs off instead of asking every scan', async ()
   assert.equal(calls.length, 2);
   assert.equal(await harness(store, fetcher).syncRepertoire(), null);
   assert.equal(calls.length, 2, 'no request inside the retry window');
+});
+
+test('the repertoire is a tree: every opening ply the account actually played', () => {
+  const api = harness();
+  const games = [
+    // Three white games down 1.e4 e5 2.Nf3, one down 1.e4 c5 2.Nf3.
+    game('hikaru', 'a', '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6'),
+    game('hikaru', 'b', '1. e4 e5 2. Nf3 Nc6 3. Bb5 a6'),
+    game('hikaru', 'c', '1. e4 e5 2. Nf3 d6 3. d4'),
+    game('hikaru', 'd', '1. e4 c5 2. Nf3 d6 3. d4'),
+    // Two black games: after 1.e4 it answers e5, then after 2.Nf3 it plays Nc6.
+    game('x', 'hikaru', '1. e4 e5 2. Nf3 Nc6'),
+    game('y', 'hikaru', '1. e4 e5 2. Nf3 Nc6')
+  ];
+  const out = api.repertoireFromGames(games, 'hikaru');
+  assert.equal(out.tree[''].e4, 1, 'the account opens 1.e4 in all four white games');
+  assert.equal(out.tree['e4'].e5, 1, 'and answers 1.e4 with e5 every time');
+  assert.equal(out.tree['e4 e5'].Nf3, 1);
+  assert.equal(out.tree['e4 e5 Nf3'].Nc6, 1, 'black games continue the node too');
+  assert.equal(out.tree['e4 e5 Nf3 Nc6'].Bb5, 1, 'two games make a node');
+  // One game on a prefix is not a habit.
+  assert.equal(out.tree['e4 c5'], undefined, '1.e4 c5 was played once');
+  assert.equal(out.tree['e4 e5 Nf3 d6'], undefined, 'and so was 2...d6');
+  // The suffix a PGN or an engine adds to a check is not part of the move name.
+  assert.deepEqual(JSON.parse(JSON.stringify(api.openingMoves('1. e4+ e5 2. Nf3#'))), ['e4', 'e5', 'Nf3']);
+  // A game that starts from a FEN has no opening to key on.
+  const fromFen = { rules: 'chess', pgn: '[SetUp "1"] [White "hikaru"] [Black "y"]\n\n1... c5 2. Nf3' };
+  const fenOut = api.repertoireFromGames([fromFen], 'hikaru');
+  // The first move is still readable (white's first move is the second token),
+  // but there is no opening tree to key on.
+  assert.deepEqual(JSON.parse(JSON.stringify(fenOut.white)), { Nf3: 1 });
+  assert.deepEqual(JSON.parse(JSON.stringify(fenOut.tree)), {});
 });

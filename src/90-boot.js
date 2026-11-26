@@ -431,11 +431,32 @@ function openingFor() {
   return state.repertoire && Number(state.repertoire.games) >= 5 ? state.repertoire : null;
 }
 
+// The moves already played, as SAN from the start position: the tree is keyed by
+// what was played, and the tracker only has UCI.
+function openingPrefix(snap) {
+  const uci = snap && Array.isArray(snap.uciMoves) ? snap.uciMoves.slice(0, OPENING_PLIES) : [];
+  if (!uci.length || typeof Chess === 'undefined' || !Chess.pvToSan) return [];
+  const start = Chess.START_FEN || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+  return (Chess.pvToSan(start, uci) || []).map(sanKey);
+}
+
 function openingShares() {
   const opening = openingFor();
   if (!opening) return null;
   const snap = state.snapshot;
   if (!snap) return null;
+  const played = Array.isArray(snap.uciMoves) ? snap.uciMoves.length : 0;
+  // Past the tree the engine has the position; an opening table would be wrong.
+  if (played >= OPENING_PLIES) return null;
+  if (opening.tree) {
+    const prefix = openingPrefix(snap);
+    // The deepest node the account has: the point of a tree is that the third
+    // move is conditioned on the first two.
+    for (let n = prefix.length; n >= 0; n--) {
+      const table = opening.tree[prefix.slice(0, n).join(' ')];
+      if (table && Object.keys(table).length) return table;
+    }
+  }
   if (snap.turn === 'b') {
     // The answer depends on the question: a table of black's moves averaged over
     // every white first move recommends replies this account never plays.
@@ -597,7 +618,8 @@ function registerButler() {
     config: cfg,
     engine,
     panel,
-    chooseMove: (lines, opts) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate, ...(opts || {}) }),
+    openingShares: () => openingShares(),
+  chooseMove: (lines, opts) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate, ...(opts || {}) }),
     computeDelay: (opts) => computeDelay(cfg, opts),
     phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
     // "Why did it not rematch?" answered without reading the source: what the
@@ -1059,7 +1081,7 @@ function scheduleAutoMove(result) {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply <= 1 ? openingShares() : null
+    openingShares: ply < OPENING_PLIES ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
@@ -1232,7 +1254,7 @@ async function playNow() {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply <= 1 ? openingShares() : null
+    openingShares: ply < OPENING_PLIES ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;

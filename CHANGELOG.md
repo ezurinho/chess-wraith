@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.48.0 — 2026-11-26
+
+The openings come from the whole tree, not just the first move.
+
+- `repertoireFromGames` also builds a tree of the account's opening plies (the
+  last 60 games, 8 plies, a node needs two games), keyed by the SAN moves that
+  lead to the position; the picker follows the deepest node it has and falls back
+  to the next one up when a line is unknown.
+- Measured on a 167-game account: 117 nodes, six of them two plies in. After
+  1.e4 e5 it plays 2.Ne2 in 9 of 9 games; after 1.e4 e5 2.Nf3 it answers 2...d6
+  in 9 of 9. An engine never picks 2.Ne2 — that is the point.
+- The repertoire now applies at every opening ply (`ply < 8`), not only the first.
+- A PGN's `Nf3+` and an engine's `Nf3+` are the same move: `sanKey` strips the
+  suffix on both sides, so a check never silently drops into the engine's line.
+- Limit, stated once: the tree reweights the engine's candidates; a signature
+  move the search never considered is not forced (MultiPV 4).
+- 187 tests.
+
 ## 1.47.0 — 2026-11-26
 
 Black's repertoire is keyed by the move it answers, and it loads without a clock.

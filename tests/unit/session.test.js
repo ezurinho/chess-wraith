@@ -264,6 +264,27 @@ test('the repertoire is read for the side that is on move, and only when it exis
     api.state.repertoire = { white: { e4: 1 }, black: { c5: 1 }, blackByFirst: { e2e4: { c5: 1 } }, games: 6 };
     api.state.snapshot = { ...api.state.snapshot, turn: 'w' };
     assert.deepEqual({ ...api.openingShares() }, { e4: 1 });
+    // The tree: the third move is conditioned on the first two, and the deepest
+    // node the account has wins.
+    api.state.repertoire = {
+      white: { e4: 1 },
+      black: {},
+      blackByFirst: {},
+      games: 9,
+      tree: { '': { e4: 1 }, e4: { e5: 1 }, 'e4 e5': { Nf3: 0.9, Bc4: 0.1 }, 'e4 c5': { Nf3: 1 } }
+    };
+    api.state.snapshot = { ...api.state.snapshot, turn: 'w', uciMoves: ['e2e4'] };
+    assert.deepEqual({ ...api.openingShares() }, { e5: 1 }, 'after 1.e4 the tree answers e5');
+    api.state.snapshot = { ...api.state.snapshot, uciMoves: ['e2e4', 'e7e5'] };
+    assert.deepEqual({ ...api.openingShares() }, { Nf3: 0.9, Bc4: 0.1 }, 'after 1.e4 e5, 2.Nf3');
+    // A prefix the tree has never seen falls back to the deepest one it has.
+    api.state.snapshot = { ...api.state.snapshot, uciMoves: ['e2e4', 'e7e5', 'g1f3'] };
+    assert.deepEqual({ ...api.openingShares() }, { Nf3: 0.9, Bc4: 0.1 });
+    api.state.snapshot = { ...api.state.snapshot, uciMoves: ['e2e4', 'c7c5'] };
+    assert.deepEqual({ ...api.openingShares() }, { Nf3: 1 });
+    // Past the opening the engine has the position, not an opening table.
+    api.state.snapshot = { ...api.state.snapshot, uciMoves: ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1b5', 'a7a6', 'b5a4', 'g8f6'] };
+    assert.equal(api.openingShares(), null);
   } finally {
     stop();
   }

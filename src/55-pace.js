@@ -150,10 +150,26 @@ function firstMoveUci(san) {
   return pawn ? `${pawn[1]}2${pawn[1]}${pawn[2]}` : null;
 }
 
+// The first move was only the start of it: a repertoire is a tree. The same
+// PGNs give what the account plays at every opening ply, keyed by the moves that
+// lead there, and the picker follows the deepest node the account has.
+const OPENING_PLIES = 8;
+const OPENING_MIN_GAMES = 2;
+
+function openingMoves(pgn) {
+  if (typeof pgn !== 'string') return [];
+  const body = pgn.replace(/\[[^\]]*\]/g, ' ').replace(/\{[^}]*\}/g, ' ').replace(/\([^)]*\)/g, ' ');
+  return body
+    .replace(/\d+\.(\.\.)?/g, ' ')
+    .split(/\s+/)
+    .filter((t) => /^[a-hRNBQKO]/.test(t))
+    .map((t) => sanKey(t.replace(/[!?]+$/, '')));
+}
+
 // Shares, not counts: the picker compares a candidate's SAN against them.
 function repertoireFromGames(games, user) {
   const list = Array.isArray(games) ? games : [];
-  const counts = { w: new Map(), b: new Map(), byFirst: new Map() };
+  const counts = { w: new Map(), b: new Map(), byFirst: new Map(), tree: new Map() };
   let used = 0;
   for (let i = list.length - 1; i >= 0 && used < 60; i--) {
     const game = list[i];
@@ -169,6 +185,18 @@ function repertoireFromGames(games, user) {
         if (!counts.byFirst.has(answer)) counts.byFirst.set(answer, new Map());
         const bucket = counts.byFirst.get(answer);
         bucket.set(move, (bucket.get(move) || 0) + 1);
+      }
+    }
+    // A game that starts from a FEN has no opening to key on. Both sides of the
+    // prefix are kept: the account's move is what to play at the end of it.
+    if (!/\b1\s*\.\s*\.\s*\./.test(game.pgn)) {
+      const moves = openingMoves(game.pgn);
+      const offset = side === 'w' ? 0 : 1;
+      for (let ply = offset; ply < moves.length && ply < OPENING_PLIES; ply += 2) {
+        const key = moves.slice(0, ply).join(' ');
+        if (!counts.tree.has(key)) counts.tree.set(key, new Map());
+        const bucket = counts.tree.get(key);
+        bucket.set(moves[ply], (bucket.get(moves[ply]) || 0) + 1);
       }
     }
     used += 1;
@@ -189,8 +217,14 @@ function repertoireFromGames(games, user) {
     const parsed = shares(bucket);
     if (parsed.games >= 2) blackByFirst[first] = parsed.shares;
   }
+  const tree = {};
+  for (const [key, bucket] of counts.tree) {
+    const parsed = shares(bucket);
+    // One game is an anecdote; two games on the same prefix is a habit.
+    if (parsed.games >= OPENING_MIN_GAMES) tree[key] = parsed.shares;
+  }
   // Both colours: a repertoire is two habits, and five games is the floor either way.
-  return { white: white.shares, black: black.shares, blackByFirst, games: white.games + black.games };
+  return { white: white.shares, black: black.shares, blackByFirst, tree, games: white.games + black.games };
 }
 
 // One entry per account and time class: a player who alternates bullet and

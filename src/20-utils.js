@@ -522,6 +522,12 @@ function loadSettings(user) {
   }
 }
 
+// The suffix is where two sources disagree (a PGN says 'Nf3+', the engine says
+// 'Nf3+'); the move is not. Two different moves never differ only by a suffix.
+function sanKey(san) {
+  return String(san || '').replace(/[+#]+$/, '');
+}
+
 function saveSettings(cfg, user) {
   try {
     localStorage.setItem(settingsKeyFor(user), JSON.stringify(cfg));

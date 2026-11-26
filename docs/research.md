@@ -195,6 +195,37 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The repertoire is a tree, and above four plies the tree is thin
+
+1.47.0 read only the first move, so the third was the engine's again. Reading
+the whole opening from the same archive (last 60 games of `aloka_27`, 167 games
+in the month) gives a tree keyed by the moves that lead to a position:
+
+| plies before the account's move | nodes | nodes with ≥2 games |
+|---|---|---|
+| 0 (its first move) | 1 | 1 |
+| 1 | 4 | 4 |
+| 2 | 7 | 6 |
+| 3 | 16 | 4 |
+| 4 | 19 | 7 |
+| 5 | 20 | 6 |
+| 6 | 24 | 4 |
+| 7 | 26 | 3 |
+
+117 nodes from 60 games, and the deep ones are single samples: above four plies
+the account's own record stops being evidence. That is why a node needs two
+games and why an unknown prefix falls back to the deepest node that does exist.
+
+Where the tree does bind it is unmistakable: after 1.e4 e5 this account plays
+2.Ne2 in **9 of 9** games, and after 1.e4 e5 2.Nf3 it answers 2...d6 in 9 of 9.
+No engine picks 2.Ne2.
+
+**The limit that keeps it honest:** the tree only reweights the moves the engine
+already put on the table (MultiPV 4). A signature move the search never
+considered is not forced, because the strength envelope is not negotiable. So
+the tree shapes the order of its own candidates, it does not override them —
+after 1.e4 e5 the engine's list is Nf3/Nc6 territory and 2.Ne2 loses to it.
+
 ## A reply is an answer, not an average
 
 The repertoire shipped in 1.46.0 had a modelling bug: black's moves were
@@ -743,7 +774,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 186 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 187 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
