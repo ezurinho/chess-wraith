@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.65.0
+// @version      1.65.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.65.0';
+const VERSION = '1.65.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.65.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.65.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6684,6 +6684,10 @@ async function improveImprovised(snap, result, legal, choice) {
   // The board may have moved while the engine was answering. The position the
   // move was priced for is the only one it may be played on.
   if (!state.snapshot || state.snapshot.fen !== snap.fen) return null;
+  // The price and the realised loss are not the same number: a candidate that
+  // costs 293 at depth 10 is often declined by the opponent, and the move ends
+  // up costing nothing. Aim above the band so the realised mean lands on it.
+  const aim = Math.min(600, Math.round(target * 1.6));
   let pick = null;
   let bestErr = Infinity;
   for (const line of lines) {
@@ -6693,7 +6697,7 @@ async function improveImprovised(snap, result, legal, choice) {
     // cost something like the band, not be a good move that happens to be legal.
     if (loss == null || loss < Math.round(target * 0.35)) continue;
     if (allowsMateInOne(legal, line.bestUci)) continue;
-    const err = Math.abs(loss - target);
+    const err = Math.abs(loss - aim);
     if (err < bestErr) {
       bestErr = err;
       pick = { line, loss };

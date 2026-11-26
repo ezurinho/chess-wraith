@@ -1421,6 +1421,10 @@ async function improveImprovised(snap, result, legal, choice) {
   // The board may have moved while the engine was answering. The position the
   // move was priced for is the only one it may be played on.
   if (!state.snapshot || state.snapshot.fen !== snap.fen) return null;
+  // The price and the realised loss are not the same number: a candidate that
+  // costs 293 at depth 10 is often declined by the opponent, and the move ends
+  // up costing nothing. Aim above the band so the realised mean lands on it.
+  const aim = Math.min(600, Math.round(target * 1.6));
   let pick = null;
   let bestErr = Infinity;
   for (const line of lines) {
@@ -1430,7 +1434,7 @@ async function improveImprovised(snap, result, legal, choice) {
     // cost something like the band, not be a good move that happens to be legal.
     if (loss == null || loss < Math.round(target * 0.35)) continue;
     if (allowsMateInOne(legal, line.bestUci)) continue;
-    const err = Math.abs(loss - target);
+    const err = Math.abs(loss - aim);
     if (err < bestErr) {
       bestErr = err;
       pick = { line, loss };

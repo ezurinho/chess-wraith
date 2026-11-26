@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.65.1 — 2026-11-27
+
+Aim above the band, because the opponent declines.
+
+- Measured on 1.65.0, live: 185.8 cp/move against 293, with four improvised moves
+  that cost 0 in the end. A candidate priced at 293 by a depth-10 search is often
+  not taken by the opponent, so the realised loss is smaller than the price.
+- The candidate is chosen to be priced at 1.6x the band. The price is still what
+  the panel reports, not the band.
+
 ## 1.65.0 — 2026-11-27
 
 The improvised move is priced by the engine.
