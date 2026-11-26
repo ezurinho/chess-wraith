@@ -78,6 +78,7 @@ const PANEL_CSS = `
 .iconbtn:hover{color:var(--acc-2);background:var(--acc-dim);border-color:var(--line-strong)}
 .iconbtn:active{transform:scale(.92)}
 .iconbtn svg{width:12px;height:12px;display:block}
+.iconbtn.stop:hover{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[role="switch"]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
 .chips{display:flex;align-items:center;gap:6px;padding:0 11px 9px}
@@ -186,6 +187,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .set-lbl{font:500 10.5px/1.35 var(--font-ui);color:var(--ink-2);min-width:0}
 .set-lbl i{display:block;font-style:normal;color:var(--dim-2);font-size:8.5px;letter-spacing:.04em}
 .set-val{display:flex;align-items:center;gap:6px;flex:none}
+.set-on{font:700 8px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--acc-2)}
 .num{width:58px;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:rgba(0,0,0,.28);
   color:var(--ink-2);font:600 10px/1.4 var(--font-mono);font-variant-numeric:tabular-nums;text-align:right;color-scheme:dark}
 .num:focus-visible{outline:2px solid var(--acc);outline-offset:1px;border-color:var(--acc)}
@@ -245,7 +247,8 @@ const ICON = {
   stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.4v.2"/></svg>',
   min: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
-  hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16M12 4v16"/></svg>'
+  hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16M12 4v16"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>'
 };
 
 const PANEL_HTML = `
@@ -256,12 +259,13 @@ const PANEL_HTML = `
     <span class="sub" data-el="engine">starting</span>
   </div>
   <a class="upd" data-el="update" href="${UPDATE_DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer" hidden title="A newer version is on GitHub" aria-label="Update available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg><span>Update</span></a>
+  <button class="iconbtn stop" type="button" data-el="stop" title="Stop AUTO (Alt+Shift+S)" aria-label="Stop AUTO">${ICON.stop}</button>
   <button class="iconbtn" type="button" data-el="min" title="Collapse (double-click the title)" aria-label="Collapse panel">${ICON.min}</button>
   <button class="iconbtn" type="button" data-el="hide" title="Hide (Alt+Shift+H)" aria-label="Hide panel">${ICON.hide}</button>
 </div>
 <div class="body">
   <div class="chips">
-    <button class="chip" type="button" data-el="auto" aria-pressed="false"><span class="k">AUTO</span><span data-el="autoTxt">OFF</span></button>
+    <button class="chip" type="button" data-el="auto" aria-pressed="true" title="AUTO is always on; click to resume if stopped"><span class="k">AUTO</span><span data-el="autoTxt">ON</span></button>
     <button class="chip afk" type="button" data-el="afk" aria-pressed="false"><span class="k">AFK</span><span data-el="afkTxt">OFF</span></button>
     <span class="chip legit" data-el="styleChip" style="cursor:default" title="One way to play: never the engine's raw best, always inside a human band">LEGIT</span>
     <span class="pace" data-el="clock">—</span>
@@ -335,8 +339,8 @@ const PANEL_HTML = `
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
-          <div class="set"><span class="set-lbl">Always auto<i>never stops at the cap; rolls the session</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="alwaysAuto" aria-checked="true" aria-label="Always auto"></button></span></div>
-          <div class="set"><span class="set-lbl">Auto rematch<i>queue the next game when one ends</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="autoRematch" aria-checked="false" aria-label="Auto rematch"></button></span></div>
+          <div class="set"><span class="set-lbl">AUTO<i>always on; Stop pauses this tab only</i></span><span class="set-val"><span class="set-on">ON</span></span></div>
+          <div class="set"><span class="set-lbl">Next game<i>automatic when a game ends</i></span><span class="set-val"><span class="set-on">ON</span></span></div>
           <div class="set"><span class="set-lbl">Keep-alive<i>near-silent audio holds the tab</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="afkKeepAlive" aria-checked="false" aria-label="Keep alive"></button></span></div>
           <div class="set"><span class="set-lbl">Play while hidden<i>off by default; Chrome may freeze tabs</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="playHidden" aria-checked="false" aria-label="Play while hidden"></button></span></div>
         </div>
@@ -386,11 +390,11 @@ const PANEL_HTML = `
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Keys</span><span class="card-s">while the tab is focused</span></div>
-          <div class="info-row"><span>Auto play</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">A</span></span></div>
+          <div class="info-row"><span>Resume AUTO</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">A</span></span></div>
           <div class="info-row"><span>AFK</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">F</span></span></div>
           <div class="info-row"><span>Play one move</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">M</span></span></div>
           <div class="info-row"><span>Hide panel</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">H</span></span></div>
-          <div class="info-row"><span>Stop everything</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
+          <div class="info-row"><span>Stop AUTO</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
         </div>
       </div>
       <div class="view v-stats">
@@ -440,6 +444,7 @@ class WraithPanel {
     panel.className = 'panel';
     panel.style.pointerEvents = 'auto';
     panel.innerHTML = PANEL_HTML;
+    panel.dataset.mode = 'auto';
     this.shadow.appendChild(panel);
     this.panel = panel;
     this.el = {};
@@ -463,7 +468,8 @@ class WraithPanel {
 
   #wire() {
     const on = (el, type, fn) => el && el.addEventListener(type, fn);
-    on(this.el.auto, 'click', () => this.handlers.toggleAuto());
+    on(this.el.auto, 'click', () => this.handlers.resumeAuto());
+    on(this.el.stop, 'click', () => this.handlers.stop());
     on(this.el.afk, 'click', () => this.handlers.toggleAfk());
     on(this.el.hide, 'click', () => this.handlers.hide());
     on(this.el.min, 'click', () => this.toggleCollapsed());
@@ -498,16 +504,8 @@ class WraithPanel {
           this.cfg[key] = !this.cfg[key];
           sw.setAttribute('aria-checked', String(Boolean(this.cfg[key])));
         }
-        // One switch for the three that make an unattended session. Turning it
-        // on turns them on; turning them off individually still works.
-        if (key === 'alwaysAuto' && this.cfg.alwaysAuto) {
-          this.cfg.autoPlayOnLoad = true;
-          this.cfg.autoRematch = true;
-          this.cfg.afkKeepAlive = true;
-          this.cfg.pauseWhenHidden = false;
-        }
         this.handlers.settingsApplied(this.cfg);
-        if (key === 'afkKeepAlive' || key === 'autoRematch') this.handlers.toggleAfk(this.cfg);
+        if (key === 'afkKeepAlive') this.handlers.toggleAfk(this.cfg);
       });
     }
 
@@ -594,7 +592,7 @@ class WraithPanel {
   render(view = {}) {
     const v = view;
     const top = v.analysis && v.analysis.lines && v.analysis.lines[0];
-    const state = v.warn ? 'warn' : v.status === 'thinking' ? 'paused' : v.autoPlay ? 'running' : 'idle';
+    const state = v.warn ? 'warn' : v.status === 'thinking' ? 'paused' : v.autoPlay ? 'running' : 'paused';
     this.panel.dataset.state = state;
 
     if (v.engine) {
@@ -704,9 +702,13 @@ class WraithPanel {
     const autoOn = Boolean(v.autoPlay);
     this.el.auto.classList.toggle('on', autoOn);
     this.el.auto.setAttribute('aria-pressed', String(autoOn));
-    this.el.autoTxt.textContent = autoOn ? 'ON' : 'OFF';
+    this.el.autoTxt.textContent = autoOn ? 'ON' : 'PAUSED';
+    this.el.auto.title = autoOn
+      ? 'AUTO is always on. The square Stop button pauses this tab; this chip resumes it.'
+      : 'AUTO is paused. Press this chip or Alt+Shift+A to resume.';
+    this.el.auto.setAttribute('aria-label', autoOn ? 'AUTO always on' : 'AUTO paused; resume');
 
-    const afkOn = Boolean(this.cfg.autoRematch || this.cfg.afkKeepAlive);
+    const afkOn = Boolean(!this.cfg.pauseWhenHidden || this.cfg.afkKeepAlive);
     this.el.afk.classList.toggle('on', afkOn);
     this.el.afk.setAttribute('aria-pressed', String(afkOn));
     this.el.afkTxt.textContent = afkOn ? 'ON' : 'OFF';
@@ -734,8 +736,8 @@ class WraithPanel {
       : v.status === 'thinking'
         ? 'thinking'
         : autoOn
-          ? 'auto play armed'
-          : 'idle';
+          ? (v.ply ? 'AUTO · playing' : 'AUTO · waiting')
+          : 'AUTO paused · press AUTO';
     this.el.build.textContent = v.version || VERSION;
     this.el.installed.textContent = v.version || VERSION;
     const latest = String(v.updateLatest || '');

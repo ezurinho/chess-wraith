@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.86.0
+// @version      1.86.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -24,7 +24,8 @@ QUICK CONFIGURATION
 Everything adjustable lives in CONFIG, in src/10-config.js, and at runtime in the
 panel's gear menu. Nothing is hidden:
 
-  CONFIG.autoPlayOnLoad -> false: auto-play never starts by itself.
+  CONFIG.autoPlayOnLoad -> true: AUTO starts with the page and has no off switch;
+                           the square Stop button pauses this tab.
   CONFIG.targetElo      -> strength requested from Stockfish (UCI_Elo).
   CONFIG.style          -> 'adaptive' studies your opponent, 'gm'/'club'/'casual'
                            are fixed levels, 'engine' is full strength.
@@ -41,7 +42,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.86.0';
+const VERSION = '1.86.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -71,11 +72,11 @@ const CONFIG = {
   hashMb: 32,
 
   // Pacing: the whole point of this script is that it does not look like a bot.
-  autoPlayOnLoad: false,
-  // Always auto: no click to start and no click to continue. It turns auto-play,
-  // rematch and the keep-alive on at boot, and the session cap becomes a rollover
-  // instead of a stop, the way nitro-wraith keeps queueing races. Turn it off in
-  // Tune to get the old one-session behaviour back.
+  // AUTO is the only mode. It starts with the page, re-arms after every game and
+  // has no off switch; the chip resumes a stopped tab and Stop is the escape hatch.
+  autoPlayOnLoad: true,
+  // Kept as a field because the session cap and the panel read it. The boot pass
+  // pins it to true so no stale per-account setting can turn AUTO off.
   alwaysAuto: true,
   minThinkMs: 700,
   maxThinkMs: 4200,
@@ -96,9 +97,9 @@ const CONFIG = {
   sessionMaxGames: 15,
   sessionMaxMs: 3 * 60 * 60 * 1000,
 
-  // AFK: play through the end of a game and into the next one without a human.
-  // Off by default; the panel says what it is doing and why it stopped.
-  autoRematch: false,
+  // Rematch is part of AUTO, not a separate switch: a finished game always asks
+  // for the next one. AFK only decides whether the tab keeps playing while hidden.
+  autoRematch: true,
   afkKeepAlive: false,
   newGameDelayMs: [1700, 4200],
   newGameLongChance: 0.12,
@@ -122,7 +123,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2932,12 +2933,14 @@ class WraithEngine {
       }
     }
     // One restricted move is asked about once; a list is asked for one line
-    // each, because the point is comparing the candidates.
+    // each, because the point is comparing the candidates. A normal search
+    // keeps the setting's full 1-10 range: 1.86.0 raised the default to eight
+    // lines, but this clamp still cut them to five before `go`.
     const restricted = searchmoveList(job.searchmoves).length;
     const multiPv =
       restricted > 1
         ? clampInt(job.multiPv, 1, Math.min(10, restricted), restricted)
-        : clampInt(restricted === 1 ? 1 : job.multiPv, 1, 5, 1);
+        : clampInt(restricted === 1 ? 1 : job.multiPv, 1, 10, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
       this.lastOptions.multiPv = multiPv;
@@ -4543,6 +4546,7 @@ const PANEL_CSS = `
 .iconbtn:hover{color:var(--acc-2);background:var(--acc-dim);border-color:var(--line-strong)}
 .iconbtn:active{transform:scale(.92)}
 .iconbtn svg{width:12px;height:12px;display:block}
+.iconbtn.stop:hover{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent);border-color:color-mix(in srgb,var(--bad) 40%,transparent)}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[role="switch"]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
 .chips{display:flex;align-items:center;gap:6px;padding:0 11px 9px}
@@ -4651,6 +4655,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .set-lbl{font:500 10.5px/1.35 var(--font-ui);color:var(--ink-2);min-width:0}
 .set-lbl i{display:block;font-style:normal;color:var(--dim-2);font-size:8.5px;letter-spacing:.04em}
 .set-val{display:flex;align-items:center;gap:6px;flex:none}
+.set-on{font:700 8px/1 var(--font-ui);letter-spacing:.1em;text-transform:uppercase;color:var(--acc-2)}
 .num{width:58px;padding:3px 6px;border-radius:6px;border:1px solid var(--line);background:rgba(0,0,0,.28);
   color:var(--ink-2);font:600 10px/1.4 var(--font-mono);font-variant-numeric:tabular-nums;text-align:right;color-scheme:dark}
 .num:focus-visible{outline:2px solid var(--acc);outline-offset:1px;border-color:var(--acc)}
@@ -4710,7 +4715,8 @@ const ICON = {
   stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.4v.2"/></svg>',
   min: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
-  hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16M12 4v16"/></svg>'
+  hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16M12 4v16"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" fill="none"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>'
 };
 
 const PANEL_HTML = `
@@ -4721,12 +4727,13 @@ const PANEL_HTML = `
     <span class="sub" data-el="engine">starting</span>
   </div>
   <a class="upd" data-el="update" href="${UPDATE_DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer" hidden title="A newer version is on GitHub" aria-label="Update available"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 20h14"/></svg><span>Update</span></a>
+  <button class="iconbtn stop" type="button" data-el="stop" title="Stop AUTO (Alt+Shift+S)" aria-label="Stop AUTO">${ICON.stop}</button>
   <button class="iconbtn" type="button" data-el="min" title="Collapse (double-click the title)" aria-label="Collapse panel">${ICON.min}</button>
   <button class="iconbtn" type="button" data-el="hide" title="Hide (Alt+Shift+H)" aria-label="Hide panel">${ICON.hide}</button>
 </div>
 <div class="body">
   <div class="chips">
-    <button class="chip" type="button" data-el="auto" aria-pressed="false"><span class="k">AUTO</span><span data-el="autoTxt">OFF</span></button>
+    <button class="chip" type="button" data-el="auto" aria-pressed="true" title="AUTO is always on; click to resume if stopped"><span class="k">AUTO</span><span data-el="autoTxt">ON</span></button>
     <button class="chip afk" type="button" data-el="afk" aria-pressed="false"><span class="k">AFK</span><span data-el="afkTxt">OFF</span></button>
     <span class="chip legit" data-el="styleChip" style="cursor:default" title="One way to play: never the engine's raw best, always inside a human band">LEGIT</span>
     <span class="pace" data-el="clock">—</span>
@@ -4800,8 +4807,8 @@ const PANEL_HTML = `
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
-          <div class="set"><span class="set-lbl">Always auto<i>never stops at the cap; rolls the session</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="alwaysAuto" aria-checked="true" aria-label="Always auto"></button></span></div>
-          <div class="set"><span class="set-lbl">Auto rematch<i>queue the next game when one ends</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="autoRematch" aria-checked="false" aria-label="Auto rematch"></button></span></div>
+          <div class="set"><span class="set-lbl">AUTO<i>always on; Stop pauses this tab only</i></span><span class="set-val"><span class="set-on">ON</span></span></div>
+          <div class="set"><span class="set-lbl">Next game<i>automatic when a game ends</i></span><span class="set-val"><span class="set-on">ON</span></span></div>
           <div class="set"><span class="set-lbl">Keep-alive<i>near-silent audio holds the tab</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="afkKeepAlive" aria-checked="false" aria-label="Keep alive"></button></span></div>
           <div class="set"><span class="set-lbl">Play while hidden<i>off by default; Chrome may freeze tabs</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="playHidden" aria-checked="false" aria-label="Play while hidden"></button></span></div>
         </div>
@@ -4851,11 +4858,11 @@ const PANEL_HTML = `
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Keys</span><span class="card-s">while the tab is focused</span></div>
-          <div class="info-row"><span>Auto play</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">A</span></span></div>
+          <div class="info-row"><span>Resume AUTO</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">A</span></span></div>
           <div class="info-row"><span>AFK</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">F</span></span></div>
           <div class="info-row"><span>Play one move</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">M</span></span></div>
           <div class="info-row"><span>Hide panel</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">H</span></span></div>
-          <div class="info-row"><span>Stop everything</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
+          <div class="info-row"><span>Stop AUTO</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
         </div>
       </div>
       <div class="view v-stats">
@@ -4905,6 +4912,7 @@ class WraithPanel {
     panel.className = 'panel';
     panel.style.pointerEvents = 'auto';
     panel.innerHTML = PANEL_HTML;
+    panel.dataset.mode = 'auto';
     this.shadow.appendChild(panel);
     this.panel = panel;
     this.el = {};
@@ -4928,7 +4936,8 @@ class WraithPanel {
 
   #wire() {
     const on = (el, type, fn) => el && el.addEventListener(type, fn);
-    on(this.el.auto, 'click', () => this.handlers.toggleAuto());
+    on(this.el.auto, 'click', () => this.handlers.resumeAuto());
+    on(this.el.stop, 'click', () => this.handlers.stop());
     on(this.el.afk, 'click', () => this.handlers.toggleAfk());
     on(this.el.hide, 'click', () => this.handlers.hide());
     on(this.el.min, 'click', () => this.toggleCollapsed());
@@ -4963,16 +4972,8 @@ class WraithPanel {
           this.cfg[key] = !this.cfg[key];
           sw.setAttribute('aria-checked', String(Boolean(this.cfg[key])));
         }
-        // One switch for the three that make an unattended session. Turning it
-        // on turns them on; turning them off individually still works.
-        if (key === 'alwaysAuto' && this.cfg.alwaysAuto) {
-          this.cfg.autoPlayOnLoad = true;
-          this.cfg.autoRematch = true;
-          this.cfg.afkKeepAlive = true;
-          this.cfg.pauseWhenHidden = false;
-        }
         this.handlers.settingsApplied(this.cfg);
-        if (key === 'afkKeepAlive' || key === 'autoRematch') this.handlers.toggleAfk(this.cfg);
+        if (key === 'afkKeepAlive') this.handlers.toggleAfk(this.cfg);
       });
     }
 
@@ -5059,7 +5060,7 @@ class WraithPanel {
   render(view = {}) {
     const v = view;
     const top = v.analysis && v.analysis.lines && v.analysis.lines[0];
-    const state = v.warn ? 'warn' : v.status === 'thinking' ? 'paused' : v.autoPlay ? 'running' : 'idle';
+    const state = v.warn ? 'warn' : v.status === 'thinking' ? 'paused' : v.autoPlay ? 'running' : 'paused';
     this.panel.dataset.state = state;
 
     if (v.engine) {
@@ -5169,9 +5170,13 @@ class WraithPanel {
     const autoOn = Boolean(v.autoPlay);
     this.el.auto.classList.toggle('on', autoOn);
     this.el.auto.setAttribute('aria-pressed', String(autoOn));
-    this.el.autoTxt.textContent = autoOn ? 'ON' : 'OFF';
+    this.el.autoTxt.textContent = autoOn ? 'ON' : 'PAUSED';
+    this.el.auto.title = autoOn
+      ? 'AUTO is always on. The square Stop button pauses this tab; this chip resumes it.'
+      : 'AUTO is paused. Press this chip or Alt+Shift+A to resume.';
+    this.el.auto.setAttribute('aria-label', autoOn ? 'AUTO always on' : 'AUTO paused; resume');
 
-    const afkOn = Boolean(this.cfg.autoRematch || this.cfg.afkKeepAlive);
+    const afkOn = Boolean(!this.cfg.pauseWhenHidden || this.cfg.afkKeepAlive);
     this.el.afk.classList.toggle('on', afkOn);
     this.el.afk.setAttribute('aria-pressed', String(afkOn));
     this.el.afkTxt.textContent = afkOn ? 'ON' : 'OFF';
@@ -5199,8 +5204,8 @@ class WraithPanel {
       : v.status === 'thinking'
         ? 'thinking'
         : autoOn
-          ? 'auto play armed'
-          : 'idle';
+          ? (v.ply ? 'AUTO · playing' : 'AUTO · waiting')
+          : 'AUTO paused · press AUTO';
     this.el.build.textContent = v.version || VERSION;
     this.el.installed.textContent = v.version || VERSION;
     const latest = String(v.updateLatest || '');
@@ -5315,6 +5320,8 @@ function adoptAccountSettings(user) {
   if (!name || name === 'anonymous' || name === state.settingsAccount) return false;
   const adopted = loadSettings(name);
   Object.assign(cfg, adopted);
+  // A second account can carry an old "alwaysAuto: false"; AUTO still wins.
+  enforceAuto();
   state.settingsAccount = name;
   // A name learned late also unlocks the published pace and the repertoire.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
@@ -5425,16 +5432,17 @@ function guardKey() {
 }
 
 const cfg = loadSettings(currentAccount());
-// Always auto is one switch for the three that make an unattended session: auto-play,
-// the rematch queue and the keep-alive that keeps the tab awake. It is forced here,
-// before any of them is read, so a stale per-account setting cannot defeat it.
-if (cfg.alwaysAuto) {
+// AUTO is an invariant, not a setting: no stored preference and no account switch
+// may leave the script waiting for a click. AFK (hidden play and keep-alive) stays
+// a separate preference, exactly like nitro-wraith's AFK switch.
+function enforceAuto() {
+  cfg.alwaysAuto = true;
   cfg.autoPlayOnLoad = true;
   cfg.autoRematch = true;
-  cfg.afkKeepAlive = true;
-  cfg.pauseWhenHidden = false;
 }
-if (settingsNeedsSave) saveSettings(cfg);
+const autoPinned = cfg.alwaysAuto !== true || cfg.autoPlayOnLoad !== true || cfg.autoRematch !== true;
+enforceAuto();
+if (settingsNeedsSave || autoPinned) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
 
@@ -6103,7 +6111,6 @@ function syncKeepAlive() {
 function stopRematch(reason) {
   state.rematchTried = true;
   noteEvent(reason);
-  cfg.autoRematch = false;
   state.warn = reason;
   saveSettings(cfg);
   refreshPanel();
@@ -6131,7 +6138,7 @@ function pressRematch() {
   }
   state.rematchTimer = setTimeout(() => {
     state.rematchTimer = null;
-    if (!cfg.autoRematch) return;
+    if (!state.autoPlay) return;
     if (!hasGameOverModal() || !state.gameOverSeen) {
       state.rematchTried = true;
       return;
@@ -6144,7 +6151,7 @@ function pressRematch() {
 // AFK, in the same shape as nitro-wraith: wait like a person, press the button
 // the site offers, and give up out loud instead of pretending to work.
 function queueRematch() {
-  if (!cfg.autoRematch || state.rematchTried || state.rematchTimer) return;
+  if (!state.autoPlay || state.rematchTried || state.rematchTimer) return;
   const limit = sessionLimit({
     startedAt: state.sessionStart,
     games: state.gamesPlayed,
@@ -6164,7 +6171,6 @@ function queueRematch() {
     saveSession();
   } else if (limit.stop) {
     state.autoPlay = false;
-    cfg.autoRematch = false;
     state.warn = limit.reason;
     noteEvent(limit.reason);
     // Tomorrow's run is a new run, not a continuation of a finished one.
@@ -6176,7 +6182,7 @@ function queueRematch() {
   const delay = nextGameDelay(cfg);
   state.rematchTimer = setTimeout(() => {
     state.rematchTimer = null;
-    if (!cfg.autoRematch) return;
+    if (!state.autoPlay) return;
     if (!hasGameOverModal()) {
       // The dialog can paint late. Look once more before calling it a miss.
       state.rematchMisses += 1;
@@ -6229,28 +6235,19 @@ function onNewGame() {
   state.tempoSamples = [];
   // The old game's arrow is not this game's plan.
   paintBoardOverlay(state.boardEl, null, false, true);
-  if (cfg.autoRematch) state.autoPlay = true;
+  // A new game re-arms AUTO unless the tab was explicitly stopped: autoPlayOnLoad
+  // is the one flag Stop clears and the next boot restores.
+  if (cfg.autoPlayOnLoad) state.autoPlay = true;
 }
 
-// The AFK chip is a single switch for "keep the session moving": rematch, and
-// the keep-alive audio that gives the hidden tab a reason to stay awake.
+// AFK is only the hidden half now: the rematch is part of AUTO and can no longer
+// be turned off. The chip toggles keep-alive and play-while-hidden together, the
+// way nitro-wraith's AFK switch does.
 function toggleAfk(next) {
-  if (next && typeof next === 'object') {
-    // Called from a Tune switch: settings are already mutated.
-  } else {
-    const on = !(cfg.autoRematch || cfg.afkKeepAlive);
-    cfg.autoRematch = on;
-    cfg.afkKeepAlive = on;
-    if (on) cfg.pauseWhenHidden = false;
+  if (!(next && typeof next === 'object')) {
+    cfg.afkKeepAlive = !cfg.afkKeepAlive;
+    cfg.pauseWhenHidden = !cfg.afkKeepAlive;
   }
-  if (!cfg.autoRematch) {
-    clearRematchTimer();
-    state.rematchTried = false;
-    state.rematchAttempts = 0;
-    state.rematchTriedTexts = [];
-    state.rematchMisses = 0;
-  }
-  if (!cfg.autoRematch && !cfg.afkKeepAlive) cfg.pauseWhenHidden = true;
   syncKeepAlive();
   saveSettings(cfg);
   refreshPanel();
@@ -7133,15 +7130,11 @@ function runScan() {
         saveReportHistory(state.settingsAccount || currentAccount(), state.reportHistory);
         if (state.lastReport.myAcpl != null) noteEvent(`report: ${result} · ${state.lastReport.myAcpl} cp`);
       }
-      state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
+      state.warn = state.autoPlay ? 'game over · next in a moment' : 'game over · AUTO paused';
       clearAutoTimer();
       clearMoveRetry();
       state.moveMisses = 0;
-      if (cfg.autoRematch) queueRematch();
-      else {
-        state.autoPlay = false;
-        noteEvent('game over · auto play off');
-      }
+      if (state.autoPlay) queueRematch();
     }
     refreshPanel();
     return;
@@ -7259,23 +7252,30 @@ function attachBoard(boardEl) {
   }
 }
 
-// Hiding the panel is not stopping: the scan loop keeps playing while the window
-// is out of sight. This key is for the moment someone walks in — auto play off,
-// AFK off, timers cleared, panel gone.
-function panicStop() {
+// Stop is the only way out of AUTO, and it is deliberately temporary: it pauses
+// this tab, and the next page load pins AUTO on again. `hide` is the panic key.
+function stopAuto(hide) {
   state.autoPlay = false;
   cfg.autoPlayOnLoad = false;
   cfg.autoRematch = false;
+  // Stop is also the AFK kill switch: no hidden play, no keep-alive audio.
+  cfg.afkKeepAlive = false;
+  cfg.pauseWhenHidden = true;
+  syncKeepAlive();
   saveSettings(cfg);
   clearAutoTimer();
   clearMoveRetry();
   clearRematchTimer();
   engine.stop();
   state.thinking = false;
-  state.warn = 'stopped';
-  noteEvent('panic stop · auto play and AFK off');
-  if (!panel.hidden) panel.toggleHidden();
+  state.warn = 'stopped · AUTO paused';
+  noteEvent(hide ? 'panic stop · AUTO paused' : 'stopped · AUTO paused');
+  if (hide && !panel.hidden) panel.toggleHidden();
   refreshPanel();
+}
+
+function panicStop() {
+  stopAuto(true);
 }
 
 function onKeyDown(event) {
@@ -7283,7 +7283,7 @@ function onKeyDown(event) {
   const key = event.key.toLowerCase();
   if (key === 'a') {
     event.preventDefault();
-    toggleAuto();
+    resumeAuto();
   } else if (key === 'm') {
     event.preventDefault();
     playNow().catch(() => {});
@@ -7331,7 +7331,7 @@ function reportText() {
     opening
       ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)${state.probes ? ` · probe ${state.probes}` : ''}`
       : '',
-    `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'paused'} · afk ${cfg.afkKeepAlive || !cfg.pauseWhenHidden ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.lastReport
       ? `last game ${state.lastReport.result || '?'}${state.lastReport.moves ? ' · ' + state.lastReport.moves + ' moves' : ''} · you ${state.lastReport.myAcpl ?? '–'} cp/move${state.lastReport.myPerf ? ' (like ' + state.lastReport.myPerf + ')' : ''} · rival ${state.lastReport.oppAcpl ?? '–'}${state.lastReport.oppPerf ? ' (like ' + state.lastReport.oppPerf + ')' : ''} · account ${state.lastReport.rating ?? '–'}${Number.isFinite(state.lastReport.delta) ? ' (' + (state.lastReport.delta >= 0 ? '+' : '') + state.lastReport.delta + ')' : ''}`
       : '',
@@ -7373,23 +7373,28 @@ async function copyReport() {
   refreshPanel();
 }
 
-function toggleAuto() {
-  state.autoPlay = !state.autoPlay;
-  cfg.autoPlayOnLoad = state.autoPlay;
-  saveSettings(cfg);
-  if (!state.autoPlay) {
-    clearAutoTimer();
-    clearMoveRetry();
+// The AUTO chip and Alt+Shift+A can only resume. There is no path that turns the
+// mode off: Stop is the one pause, and it lives on the header's square button.
+function resumeAuto() {
+  const wasStopped = !cfg.autoPlayOnLoad;
+  enforceAuto();
+  state.autoPlay = true;
+  state.rematchTried = false;
+  state.rematchAttempts = 0;
+  state.rematchTriedTexts = [];
+  state.rematchMisses = 0;
+  if (wasStopped) {
     // A stopped run is finished: the next one starts the clock again.
     clearSession();
-  } else {
     state.sessionStart = Date.now();
     state.gamesPlayed = 1;
     saveSession();
-    if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
-      scheduleAutoMove(state.analysis);
-    }
   }
+  saveSettings(cfg);
+  if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
+    scheduleAutoMove(state.analysis);
+  }
+  scheduleScan(0);
   refreshPanel();
 }
 
@@ -7415,7 +7420,9 @@ function settingsApplied(next) {
 }
 
 const panel = new WraithPanel(cfg, {
-  toggleAuto,
+  resumeAuto,
+  toggleAuto: resumeAuto,
+  stop: () => stopAuto(false),
   toggleAfk,
   step: () => playNow().catch(() => false),
   scan: () => {
@@ -7468,7 +7475,14 @@ function heartbeatTab() {
     }
     return;
   }
+  const wasPassive = state.passiveTab;
   state.passiveTab = false;
+  // Handing the lease back must restore AUTO: a passive tab had paused it, and
+  // without this the first tab stayed idle after the second one closed.
+  if (wasPassive && cfg.autoPlayOnLoad) {
+    state.autoPlay = true;
+    if (/another tab/.test(state.warn)) state.warn = '';
+  }
   try {
     localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));
   } catch {

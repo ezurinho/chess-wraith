@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.86.0
+// @version      1.86.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -24,7 +24,8 @@ QUICK CONFIGURATION
 Everything adjustable lives in CONFIG, in src/10-config.js, and at runtime in the
 panel's gear menu. Nothing is hidden:
 
-  CONFIG.autoPlayOnLoad -> false: auto-play never starts by itself.
+  CONFIG.autoPlayOnLoad -> true: AUTO starts with the page and has no off switch;
+                           the square Stop button pauses this tab.
   CONFIG.targetElo      -> strength requested from Stockfish (UCI_Elo).
   CONFIG.style          -> 'adaptive' studies your opponent, 'gm'/'club'/'casual'
                            are fixed levels, 'engine' is full strength.

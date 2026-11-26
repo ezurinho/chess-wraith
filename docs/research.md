@@ -966,8 +966,8 @@ Sources: [563087](https://greasyfork.org/en/scripts/563087-chess-com-complete-mo
 | Heavy lifting | none (typing) | Stockfish 19 NNUE in a blob worker |
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
-| Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 25 files | 222 tests in 25 files (7 of them boot the whole script) |
+| Session model | queue with breaks, DQ streak handling | AUTO always on, rematch loop, optional hidden-tab keep-alive, hand-on-board stop |
+| Tests | 25 files | 225 tests in 25 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

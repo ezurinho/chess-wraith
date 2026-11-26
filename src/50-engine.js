@@ -493,12 +493,14 @@ class WraithEngine {
       }
     }
     // One restricted move is asked about once; a list is asked for one line
-    // each, because the point is comparing the candidates.
+    // each, because the point is comparing the candidates. A normal search
+    // keeps the setting's full 1-10 range: 1.86.0 raised the default to eight
+    // lines, but this clamp still cut them to five before `go`.
     const restricted = searchmoveList(job.searchmoves).length;
     const multiPv =
       restricted > 1
         ? clampInt(job.multiPv, 1, Math.min(10, restricted), restricted)
-        : clampInt(restricted === 1 ? 1 : job.multiPv, 1, 5, 1);
+        : clampInt(restricted === 1 ? 1 : job.multiPv, 1, 10, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
       this.lastOptions.multiPv = multiPv;

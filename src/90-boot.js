@@ -28,6 +28,8 @@ function adoptAccountSettings(user) {
   if (!name || name === 'anonymous' || name === state.settingsAccount) return false;
   const adopted = loadSettings(name);
   Object.assign(cfg, adopted);
+  // A second account can carry an old "alwaysAuto: false"; AUTO still wins.
+  enforceAuto();
   state.settingsAccount = name;
   // A name learned late also unlocks the published pace and the repertoire.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
@@ -138,16 +140,17 @@ function guardKey() {
 }
 
 const cfg = loadSettings(currentAccount());
-// Always auto is one switch for the three that make an unattended session: auto-play,
-// the rematch queue and the keep-alive that keeps the tab awake. It is forced here,
-// before any of them is read, so a stale per-account setting cannot defeat it.
-if (cfg.alwaysAuto) {
+// AUTO is an invariant, not a setting: no stored preference and no account switch
+// may leave the script waiting for a click. AFK (hidden play and keep-alive) stays
+// a separate preference, exactly like nitro-wraith's AFK switch.
+function enforceAuto() {
+  cfg.alwaysAuto = true;
   cfg.autoPlayOnLoad = true;
   cfg.autoRematch = true;
-  cfg.afkKeepAlive = true;
-  cfg.pauseWhenHidden = false;
 }
-if (settingsNeedsSave) saveSettings(cfg);
+const autoPinned = cfg.alwaysAuto !== true || cfg.autoPlayOnLoad !== true || cfg.autoRematch !== true;
+enforceAuto();
+if (settingsNeedsSave || autoPinned) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
 
@@ -816,7 +819,6 @@ function syncKeepAlive() {
 function stopRematch(reason) {
   state.rematchTried = true;
   noteEvent(reason);
-  cfg.autoRematch = false;
   state.warn = reason;
   saveSettings(cfg);
   refreshPanel();
@@ -844,7 +846,7 @@ function pressRematch() {
   }
   state.rematchTimer = setTimeout(() => {
     state.rematchTimer = null;
-    if (!cfg.autoRematch) return;
+    if (!state.autoPlay) return;
     if (!hasGameOverModal() || !state.gameOverSeen) {
       state.rematchTried = true;
       return;
@@ -857,7 +859,7 @@ function pressRematch() {
 // AFK, in the same shape as nitro-wraith: wait like a person, press the button
 // the site offers, and give up out loud instead of pretending to work.
 function queueRematch() {
-  if (!cfg.autoRematch || state.rematchTried || state.rematchTimer) return;
+  if (!state.autoPlay || state.rematchTried || state.rematchTimer) return;
   const limit = sessionLimit({
     startedAt: state.sessionStart,
     games: state.gamesPlayed,
@@ -877,7 +879,6 @@ function queueRematch() {
     saveSession();
   } else if (limit.stop) {
     state.autoPlay = false;
-    cfg.autoRematch = false;
     state.warn = limit.reason;
     noteEvent(limit.reason);
     // Tomorrow's run is a new run, not a continuation of a finished one.
@@ -889,7 +890,7 @@ function queueRematch() {
   const delay = nextGameDelay(cfg);
   state.rematchTimer = setTimeout(() => {
     state.rematchTimer = null;
-    if (!cfg.autoRematch) return;
+    if (!state.autoPlay) return;
     if (!hasGameOverModal()) {
       // The dialog can paint late. Look once more before calling it a miss.
       state.rematchMisses += 1;
@@ -942,28 +943,19 @@ function onNewGame() {
   state.tempoSamples = [];
   // The old game's arrow is not this game's plan.
   paintBoardOverlay(state.boardEl, null, false, true);
-  if (cfg.autoRematch) state.autoPlay = true;
+  // A new game re-arms AUTO unless the tab was explicitly stopped: autoPlayOnLoad
+  // is the one flag Stop clears and the next boot restores.
+  if (cfg.autoPlayOnLoad) state.autoPlay = true;
 }
 
-// The AFK chip is a single switch for "keep the session moving": rematch, and
-// the keep-alive audio that gives the hidden tab a reason to stay awake.
+// AFK is only the hidden half now: the rematch is part of AUTO and can no longer
+// be turned off. The chip toggles keep-alive and play-while-hidden together, the
+// way nitro-wraith's AFK switch does.
 function toggleAfk(next) {
-  if (next && typeof next === 'object') {
-    // Called from a Tune switch: settings are already mutated.
-  } else {
-    const on = !(cfg.autoRematch || cfg.afkKeepAlive);
-    cfg.autoRematch = on;
-    cfg.afkKeepAlive = on;
-    if (on) cfg.pauseWhenHidden = false;
+  if (!(next && typeof next === 'object')) {
+    cfg.afkKeepAlive = !cfg.afkKeepAlive;
+    cfg.pauseWhenHidden = !cfg.afkKeepAlive;
   }
-  if (!cfg.autoRematch) {
-    clearRematchTimer();
-    state.rematchTried = false;
-    state.rematchAttempts = 0;
-    state.rematchTriedTexts = [];
-    state.rematchMisses = 0;
-  }
-  if (!cfg.autoRematch && !cfg.afkKeepAlive) cfg.pauseWhenHidden = true;
   syncKeepAlive();
   saveSettings(cfg);
   refreshPanel();
@@ -1846,15 +1838,11 @@ function runScan() {
         saveReportHistory(state.settingsAccount || currentAccount(), state.reportHistory);
         if (state.lastReport.myAcpl != null) noteEvent(`report: ${result} · ${state.lastReport.myAcpl} cp`);
       }
-      state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
+      state.warn = state.autoPlay ? 'game over · next in a moment' : 'game over · AUTO paused';
       clearAutoTimer();
       clearMoveRetry();
       state.moveMisses = 0;
-      if (cfg.autoRematch) queueRematch();
-      else {
-        state.autoPlay = false;
-        noteEvent('game over · auto play off');
-      }
+      if (state.autoPlay) queueRematch();
     }
     refreshPanel();
     return;
@@ -1972,23 +1960,30 @@ function attachBoard(boardEl) {
   }
 }
 
-// Hiding the panel is not stopping: the scan loop keeps playing while the window
-// is out of sight. This key is for the moment someone walks in — auto play off,
-// AFK off, timers cleared, panel gone.
-function panicStop() {
+// Stop is the only way out of AUTO, and it is deliberately temporary: it pauses
+// this tab, and the next page load pins AUTO on again. `hide` is the panic key.
+function stopAuto(hide) {
   state.autoPlay = false;
   cfg.autoPlayOnLoad = false;
   cfg.autoRematch = false;
+  // Stop is also the AFK kill switch: no hidden play, no keep-alive audio.
+  cfg.afkKeepAlive = false;
+  cfg.pauseWhenHidden = true;
+  syncKeepAlive();
   saveSettings(cfg);
   clearAutoTimer();
   clearMoveRetry();
   clearRematchTimer();
   engine.stop();
   state.thinking = false;
-  state.warn = 'stopped';
-  noteEvent('panic stop · auto play and AFK off');
-  if (!panel.hidden) panel.toggleHidden();
+  state.warn = 'stopped · AUTO paused';
+  noteEvent(hide ? 'panic stop · AUTO paused' : 'stopped · AUTO paused');
+  if (hide && !panel.hidden) panel.toggleHidden();
   refreshPanel();
+}
+
+function panicStop() {
+  stopAuto(true);
 }
 
 function onKeyDown(event) {
@@ -1996,7 +1991,7 @@ function onKeyDown(event) {
   const key = event.key.toLowerCase();
   if (key === 'a') {
     event.preventDefault();
-    toggleAuto();
+    resumeAuto();
   } else if (key === 'm') {
     event.preventDefault();
     playNow().catch(() => {});
@@ -2044,7 +2039,7 @@ function reportText() {
     opening
       ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)${state.probes ? ` · probe ${state.probes}` : ''}`
       : '',
-    `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'paused'} · afk ${cfg.afkKeepAlive || !cfg.pauseWhenHidden ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.lastReport
       ? `last game ${state.lastReport.result || '?'}${state.lastReport.moves ? ' · ' + state.lastReport.moves + ' moves' : ''} · you ${state.lastReport.myAcpl ?? '–'} cp/move${state.lastReport.myPerf ? ' (like ' + state.lastReport.myPerf + ')' : ''} · rival ${state.lastReport.oppAcpl ?? '–'}${state.lastReport.oppPerf ? ' (like ' + state.lastReport.oppPerf + ')' : ''} · account ${state.lastReport.rating ?? '–'}${Number.isFinite(state.lastReport.delta) ? ' (' + (state.lastReport.delta >= 0 ? '+' : '') + state.lastReport.delta + ')' : ''}`
       : '',
@@ -2086,23 +2081,28 @@ async function copyReport() {
   refreshPanel();
 }
 
-function toggleAuto() {
-  state.autoPlay = !state.autoPlay;
-  cfg.autoPlayOnLoad = state.autoPlay;
-  saveSettings(cfg);
-  if (!state.autoPlay) {
-    clearAutoTimer();
-    clearMoveRetry();
+// The AUTO chip and Alt+Shift+A can only resume. There is no path that turns the
+// mode off: Stop is the one pause, and it lives on the header's square button.
+function resumeAuto() {
+  const wasStopped = !cfg.autoPlayOnLoad;
+  enforceAuto();
+  state.autoPlay = true;
+  state.rematchTried = false;
+  state.rematchAttempts = 0;
+  state.rematchTriedTexts = [];
+  state.rematchMisses = 0;
+  if (wasStopped) {
     // A stopped run is finished: the next one starts the clock again.
     clearSession();
-  } else {
     state.sessionStart = Date.now();
     state.gamesPlayed = 1;
     saveSession();
-    if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
-      scheduleAutoMove(state.analysis);
-    }
   }
+  saveSettings(cfg);
+  if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
+    scheduleAutoMove(state.analysis);
+  }
+  scheduleScan(0);
   refreshPanel();
 }
 
@@ -2128,7 +2128,9 @@ function settingsApplied(next) {
 }
 
 const panel = new WraithPanel(cfg, {
-  toggleAuto,
+  resumeAuto,
+  toggleAuto: resumeAuto,
+  stop: () => stopAuto(false),
   toggleAfk,
   step: () => playNow().catch(() => false),
   scan: () => {
@@ -2181,7 +2183,14 @@ function heartbeatTab() {
     }
     return;
   }
+  const wasPassive = state.passiveTab;
   state.passiveTab = false;
+  // Handing the lease back must restore AUTO: a passive tab had paused it, and
+  // without this the first tab stayed idle after the second one closed.
+  if (wasPassive && cfg.autoPlayOnLoad) {
+    state.autoPlay = true;
+    if (/another tab/.test(state.warn)) state.warn = '';
+  }
   try {
     localStorage.setItem(TAB_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() }));
   } catch {

@@ -150,16 +150,54 @@ test('boot reaches the engine and asks it for a move', async () => {
   }
 });
 
+test('a stored off switch cannot turn AUTO off', async () => {
+  const { api, stop } = boot(PAGE, (store) => {
+    store.setItem('chess-wraith-settings-v1:tester', JSON.stringify({
+      autoPlayOnLoad: false,
+      autoRematch: false,
+      alwaysAuto: false
+    }));
+  });
+  try {
+    assert.equal(api.state.autoPlay, true, 'the page boots with AUTO on');
+    assert.equal(api.cfg.autoPlayOnLoad, true, 'the stored false was pinned');
+    assert.equal(api.cfg.autoRematch, true, 'a finished game still queues the next one');
+    assert.equal(api.cfg.alwaysAuto, true);
+  } finally {
+    stop();
+  }
+});
+
+test('Alt+Shift+A resumes AUTO and can never turn it off', () => {
+  const { window, api, stop } = boot();
+  try {
+    api.state.autoPlay = false;
+    api.cfg.autoPlayOnLoad = false;
+    const press = () => window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'a', altKey: true, shiftKey: true }));
+    press();
+    assert.equal(api.state.autoPlay, true, 'the first press resumes');
+    press();
+    assert.equal(api.state.autoPlay, true, 'the second press is not an off switch');
+    assert.equal(api.cfg.autoPlayOnLoad, true);
+  } finally {
+    stop();
+  }
+});
+
 test('the panic key stops the session instead of only hiding the panel', () => {
   const { window, api, stop } = boot();
   try {
     api.state.autoPlay = true;
     api.cfg.autoRematch = true;
     api.cfg.autoPlayOnLoad = true;
+    api.cfg.afkKeepAlive = true;
+    api.cfg.pauseWhenHidden = false;
     window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 's', altKey: true, shiftKey: true }));
     assert.equal(api.state.autoPlay, false, 'auto play is off');
-    assert.equal(api.cfg.autoRematch, false, 'AFK is off');
+    assert.equal(api.cfg.autoRematch, false, 'the rematch is disarmed while stopped');
     assert.equal(api.cfg.autoPlayOnLoad, false, 'and it will not re-arm on the next load');
+    assert.equal(api.cfg.afkKeepAlive, false, 'keep-alive audio is off');
+    assert.equal(api.cfg.pauseWhenHidden, true, 'hidden play is off');
     assert.equal(api.panel.hidden, true, 'the panel is gone');
     assert.match(api.state.events[0].text, /panic stop/, 'and the history says why');
   } finally {

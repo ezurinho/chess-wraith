@@ -548,3 +548,38 @@ test('a restricted search asks the engine about one move only', async () => {
   await plain;
   engine.destroy();
 });
+
+test('a normal search keeps the full MultiPV setting, not the old five', async () => {
+  const { api, workers } = harness();
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+
+  const done = engine.analyze({
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    turn: 'w',
+    flipped: false,
+    uciMoves: ['e2e4'],
+    depth: 12,
+    moveTimeMs: 400,
+    multiPv: 8,
+    elo: 0,
+    skill: 20
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(
+    worker.sent.includes('setoption name MultiPV value 8'),
+    JSON.stringify(worker.sent.slice(-4))
+  );
+  for (let i = 1; i <= 8; i += 1) {
+    worker.reply(`info depth 12 seldepth 16 multipv ${i} score cp ${20 - i} nodes 400 pv e2e4 e7e5`);
+  }
+  worker.reply('bestmove e2e4');
+  const lines = await done;
+  assert.equal(lines.length, 8, '1.86.0 promised eight lines and the engine only returned five');
+  engine.destroy();
+});

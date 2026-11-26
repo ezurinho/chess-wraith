@@ -1,4 +1,4 @@
-const VERSION = '1.86.0';
+const VERSION = '1.86.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -28,11 +28,11 @@ const CONFIG = {
   hashMb: 32,
 
   // Pacing: the whole point of this script is that it does not look like a bot.
-  autoPlayOnLoad: false,
-  // Always auto: no click to start and no click to continue. It turns auto-play,
-  // rematch and the keep-alive on at boot, and the session cap becomes a rollover
-  // instead of a stop, the way nitro-wraith keeps queueing races. Turn it off in
-  // Tune to get the old one-session behaviour back.
+  // AUTO is the only mode. It starts with the page, re-arms after every game and
+  // has no off switch; the chip resumes a stopped tab and Stop is the escape hatch.
+  autoPlayOnLoad: true,
+  // Kept as a field because the session cap and the panel read it. The boot pass
+  // pins it to true so no stale per-account setting can turn AUTO off.
   alwaysAuto: true,
   minThinkMs: 700,
   maxThinkMs: 4200,
@@ -53,9 +53,9 @@ const CONFIG = {
   sessionMaxGames: 15,
   sessionMaxMs: 3 * 60 * 60 * 1000,
 
-  // AFK: play through the end of a game and into the next one without a human.
-  // Off by default; the panel says what it is doing and why it stopped.
-  autoRematch: false,
+  // Rematch is part of AUTO, not a separate switch: a finished game always asks
+  // for the next one. AFK only decides whether the tab keeps playing while hidden.
+  autoRematch: true,
   afkKeepAlive: false,
   newGameDelayMs: [1700, 4200],
   newGameLongChance: 0.12,
@@ -79,7 +79,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

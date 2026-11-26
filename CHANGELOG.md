@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.86.2 — 2026-11-27
+
+AUTO is a mode, not a switch.
+
+- A stored `alwaysAuto: false` or an old account's `autoPlayOnLoad: false` could
+  still reach the engine: boot forced the flags, then `adoptAccountSettings`
+  copied the stored object over them. Boot and account adoption now pin
+  auto-play and rematch after the copy.
+- A finished game set `autoPlay` false whenever `autoRematch` was off, and a
+  passive tab that got the lease back stayed idle. Both paths now restore AUTO.
+- The AUTO chip is state plus resume (`ON`/`PAUSED`); the Tune "Always auto"
+  and "Auto rematch" switches are static rows. Stop is the one pause, on the
+  header's square button; `Alt+Shift+S` keeps its panic behaviour and hides the
+  panel. Stop also drops AFK, including the keep-alive audio.
+- AFK keeps only the hidden half (keep-alive and play-while-hidden). Turning it
+  off no longer cancels the rematch or resets the session.
+- Two regressions: a stored false cannot boot AUTO off, and Alt+Shift+A can
+  resume but never toggle it off.
+
+## 1.86.1 — 2026-11-27
+
+The eight lines 1.86.0 promised never left the engine.
+
+- `#applyOptions` still clamped an unrestricted search to five lines, so the
+  new default of eight and the setting's maximum of ten were cut to five before
+  `go`. The clamp is now the setting's own 1-10 range.
+- A fake-worker test asks for eight lines and checks that eight formatted lines
+  come back; it fails on the 1.86.0 clamp.
+
 ## 1.86.0 — 2026-11-27
 
 Four lines were not enough to price a 60 cp band.

@@ -1,6 +1,27 @@
 # Review, 1.80.0
 
-Evidence: `npm run check` (222 tests, 0 failures), the committed bundle, and live
+> **Addendum, 1.86.2 (2026-11-27).** AUTO is now an invariant rather than a
+> preference. Bootstrap, per-account settings and the end of a game pin
+> `autoPlayOnLoad`, `autoRematch` and `alwaysAuto` on; the AUTO chip is state plus
+> resume (`ON`/`PAUSED`), the Tune switches for Always auto and Auto rematch are
+> static rows, and Stop is the one pause (the header square keeps the panel, the
+> panic key hides it). AFK keeps only keep-alive and play-while-hidden. This is
+> the Nitro-like contract the owner asked for: no path leaves a tab waiting for
+> a click. `npm run check` passes **225 tests** and lint. The 1320 rung still has
+> no live measurement and the live-board checks are unchanged, so the overall
+> grade moves provisionally to **8.5/10** (Product 8.6, UX 8.2; Engineering 8.7,
+> Verification 8.3, Honesty 9.5 and Risk 3.0 unchanged).
+>
+> **Addendum, 1.86.1 (2026-11-27).** This review is kept as written for 1.80.0.
+> Re-run on the 1.86.1 working tree: `npm run check` passes 223 tests and lint.
+> The audit found that the 1.86.0 claim (eight lines by default, ten in the
+> setting) never reached the engine: `#applyOptions` still clamped an
+> unrestricted search to five lines. The clamp now carries the setting's own
+> 1-10 range, and a fake-worker regression asks for eight and asserts eight
+> formatted lines. This restores the intended 1.86.0 behaviour; the 1320 rung
+> still has no live measurement, so the 8.4/10 overall grade is unchanged.
+>
+> Evidence: `npm run check` (223 tests, 0 failures), the committed bundle, and live
 sessions on `chess.com/analysis` where the shipped file was fetched from jsDelivr,
 evaluated in the page, and driven with real pointer events against chess.com's own
 handlers. Where the evidence is thin it says so. Numbers from 2026-11-27.
