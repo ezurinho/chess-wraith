@@ -1106,7 +1106,6 @@ function probeOpeningMove(probe, result) {
     .then((lines) => {
       const line = lines && lines[0];
       if (!line || line.bestUci !== probe.uci) return;
-      state.probes += 1;
       state.probeLine = { ...line, opening: true, fen: probe.fen };
     })
     .catch(() => [])
@@ -1114,9 +1113,11 @@ function probeOpeningMove(probe, result) {
       state.probeSpentMs = Date.now() - started;
       const probed = state.probeLine;
       const known = (result.lines || []).some((line) => line.bestUci === (probed && probed.bestUci));
-      const merged = probed && probed.fen === result.fen && !known
-        ? { ...result, lines: [...result.lines, probed] }
-        : result;
+      // Only a probe that reaches the decision counts: one whose position moved on,
+      // or whose move the search had already found, judged nothing.
+      const used = Boolean(probed) && probed.fen === result.fen && !known;
+      if (used) state.probes += 1;
+      const merged = used ? { ...result, lines: [...result.lines, probed] } : result;
       scheduleAutoMove(merged);
     });
 }

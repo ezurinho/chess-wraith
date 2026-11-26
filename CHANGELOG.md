@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.51.6 — 2026-11-26
+
+`probe N` counts the probes that actually judged a move.
+
+- The counter went up when the restricted search answered, even if the position
+  had moved on or the move was already a candidate. It now increments only when the
+  line reaches the decision, so the report means "N of my moves were judged".
+
 ## 1.51.5 — 2026-11-26
 
 The probe count belongs to the account that earned it.
