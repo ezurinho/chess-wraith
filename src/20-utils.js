@@ -509,6 +509,7 @@ function loadSettings(user) {
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
     merged.panelCollapsed = Boolean(merged.panelCollapsed);
+    merged.panelTab = pickEnum(merged.panelTab, ['live', 'tune', 'info', 'stats'], CONFIG.panelTab);
     // A saved corner is two finite numbers or nothing; anything else is the
     // default corner, not a panel parked at 0,0 or NaN.
     merged.panelX = Number.isFinite(Number(merged.panelX)) && merged.panelX !== null

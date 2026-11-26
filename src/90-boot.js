@@ -1986,6 +1986,19 @@ function panicStop() {
   stopAuto(true);
 }
 
+const THEME_ORDER = ['carbon', 'aurora', 'sunset', 'ice', 'violet', 'rgb'];
+
+// Alt+Shift+T cycles the six skins without opening Tune, the same gesture
+// Nitro uses for Alt+T. It goes through the panel so the swatches and the name
+// stay in sync, and through settingsApplied so the choice survives the reload.
+function cycleTheme() {
+  const index = THEME_ORDER.indexOf(cfg.theme);
+  cfg.theme = THEME_ORDER[(index + 1) % THEME_ORDER.length];
+  panel.setTheme(cfg.theme);
+  settingsApplied(cfg);
+  noteEvent(`theme · ${cfg.theme}`);
+}
+
 function onKeyDown(event) {
   if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
   const key = event.key.toLowerCase();
@@ -2004,6 +2017,9 @@ function onKeyDown(event) {
   } else if (key === 's') {
     event.preventDefault();
     panicStop();
+  } else if (key === 't') {
+    event.preventDefault();
+    cycleTheme();
   }
 }
 

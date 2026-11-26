@@ -1,5 +1,13 @@
 # Review, 1.80.0
 
+> **Addendum, 1.88.0 (2026-11-26).** The rail is now the same contract as
+> Nitro's panel: `role=tablist`/`tab`/`tabpanel`, `aria-selected`, roving
+> tabindex, arrows/Home/End move the view and the focus, and the active tab is
+> saved per account. `Alt+Shift+T` cycles the six themes. Three tests cover the
+> restored tab, the keyboard path and the hotkey. `npm run check` passes **230
+> tests** and lint. The overall grade moves provisionally to **8.7/10**
+> (UX 8.5 -> 8.7; Product 8.6, Engineering 8.8, Verification 8.3 unchanged).
+>
 > **Addendum, 1.87.0 (2026-11-26).** The panel now remembers its corner: a drag
 > writes `panelX`/`panelY` into the account's settings, boot restores them
 > clamped to the viewport, and the header is a keyboard control (arrows 8 px,

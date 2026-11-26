@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.87.0
+// @version      1.88.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -42,7 +42,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.87.0';
+const VERSION = '1.88.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -109,6 +109,8 @@ const CONFIG = {
   theme: 'carbon', // 'carbon' | 'aurora' | 'sunset' | 'ice' | 'violet' | 'rgb'
 
   panelCollapsed: false,
+  // The rail remembers the view: `live`, `tune`, `info` or `stats`.
+  panelTab: 'live',
   // Where the panel was left, in CSS pixels; null means the default corner.
   // Saved with the rest of the settings, so a reload keeps the panel where it
   // was instead of sending it back to the top-right.
@@ -128,7 +130,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.87.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.88.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -647,6 +649,7 @@ function loadSettings(user) {
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
     merged.panelCollapsed = Boolean(merged.panelCollapsed);
+    merged.panelTab = pickEnum(merged.panelTab, ['live', 'tune', 'info', 'stats'], CONFIG.panelTab);
     // A saved corner is two finite numbers or nothing; anything else is the
     // default corner, not a panel parked at 0,0 or NaN.
     merged.panelX = Number.isFinite(Number(merged.panelX)) && merged.panelX !== null
@@ -4921,6 +4924,8 @@ class WraithPanel {
 
     const panel = document.createElement('div');
     panel.className = 'panel';
+    panel.setAttribute('role', 'region');
+    panel.setAttribute('aria-label', 'Chess Wraith control panel');
     panel.style.pointerEvents = 'auto';
     panel.innerHTML = PANEL_HTML;
     panel.dataset.mode = 'auto';
@@ -4931,7 +4936,7 @@ class WraithPanel {
 
     this.hidden = false;
     this.#wire();
-    this.setTab('live');
+    this.setTab(cfg.panelTab, false);
     this.setTheme(cfg.theme || 'carbon');
     this.panel.dataset.collapsed = String(Boolean(cfg.panelCollapsed));
     this.#restorePosition();
@@ -4966,10 +4971,7 @@ class WraithPanel {
     });
     on(this.el.head, 'dblclick', () => this.toggleCollapsed());
 
-    for (const btn of this.panel.querySelectorAll('[data-tab-btn]')) {
-      on(btn, 'click', () => this.setTab(btn.dataset.tabBtn));
-    }
-
+    this.#wireTabs();
 
     for (const btn of this.panel.querySelectorAll('[data-theme-btn]')) {
       on(btn, 'click', () => {
@@ -5127,6 +5129,49 @@ class WraithPanel {
     });
   }
 
+  // The rail is a real tablist, the same contract Nitro uses: one tab in the
+  // tab order, arrows/Home/End move both the view and the focus, and the
+  // active view is stored with the rest of the settings.
+  #wireTabs() {
+    const rail = this.el.rail;
+    if (!rail) return;
+    rail.setAttribute('role', 'tablist');
+    rail.setAttribute('aria-label', 'Panel views');
+    const tabs = [...rail.querySelectorAll('[data-tab-btn]')];
+    for (const btn of tabs) {
+      const name = btn.dataset.tabBtn;
+      const view = this.panel.querySelector(`.v-${name}`);
+      if (view) {
+        view.id = `cw-view-${name}`;
+        view.setAttribute('role', 'tabpanel');
+        view.setAttribute('aria-label', name.charAt(0).toUpperCase() + name.slice(1));
+      }
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-controls', `cw-view-${name}`);
+      btn.setAttribute('aria-selected', 'false');
+      btn.tabIndex = -1;
+      btn.addEventListener('click', () => this.setTab(name));
+    }
+    rail.addEventListener('keydown', (event) => {
+      const btn = event.target && event.target.closest ? event.target.closest('[data-tab-btn]') : null;
+      if (!btn) return;
+      const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+      if (!keys.includes(event.key)) return;
+      const buttons = [...rail.querySelectorAll('[data-tab-btn]')];
+      const current = buttons.indexOf(btn);
+      if (current < 0) return;
+      let next = current;
+      if (event.key === 'Home') next = 0;
+      else if (event.key === 'End') next = buttons.length - 1;
+      else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') next = (current + 1) % buttons.length;
+      else next = (current - 1 + buttons.length) % buttons.length;
+      event.preventDefault();
+      event.stopPropagation();
+      this.setTab(buttons[next].dataset.tabBtn);
+      buttons[next].focus();
+    });
+  }
+
   setTheme(theme) {
     const name = THEME_NAMES[theme] ? theme : 'carbon';
     this.panel.dataset.theme = name;
@@ -5136,10 +5181,18 @@ class WraithPanel {
     }
   }
 
-  setTab(tab) {
-    const index = { live: 0, tune: 1, info: 2, stats: 3 }[tab] || 0;
-    this.panel.dataset.tab = tab || 'live';
+  setTab(tab, persist = true) {
+    const name = ['live', 'tune', 'info', 'stats'].includes(tab) ? tab : 'live';
+    const index = { live: 0, tune: 1, info: 2, stats: 3 }[name];
+    this.panel.dataset.tab = name;
     this.el.rail.dataset.index = String(index);
+    this.cfg.panelTab = name;
+    for (const btn of this.panel.querySelectorAll('[data-tab-btn]')) {
+      const selected = btn.dataset.tabBtn === name;
+      btn.setAttribute('aria-selected', String(selected));
+      btn.tabIndex = selected ? 0 : -1;
+    }
+    if (persist) this.handlers.settingsApplied(this.cfg);
   }
 
   toggleCollapsed() {
@@ -7376,6 +7429,19 @@ function panicStop() {
   stopAuto(true);
 }
 
+const THEME_ORDER = ['carbon', 'aurora', 'sunset', 'ice', 'violet', 'rgb'];
+
+// Alt+Shift+T cycles the six skins without opening Tune, the same gesture
+// Nitro uses for Alt+T. It goes through the panel so the swatches and the name
+// stay in sync, and through settingsApplied so the choice survives the reload.
+function cycleTheme() {
+  const index = THEME_ORDER.indexOf(cfg.theme);
+  cfg.theme = THEME_ORDER[(index + 1) % THEME_ORDER.length];
+  panel.setTheme(cfg.theme);
+  settingsApplied(cfg);
+  noteEvent(`theme · ${cfg.theme}`);
+}
+
 function onKeyDown(event) {
   if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
   const key = event.key.toLowerCase();
@@ -7394,6 +7460,9 @@ function onKeyDown(event) {
   } else if (key === 's') {
     event.preventDefault();
     panicStop();
+  } else if (key === 't') {
+    event.preventDefault();
+    cycleTheme();
   }
 }
 

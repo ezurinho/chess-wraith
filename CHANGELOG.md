@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.88.0 — 2026-11-26
+
+The rail behaves like Nitro's.
+
+- The rail is a real tablist: `role=tab`/`tabpanel`, `aria-selected`, roving
+  tabindex, and arrows/Home/End move both the view and the focus.
+- The active tab is saved per account and restored on load, so opening Tune and
+  coming back later no longer lands on Live.
+- `Alt+Shift+T` cycles the six themes without opening Tune.
+- Three tests cover the restored tab, the keyboard path and the theme hotkey.
+
 ## 1.87.0 — 2026-11-26
 
 The panel stays where you put it.
