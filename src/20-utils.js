@@ -509,6 +509,12 @@ function loadSettings(user) {
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
     merged.panelCollapsed = Boolean(merged.panelCollapsed);
+    // A saved corner is two finite numbers or nothing; anything else is the
+    // default corner, not a panel parked at 0,0 or NaN.
+    merged.panelX = Number.isFinite(Number(merged.panelX)) && merged.panelX !== null
+      ? clamp(Number(merged.panelX), 0, 20000) : null;
+    merged.panelY = Number.isFinite(Number(merged.panelY)) && merged.panelY !== null
+      ? clamp(Number(merged.panelY), 0, 20000) : null;
     merged.showLines = clampInt(merged.showLines, 1, 4, CONFIG.showLines);
     merged.theme = pickEnum(merged.theme, ['carbon', 'aurora', 'sunset', 'ice', 'violet', 'rgb'], CONFIG.theme);
     merged.autoRematch = Boolean(merged.autoRematch);

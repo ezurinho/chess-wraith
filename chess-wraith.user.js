@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.86.2
+// @version      1.87.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -42,7 +42,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.86.2';
+const VERSION = '1.87.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -109,6 +109,11 @@ const CONFIG = {
   theme: 'carbon', // 'carbon' | 'aurora' | 'sunset' | 'ice' | 'violet' | 'rgb'
 
   panelCollapsed: false,
+  // Where the panel was left, in CSS pixels; null means the default corner.
+  // Saved with the rest of the settings, so a reload keeps the panel where it
+  // was instead of sending it back to the top-right.
+  panelX: null,
+  panelY: null,
   showLines: 3,
   // Paint the engine's move on the board, not only in the panel.
   arrows: true,
@@ -123,7 +128,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.87.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -642,6 +647,12 @@ function loadSettings(user) {
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
     merged.panelCollapsed = Boolean(merged.panelCollapsed);
+    // A saved corner is two finite numbers or nothing; anything else is the
+    // default corner, not a panel parked at 0,0 or NaN.
+    merged.panelX = Number.isFinite(Number(merged.panelX)) && merged.panelX !== null
+      ? clamp(Number(merged.panelX), 0, 20000) : null;
+    merged.panelY = Number.isFinite(Number(merged.panelY)) && merged.panelY !== null
+      ? clamp(Number(merged.panelY), 0, 20000) : null;
     merged.showLines = clampInt(merged.showLines, 1, 4, CONFIG.showLines);
     merged.theme = pickEnum(merged.theme, ['carbon', 'aurora', 'sunset', 'ice', 'violet', 'rgb'], CONFIG.theme);
     merged.autoRematch = Boolean(merged.autoRematch);
@@ -4923,6 +4934,12 @@ class WraithPanel {
     this.setTab('live');
     this.setTheme(cfg.theme || 'carbon');
     this.panel.dataset.collapsed = String(Boolean(cfg.panelCollapsed));
+    this.#restorePosition();
+    // An alt-tab, a zoom change or a rotated screen can shrink the viewport
+    // under a saved corner; reclamp without rewriting the stored value.
+    window.addEventListener('resize', () => {
+      if (Number.isFinite(this.cfg.panelX)) this.#placePanel(this.cfg.panelX, this.cfg.panelY);
+    });
     this.render();
   }
 
@@ -4999,15 +5016,56 @@ class WraithPanel {
     this.#drag();
   }
 
+  #positionLimits() {
+    // offsetWidth is 0 before layout; the CSS width is the honest fallback.
+    const width = this.panel.offsetWidth || 322;
+    return {
+      maxLeft: Math.max(8, window.innerWidth - width - 8),
+      maxTop: Math.max(8, window.innerHeight - 44),
+    };
+  }
+
+  #placePanel(left, top) {
+    const { maxLeft, maxTop } = this.#positionLimits();
+    const x = clamp(Math.round(left), 8, maxLeft);
+    const y = clamp(Math.round(top), 8, maxTop);
+    this.panel.style.right = 'auto';
+    this.panel.style.left = `${x}px`;
+    this.panel.style.top = `${y}px`;
+    this.cfg.panelX = x;
+    this.cfg.panelY = y;
+    return { left: x, top: y };
+  }
+
+  #savePosition() {
+    this.handlers.settingsApplied(this.cfg);
+  }
+
+  #restorePosition() {
+    if (!Number.isFinite(this.cfg.panelX) || !Number.isFinite(this.cfg.panelY)) return;
+    this.#placePanel(this.cfg.panelX, this.cfg.panelY);
+  }
+
+  #resetPosition() {
+    this.panel.style.left = '';
+    this.panel.style.top = '';
+    this.panel.style.right = '';
+    this.cfg.panelX = null;
+    this.cfg.panelY = null;
+    this.#savePosition();
+  }
+
   #drag() {
     let dragging = false;
+    let moved = false;
     let sx = 0;
     let sy = 0;
     let ox = 0;
     let oy = 0;
     this.el.head.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('button')) return;
+      if (e.target.closest('button, a')) return;
       dragging = true;
+      moved = false;
       const r = this.panel.getBoundingClientRect();
       sx = e.clientX;
       sy = e.clientY;
@@ -5021,11 +5079,51 @@ class WraithPanel {
       if (!dragging) return;
       const maxLeft = Math.max(8, window.innerWidth - this.panel.offsetWidth - 8);
       const maxTop = Math.max(8, window.innerHeight - 40);
-      this.panel.style.left = `${clamp(ox + e.clientX - sx, 8, maxLeft)}px`;
-      this.panel.style.top = `${clamp(oy + e.clientY - sy, 8, maxTop)}px`;
+      const left = clamp(ox + e.clientX - sx, 8, maxLeft);
+      const top = clamp(oy + e.clientY - sy, 8, maxTop);
+      this.panel.style.left = `${left}px`;
+      this.panel.style.top = `${top}px`;
+      if (Math.abs(left - ox) > 1 || Math.abs(top - oy) > 1) moved = true;
     });
     window.addEventListener('pointerup', () => {
+      if (!dragging) return;
       dragging = false;
+      if (!moved) return;
+      const left = parseFloat(this.panel.style.left);
+      const top = parseFloat(this.panel.style.top);
+      if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+      this.#placePanel(left, top);
+      this.#savePosition();
+    });
+
+    // The header is a keyboard control too: arrows move 8 px, Shift 24 and
+    // Home returns the panel to its corner. The pointer and the keyboard share
+    // placePanel/savePosition, so they cannot drift into two positions.
+    const head = this.el.head;
+    if (!head) return;
+    head.tabIndex = 0;
+    head.setAttribute('aria-keyshortcuts', 'ArrowLeft ArrowRight ArrowUp ArrowDown Home');
+    head.setAttribute('aria-label', 'Panel header. Arrow keys move the panel, Shift moves 24 pixels, Home resets it.');
+    head.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(e.key)) return;
+      if (e.target !== head && e.target.closest && e.target.closest('button, a, input, select, textarea')) return;
+      e.preventDefault();
+      if (e.key === 'Home') {
+        this.#resetPosition();
+        return;
+      }
+      const step = e.shiftKey ? 24 : 8;
+      const rect = this.panel.getBoundingClientRect();
+      const baseLeft = Number.isFinite(this.cfg.panelX) ? this.cfg.panelX : rect.left;
+      const baseTop = Number.isFinite(this.cfg.panelY) ? this.cfg.panelY : rect.top;
+      let left = baseLeft;
+      let top = baseTop;
+      if (e.key === 'ArrowLeft') left -= step;
+      else if (e.key === 'ArrowRight') left += step;
+      else if (e.key === 'ArrowUp') top -= step;
+      else top += step;
+      this.#placePanel(left, top);
+      this.#savePosition();
     });
   }
 

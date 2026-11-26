@@ -1,4 +1,4 @@
-const VERSION = '1.86.2';
+const VERSION = '1.87.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -65,6 +65,11 @@ const CONFIG = {
   theme: 'carbon', // 'carbon' | 'aurora' | 'sunset' | 'ice' | 'violet' | 'rgb'
 
   panelCollapsed: false,
+  // Where the panel was left, in CSS pixels; null means the default corner.
+  // Saved with the rest of the settings, so a reload keeps the panel where it
+  // was instead of sending it back to the top-right.
+  panelX: null,
+  panelY: null,
   showLines: 3,
   // Paint the engine's move on the board, not only in the panel.
   arrows: true,
@@ -79,7 +84,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.87.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

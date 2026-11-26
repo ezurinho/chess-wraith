@@ -941,7 +941,7 @@ Read on 2026-11-26 from GreasyFork and GitHub, not from their screenshots:
 | Follows the account's rating | no | no | no (it is built for maximum strength) | n/a | n/a | `UCI_Elo` + pace + slack, per account |
 | Plays by itself | no | yes, with a human delay | yes (snipe targets) | no | no | yes, with measured pacing and AFK rematch |
 | Persistence | none | none documented | `config.json` on disk | account | cloud | per-account settings, session, pace, history, reports |
-| Tests in the repo | none | none | none | closed source | n/a | 210 node tests, 7 of them boot the whole script |
+| Tests in the repo | none | none | none | closed source | n/a | 227 node tests, 7 of them boot the whole script |
 | Fair-play stance | silent | silent | advertises streamsniping | training tool | official | states the risk and refuses to hide it |
 
 Two things stand out. First, none of the public scripts anchors the engine to the
@@ -967,7 +967,7 @@ Sources: [563087](https://greasyfork.org/en/scripts/563087-chess-com-complete-mo
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | AUTO always on, rematch loop, optional hidden-tab keep-alive, hand-on-board stop |
-| Tests | 25 files | 225 tests in 25 files (7 of them boot the whole script) |
+| Tests | 26 files | 227 tests in 26 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

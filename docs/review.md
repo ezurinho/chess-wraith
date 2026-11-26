@@ -1,5 +1,13 @@
 # Review, 1.80.0
 
+> **Addendum, 1.87.0 (2026-11-26).** The panel now remembers its corner: a drag
+> writes `panelX`/`panelY` into the account's settings, boot restores them
+> clamped to the viewport, and the header is a keyboard control (arrows 8 px,
+> 24 with Shift, Home resets). Two unit tests cover restore and the keyboard
+> path. `npm run check` passes **227 tests** and lint. The overall grade moves
+> provisionally to **8.6/10** (UX 8.2 -> 8.5, Engineering 8.7 -> 8.8); Product
+> stays 8.6 and Verification 8.3 because no live board session was run.
+>
 > **Addendum, 1.86.2 (2026-11-27).** AUTO is now an invariant rather than a
 > preference. Bootstrap, per-account settings and the end of a game pin
 > `autoPlayOnLoad`, `autoRematch` and `alwaysAuto` on; the AUTO chip is state plus

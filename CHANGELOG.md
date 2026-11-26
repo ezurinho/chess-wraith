@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.87.0 — 2026-11-26
+
+The panel stays where you put it.
+
+- Dragging the panel now saves its corner in the account's settings and
+  restores it on the next load, clamped to the viewport.
+- The header is focusable: arrows move the panel 8 px (24 with Shift) and Home
+  returns it to the default corner. A window resize reclamps a saved corner.
+- Two regressions seed a saved corner, reload it, and drive the keyboard path.
+
 ## 1.86.2 — 2026-11-27
 
 AUTO is a mode, not a switch.
