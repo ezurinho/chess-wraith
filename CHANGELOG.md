@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.39.1 — 2026-11-26
+
+The strength exists before the first search.
+
+- `state.effectiveElo` was resolved only inside the rating callbacks, so a
+  signed-out tab or a blocked profile request left it `null` and the search fell
+  back to `cfg.targetElo` (0), which the engine clamps to 1320 — the panel
+  documented 1500. It is now resolved at boot and on every settings change.
+- A manual target typed into the panel applies immediately, not after the next
+  rating fetch.
+- 171 tests: the signed-out boot removes the navbar name, makes the stats
+  endpoint answer 404, and asserts 1500.
+
 ## 1.39.0 — 2026-11-26
 
 The strength stays the account's while the night moves the account.

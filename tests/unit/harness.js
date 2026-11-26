@@ -74,7 +74,11 @@ function bootSource(source, options = {}) {
   };
   // Two callers: the engine downloads its source as text (a fake worker never
   // runs it), and the account lookup asks the public API for stats.
-  window.fetch = async (url) => ({
+  window.fetch = async (url) => {
+    if (options.signedOut && String(url).includes('/pub/player/')) {
+      return { ok: false, status: 404, json: async () => ({}) };
+    }
+    return ({
     ok: true,
     status: 200,
     text: async () => '/* stubbed engine source */',
@@ -83,6 +87,11 @@ function bootSource(source, options = {}) {
       chess_rapid: { last: { rating: 1480 }, record: { win: 40, loss: 38, draw: 2 } }
     })
   });
+  }
+  if (options.signedOut) {
+    const user = window.document.getElementById('user-username-component');
+    if (user) user.textContent = '';
+  }
   // jsdom has no object URLs; the engine only needs one to hand the fake worker
   // a URL it never fetches.
   window.URL.createObjectURL = () => 'blob:chess-wraith';

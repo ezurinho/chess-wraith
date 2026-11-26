@@ -1497,6 +1497,7 @@ function toggleAuto() {
 function settingsChanged(next) {
   Object.assign(cfg, next);
   saveSettings(cfg);
+  resolveElo();
   state.analyzedFen = null;
   engine.stop();
   scheduleScan(60);
@@ -1508,6 +1509,7 @@ function settingsChanged(next) {
 function settingsApplied(next) {
   Object.assign(cfg, next);
   saveSettings(cfg);
+  resolveElo();
   refreshPanel();
 }
 
@@ -1608,6 +1610,10 @@ function boot() {
   refreshPanel();
   syncKeepAlive();
   engine.boot();
+  // The strength must exist before the first search, not after the first rating
+  // fetch: a signed-out tab or a blocked profile request used to leave it null
+  // and the engine fell back to its own 1320 floor.
+  resolveElo();
   window.addEventListener('keydown', onKeyDown, true);
   // Clicks on the panel itself are not "a hand on the board".
   window.addEventListener(

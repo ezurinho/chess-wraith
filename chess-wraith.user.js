@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.39.0
+// @version      1.39.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.39.0';
+const VERSION = '1.39.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.39.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.39.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -5754,6 +5754,7 @@ function toggleAuto() {
 function settingsChanged(next) {
   Object.assign(cfg, next);
   saveSettings(cfg);
+  resolveElo();
   state.analyzedFen = null;
   engine.stop();
   scheduleScan(60);
@@ -5765,6 +5766,7 @@ function settingsChanged(next) {
 function settingsApplied(next) {
   Object.assign(cfg, next);
   saveSettings(cfg);
+  resolveElo();
   refreshPanel();
 }
 
@@ -5865,6 +5867,10 @@ function boot() {
   refreshPanel();
   syncKeepAlive();
   engine.boot();
+  // The strength must exist before the first search, not after the first rating
+  // fetch: a signed-out tab or a blocked profile request used to leave it null
+  // and the engine fell back to its own 1320 floor.
+  resolveElo();
   window.addEventListener('keydown', onKeyDown, true);
   // Clicks on the panel itself are not "a hand on the board".
   window.addEventListener(

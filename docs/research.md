@@ -195,6 +195,18 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The default never ran
+
+`state.effectiveElo` was only resolved inside the rating callbacks. A signed-out
+tab, or an account whose profile request comes back 403/429, never reached them,
+so the value stayed `null` — and the search falls back to `cfg.targetElo`, which
+is `0` by default. The engine then clamps 0 to its own floor: an account-less tab
+played at 1320 while the panel documented 1500, and a manual target typed into
+the panel did not apply until the next rating fetch.
+
+Resolved once at boot and again whenever settings change. The boot test removes
+the navbar name, makes the stats endpoint answer 404, and asserts the strength is
+1500; before the fix it was `null`.
 ## The strength follows the account, and keeps following it
 
 `effectiveElo` has always been anchored to the account: `base` is the published
@@ -557,7 +569,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 170 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 171 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

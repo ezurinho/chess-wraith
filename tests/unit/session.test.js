@@ -19,8 +19,8 @@ const FRAGMENTS = [
   '80-panel.js', '90-boot.js'
 ];
 
-function boot(html = PAGE, seed = null) {
-  return bootSource(FRAGMENTS.map(read).join('\n'), { html, seed });
+function boot(html = PAGE, seed = null, options = {}) {
+  return bootSource(FRAGMENTS.map(read).join('\n'), { html, seed, ...options });
 }
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -181,6 +181,18 @@ test('the strength asked of the engine is the account\'s own rating', async () =
     assert.ok(api.state.effectiveElo >= 1405 && api.state.effectiveElo <= 1505,
       `effectiveElo ${api.state.effectiveElo} outside the account envelope`);
     assert.ok(api.state.effectiveElo <= 1480 + 25, 'never asked to play above the account plus a hair');
+  } finally {
+    stop();
+  }
+});
+test('a signed-out tab plays at the documented default, not the engine floor', async () => {
+  // No navbar name and a 404 from the stats endpoint: the fallback chain is
+  // manual target, then 1500. It used to be null, which the engine clamps to 1320.
+  const { api, stop } = boot(PAGE, null, { signedOut: true });
+  try {
+    assert.equal(await until(() => api.state.eloSource !== 'target', 6000), true, 'the source is decided');
+    assert.equal(api.state.eloSource, 'default');
+    assert.equal(api.state.effectiveElo, 1500, 'the documented default, not the floor');
   } finally {
     stop();
   }
