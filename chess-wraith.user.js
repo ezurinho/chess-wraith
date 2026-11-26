@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.41.0
+// @version      1.42.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.41.0';
+const VERSION = '1.42.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.41.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.42.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -4834,6 +4834,7 @@ function registerButler() {
       return el ? (el.textContent || '').trim() : null;
     },
     scan: () => runScan(),
+    report: () => reportText(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
       if (!scan || !scan.valid) return { valid: false };
@@ -5714,13 +5715,21 @@ function reportText() {
   const cls = state.ratingClass;
   const ratings = state.accountRatings;
   const rating = ratings && cls && ratings[cls] ? `${ratings[cls]} ${cls}` : 'no account rating';
+  // The anchor chain, not just its result: a report that says "effective 1374"
+  // cannot be checked without knowing what it was anchored to.
+  const rival = state.oppEloEstimate
+    ? `~${state.oppEloEstimate}`
+    : state.opponentRating
+      ? String(state.opponentRating)
+      : 'unknown';
+  const form = state.formOffset > 0 ? `+${state.formOffset}` : String(state.formOffset || 0);
   const lines = [
     `chess-wraith ${VERSION}`,
     `engine ${engine.ready ? 'ready' : 'not ready'} · ${engine.mode}`,
     snap
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
-    `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
+    `rating ${rating} · rival ${rival} · form ${form} · effective ${state.effectiveElo || 'full'} (${state.eloSource})${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
     state.events.length
       ? `history ${state.events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join(' | ')}`
       : 'history empty',

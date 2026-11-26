@@ -217,3 +217,20 @@ test('learning the opponent\'s rating re-anchors the strength in the same game',
     stop();
   }
 });
+test('the report carries the whole anchor chain, not only its result', async () => {
+  const { api, stop } = boot(RATED);
+  try {
+    assert.equal(
+      await until(() => api.state.opponentRating === 1000 && api.state.eloSource === 'account', 9000),
+      true,
+      'the rival and the account are both known'
+    );
+    const report = api.report();
+    assert.match(report, /rival 1000/);
+    assert.match(report, /rating 1480 rapid/);
+    assert.match(report, new RegExp('form ' + (api.state.formOffset > 0 ? '\\+' : '') + api.state.formOffset));
+    assert.match(report, new RegExp('effective ' + api.state.effectiveElo + ' \\(account\\)'));
+  } finally {
+    stop();
+  }
+});

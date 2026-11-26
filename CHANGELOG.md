@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.42.0 — 2026-11-26
+
+The bug report carries the anchor chain, and the page costs 1.8 ms.
+
+- `copy report` now prints `rating … · rival … · form … · effective … (source)`.
+  "effective 1374" was unverifiable without the numbers it was anchored to.
+- New research section with three measurements: a scan is 1.8 ms on a real
+  game page, 1.41.0 boots clean on `/analysis` and `/play/online` with no
+  uncaught error, and the opening picker spreads over four moves (23-26 % each)
+  while the repeated move drops to 12 %.
+- 175 tests.
+
 ## 1.41.0 — 2026-11-26
 
 The rival's rating lands in the anchor in the same scan, and the comparison is

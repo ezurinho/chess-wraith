@@ -547,6 +547,7 @@ function registerButler() {
       return el ? (el.textContent || '').trim() : null;
     },
     scan: () => runScan(),
+    report: () => reportText(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
       if (!scan || !scan.valid) return { valid: false };
@@ -1427,13 +1428,21 @@ function reportText() {
   const cls = state.ratingClass;
   const ratings = state.accountRatings;
   const rating = ratings && cls && ratings[cls] ? `${ratings[cls]} ${cls}` : 'no account rating';
+  // The anchor chain, not just its result: a report that says "effective 1374"
+  // cannot be checked without knowing what it was anchored to.
+  const rival = state.oppEloEstimate
+    ? `~${state.oppEloEstimate}`
+    : state.opponentRating
+      ? String(state.opponentRating)
+      : 'unknown';
+  const form = state.formOffset > 0 ? `+${state.formOffset}` : String(state.formOffset || 0);
   const lines = [
     `chess-wraith ${VERSION}`,
     `engine ${engine.ready ? 'ready' : 'not ready'} · ${engine.mode}`,
     snap
       ? `board ply ${plyOf(snap)} · ${snap.turn === 'w' ? 'white' : 'black'} to move${snap.turnCertain === false ? ' (guess)' : ''}`
       : 'board not readable',
-    `rating ${rating} · effective ${state.effectiveElo || 'full'}${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
+    `rating ${rating} · rival ${rival} · form ${form} · effective ${state.effectiveElo || 'full'} (${state.eloSource})${strengthFloor(accountRatingNow() || 0).gap ? ` · ${strengthFloor(accountRatingNow() || 0).gap} under the engine floor` : ''}`,
     state.events.length
       ? `history ${state.events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join(' | ')}`
       : 'history empty',

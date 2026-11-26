@@ -195,6 +195,20 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The three numbers a report needs, and the ones it had
+
+Measured on 2026-11-26 with 1.41.0 in the browser:
+
+| Claim | How it was measured | Result |
+|---|---|---|
+| a scan is cheap | 50 × `ChessWraith.scan()` on a 17-piece game page | **1.8 ms** per scan, of which 0.01 ms is listing the pieces and 0.04 ms reading their boxes |
+| the script survives the other pages | booted 1.41.0 on `/analysis` and `/play/online` | board found, engine `Stockfish 19 NNUE`, no warning, **0 uncaught errors** |
+| the opening is not a book | 400 draws of `chooseMove()` over four opening lines | d2d4 26 %, e2e4 26 %, g1f3 26 %, c2c4 23 %; with `repeatUci = e2e4` the same move drops to **12 %** |
+
+The report line is now the whole chain — `rating 1480 rapid · rival 1000 · form 0 ·
+effective 1425 (default)` — because "effective 1374" cannot be checked by anyone
+without knowing what it was anchored to. A test boots the script, waits for both
+the rival and the account rating, and asserts every link.
 ## What the five public scripts actually are
 
 Read from the published source on 2026-11-26 (greasyfork `/code`), not from
@@ -612,7 +626,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 174 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 175 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
