@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.52.3 — 2026-11-26
+
+The probe request exists once.
+
+- `probeRequest(fen, uciMoves, uci)` owns the restricted-search shape — MultiPV 1,
+  depth cap, `searchmoves`, budget — for both the timer and the play button. That
+  shape is what drifted in 1.52.0; one copy is left.
+
 ## 1.52.2 — 2026-11-26
 
 One probe budget, one place.
