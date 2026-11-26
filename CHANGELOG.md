@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.61.2 — 2026-11-27
+
+The board arrows never drew.
+
+- `refreshPanel` passed `state.snapshot.boardEl`, which does not exist: `state`
+  owns the board element, the snapshot never did. `paintBoardOverlay` returned on
+  its first line, so the arrows shipped in 1.58.0 have never appeared on a real
+  page. Both call sites pass `state.boardEl` now.
+- The boot test asserts the arrow elements exist once the engine answers, so the
+  module cannot be wired to nothing again.
+- Found by driving the shipped bundle on chess.com's real analysis board with
+  `?cw=1` and the real wasm engine: the script played Nf3 and Ne5 through real
+  pointer events and verified them; the overlay was the one thing missing.
+
 ## 1.61.1 — 2026-11-27
 
 Debug hooks for the one path tests cannot reach.

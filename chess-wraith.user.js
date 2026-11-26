@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.61.1
+// @version      1.61.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.61.1';
+const VERSION = '1.61.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.61.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.61.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6158,7 +6158,7 @@ function onNewGame() {
   state.clockPeak = 0;
   state.tempoSamples = [];
   // The old game's arrow is not this game's plan.
-  paintBoardOverlay(state.snapshot && state.snapshot.boardEl, null, false, true);
+  paintBoardOverlay(state.boardEl, null, false, true);
   if (cfg.autoRematch) state.autoPlay = true;
 }
 
@@ -6256,7 +6256,10 @@ function refreshPanel() {
   // The board overlay follows the same state as the panel, including the
   // toggle, so one place keeps it from going stale after a setting change.
   if (state.snapshot) {
-    paintBoardOverlay(state.snapshot.boardEl, state.analysis && state.analysis.lines, state.snapshot.flipped, cfg.arrows);
+    // boardEl lives on `state`, not on the snapshot: the first version of this
+    // line read `snapshot.boardEl`, always undefined, and the arrows never drew
+    // on a real page. `refreshPanel` is the only place that paints them.
+    paintBoardOverlay(state.boardEl, state.analysis && state.analysis.lines, state.snapshot.flipped, cfg.arrows);
   }
 }
 

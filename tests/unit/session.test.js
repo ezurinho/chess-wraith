@@ -56,6 +56,12 @@ test('the whole script boots on a real board without throwing', async () => {
     assert.ok(api.state.boardEl, 'the board element was found');
     assert.equal(api.engine.mode, 'Stockfish 19 NNUE', 'the engine came up');
     assert.ok(window.document.body.children.length > 0, 'the panel has a host');
+    // The arrows were wired to `snapshot.boardEl`, which does not exist, so the
+    // module tested and the feature never drew. The wiring is what this checks.
+    assert.ok(await until(() => api.state.analysis && api.state.analysis.lines.length, 8000), 'the engine answered');
+    const svg = window.document.querySelector('svg[data-cw-overlay]');
+    assert.ok(svg, 'the arrow overlay is on the board, not just in the module');
+    assert.ok(svg.querySelectorAll('[data-cw-arrow]').length >= 2, 'and it draws the shaft and the head');
   } finally {
     stop();
   }

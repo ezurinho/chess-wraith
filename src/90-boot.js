@@ -933,7 +933,7 @@ function onNewGame() {
   state.clockPeak = 0;
   state.tempoSamples = [];
   // The old game's arrow is not this game's plan.
-  paintBoardOverlay(state.snapshot && state.snapshot.boardEl, null, false, true);
+  paintBoardOverlay(state.boardEl, null, false, true);
   if (cfg.autoRematch) state.autoPlay = true;
 }
 
@@ -1031,7 +1031,10 @@ function refreshPanel() {
   // The board overlay follows the same state as the panel, including the
   // toggle, so one place keeps it from going stale after a setting change.
   if (state.snapshot) {
-    paintBoardOverlay(state.snapshot.boardEl, state.analysis && state.analysis.lines, state.snapshot.flipped, cfg.arrows);
+    // boardEl lives on `state`, not on the snapshot: the first version of this
+    // line read `snapshot.boardEl`, always undefined, and the arrows never drew
+    // on a real page. `refreshPanel` is the only place that paints them.
+    paintBoardOverlay(state.boardEl, state.analysis && state.analysis.lines, state.snapshot.flipped, cfg.arrows);
   }
 }
 
