@@ -225,6 +225,22 @@ function eventLabel(at, now) {
   return `${dd}/${mm} ${eventClock(at)}`;
 }
 
+// The session limit is a safety valve, and a reload used to reset it: arrive
+// next morning and "3 h / 10 games" had quietly become a fresh start, so a
+// Tampermonkey update at 03:00 could keep the account playing until dawn.
+// Resumed only while the run is still plausibly the same one — a tab opened
+// the next day is a new session, not a 19-hour one.
+function resumeSession(stored, now, maxMs) {
+  const at = Number(now) || 0;
+  const ttl = Math.max(0, Number(maxMs) || 0) || 12 * 3600 * 1000;
+  const startedAt = Number(stored && stored.startedAt) || 0;
+  const games = Math.max(1, Math.round(Number(stored && stored.games) || 1));
+  if (!startedAt || startedAt > at + 60000 || at - startedAt > ttl) {
+    return { startedAt: at, games: 1, resumed: false };
+  }
+  return { startedAt, games, resumed: true };
+}
+
 function searchBudgetMs(job) {
   const movetime = clampInt(job && job.moveTimeMs, 120, 6000, 700);
   const base = movetime * 6 + 6000;

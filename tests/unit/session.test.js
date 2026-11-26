@@ -61,7 +61,7 @@ class FakeWorker {
   terminate() {}
 }
 
-function boot(html = PAGE) {
+function boot(html = PAGE, seed = null) {
   // Boot owns intervals and a mutation observer, and a test process will not
   // exit while they are alive: every timer is tracked so the test can stop the
   // page the way a tab close would.
@@ -97,6 +97,8 @@ function boot(html = PAGE) {
   // a URL it never fetches.
   window.URL.createObjectURL = () => 'blob:chess-wraith';
   window.URL.revokeObjectURL = () => {};
+
+  if (seed) seed(window.localStorage);
 
   const timers = new Set();
   const trackedTimeout = (fn, ms, ...rest) => {
@@ -200,6 +202,22 @@ test('a finished game with AFK on presses the button a person would press', asyn
     const last = api.state.events[api.state.events.length - 1];
     assert.match(last.text, /rematch/i, 'the press landed in the history');
     assert.ok(api.state.events.length <= 5, 'and the history stays short');
+  } finally {
+    stop();
+  }
+});
+
+test('a reload keeps the session limit instead of resetting it', async () => {
+  const startedAt = Date.now() - 40 * 60 * 1000;
+  const { api, stop } = boot(PAGE, (store) => {
+    store.setItem('chess-wraith-settings-v1:tester', JSON.stringify({ autoPlayOnLoad: true }));
+    store.setItem('chess-wraith-session-v1:tester', JSON.stringify({ startedAt, games: 6 }));
+  });
+  try {
+    assert.ok(await until(() => api.state.gamesPlayed === 6, 5000), 'six games came back');
+    assert.equal(api.state.sessionStart, startedAt, 'the clock did not restart');
+    assert.equal(api.state.autoPlay, true, 'auto play restored with it');
+    assert.ok(api.state.events.some((item) => /resumed/i.test(item.text)), 'and the history says so');
   } finally {
     stop();
   }

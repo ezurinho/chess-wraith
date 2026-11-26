@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.28.0 — 2026-11-25
+
+A limit that resets itself is not a limit.
+
+- `gamesPlayed` and `sessionStart` lived in memory, so every page load handed
+  the account a fresh allowance. A Tampermonkey update accepted at 03:00, or a
+  discarded tab the browser restored, silently moved `9 of 15` back to `1 of
+  15` — the safety valve the user set was advisory.
+- The run is now stored per account (`chess-wraith-session-v1:<user>`) and
+  resumed on boot while it is still the same run: inside `sessionMaxMs`, with a
+  start time that is not in the future. Anything else starts fresh.
+- Turning auto play off clears it; so does the limit firing. A resumed run
+  writes a `resumed:` line into the history, which is how you see that the
+  counter came back.
+- The AFK toggle now starts the clock on a new run instead of continuing the
+  old counters.
+- 150 tests: the resume rules (fresh, kept, stale, clock skew, junk) and a boot
+  that restores six games and the original start time.
+
 ## 1.27.0 — 2026-11-25
 
 The night outlives the tab.

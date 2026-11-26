@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.27.0
+// @version      1.28.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.27.0';
+const VERSION = '1.28.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.27.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.28.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -343,6 +343,22 @@ function eventLabel(at, now) {
   const dd = String(when.getDate()).padStart(2, '0');
   const mm = String(when.getMonth() + 1).padStart(2, '0');
   return `${dd}/${mm} ${eventClock(at)}`;
+}
+
+// The session limit is a safety valve, and a reload used to reset it: arrive
+// next morning and "3 h / 10 games" had quietly become a fresh start, so a
+// Tampermonkey update at 03:00 could keep the account playing until dawn.
+// Resumed only while the run is still plausibly the same one — a tab opened
+// the next day is a new session, not a 19-hour one.
+function resumeSession(stored, now, maxMs) {
+  const at = Number(now) || 0;
+  const ttl = Math.max(0, Number(maxMs) || 0) || 12 * 3600 * 1000;
+  const startedAt = Number(stored && stored.startedAt) || 0;
+  const games = Math.max(1, Math.round(Number(stored && stored.games) || 1));
+  if (!startedAt || startedAt > at + 60000 || at - startedAt > ttl) {
+    return { startedAt: at, games: 1, resumed: false };
+  }
+  return { startedAt, games, resumed: true };
 }
 
 function searchBudgetMs(job) {
@@ -4027,6 +4043,7 @@ const RATING_RETRY_MS = 15 * 60 * 1000;
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
 const HISTORY_KEY = 'chess-wraith-history-v1';
+const SESSION_KEY = 'chess-wraith-session-v1';
 const TAB_TTL_MS = 9000;
 const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // A move landing while a hand is on the board is the one case where the script
@@ -4047,6 +4064,7 @@ function adoptAccountSettings(user) {
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
+  resumeSessionState();
   refreshPanel();
   return true;
 }
@@ -4085,6 +4103,52 @@ function saveHistory() {
   } catch (error) {
     /* storage full or blocked: the panel still shows this session */
   }
+}
+
+function sessionKey() {
+  return `${SESSION_KEY}:${state.settingsAccount || currentAccount()}`;
+}
+
+function readSession() {
+  try {
+    const raw = localStorage.getItem(sessionKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveSession() {
+  try {
+    localStorage.setItem(sessionKey(), JSON.stringify({
+      startedAt: state.sessionStart,
+      games: state.gamesPlayed
+    }));
+  } catch (error) {
+    /* storage blocked: the limit still holds for this tab */
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(sessionKey());
+  } catch (error) {
+    /* nothing to clear */
+  }
+}
+
+// Called once, after a late account name has been adopted: the key is per
+// account and must not be read before the name is known.
+function resumeSessionState() {
+  if (!cfg.autoPlayOnLoad) {
+    clearSession();
+    return;
+  }
+  const next = resumeSession(readSession(), Date.now(), cfg.sessionMaxMs);
+  state.sessionStart = next.startedAt;
+  state.gamesPlayed = Math.max(state.gamesPlayed, next.games);
+  if (next.resumed) noteEvent(`resumed: ${next.games} games, ${Math.round((Date.now() - next.startedAt) / 60000)} min`);
+  saveSession();
 }
 
 function guardKey() {
@@ -4685,6 +4749,8 @@ function queueRematch() {
     cfg.autoRematch = false;
     state.warn = limit.reason;
     noteEvent(limit.reason);
+    // Tomorrow's run is a new run, not a continuation of a finished one.
+    clearSession();
     saveSettings(cfg);
     refreshPanel();
     return;
@@ -4720,6 +4786,7 @@ function onNewGame() {
   state.foreignHits = 0;
   state.foreignFen = null;
   state.gamesPlayed += 1;
+  saveSession();
   state.gameOverSeen = false;
   state.rematchTried = false;
   state.rematchAttempts = 0;
@@ -5384,9 +5451,15 @@ function toggleAuto() {
   if (!state.autoPlay) {
     clearAutoTimer();
     clearMoveRetry();
-  }
-  else if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
-    scheduleAutoMove(state.analysis);
+    // A stopped run is finished: the next one starts the clock again.
+    clearSession();
+  } else {
+    state.sessionStart = Date.now();
+    state.gamesPlayed = 1;
+    saveSession();
+    if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
+      scheduleAutoMove(state.analysis);
+    }
   }
   refreshPanel();
 }

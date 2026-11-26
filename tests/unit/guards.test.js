@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadFragments } = require('./helpers');
 
-const utils = loadFragments(['10-config.js', '20-utils.js'], `{ tabLeaseDecision, foreignMoveSeen, pushEvent, eventClock, eventLabel }`);
+const utils = loadFragments(['10-config.js', '20-utils.js'], `{ tabLeaseDecision, foreignMoveSeen, pushEvent, eventClock, eventLabel, resumeSession }`);
 const analysis = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
   `{ acplBand, acplGuard }`
@@ -32,6 +32,28 @@ test('the history clock is 24-hour HH:MM', () => {
   const at = new Date(2026, 10, 25, 7, 4).getTime();
   assert.equal(utils.eventClock(at), '07:04');
   assert.equal(utils.eventClock(0).length, 5);
+});
+
+// A reload used to reset the session limit, which meant an update at 03:00
+// could keep the account playing past the limit the user set.
+test('a session limit survives a reload, but not a new day', () => {
+  const now = 1_700_000_000_000;
+  const three = 3 * 3600 * 1000;
+
+  const fresh = utils.resumeSession(null, now, three);
+  assert.deepEqual([fresh.startedAt, fresh.games, fresh.resumed], [now, 1, false]);
+
+  const kept = utils.resumeSession({ startedAt: now - 40 * 60000, games: 6 }, now, three);
+  assert.deepEqual([kept.startedAt, kept.games, kept.resumed], [now - 40 * 60000, 6, true]);
+
+  const stale = utils.resumeSession({ startedAt: now - 5 * 3600 * 1000, games: 9 }, now, three);
+  assert.deepEqual([stale.startedAt, stale.games, stale.resumed], [now, 1, false], 'older than the limit is a new session');
+
+  const skewed = utils.resumeSession({ startedAt: now + 10 * 60000, games: 2 }, now, three);
+  assert.equal(skewed.resumed, false, 'a clock that jumped back is not resumed');
+
+  const junk = utils.resumeSession({ startedAt: 'x', games: -4 }, now, three);
+  assert.deepEqual([junk.startedAt, junk.games], [now, 1]);
 });
 
 test('an old history line keeps its date', () => {

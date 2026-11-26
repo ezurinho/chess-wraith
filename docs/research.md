@@ -131,6 +131,22 @@ Dates matter once the list survives midnight. A line from 23:40 shown as
 `23:40` next to a line from 00:10 reads as "twenty minutes ago" when it is a
 day older, so anything not from today carries `DD/MM`.
 
+## A limit that resets itself is not a limit
+
+The defaults are 15 games and three hours, and until 1.28.0 both counters lived
+in `state`: `gamesPlayed` and `sessionStart` were rebuilt on every page load.
+That made the limit advisory. A Tampermonkey auto-update — which this script
+checks for every six hours — reloads nothing by itself, but the update prompt
+the user accepts at 03:00 does, and the account starts a brand-new 15-game
+allowance. The same applies to a discarded tab restored by the browser.
+
+The fix is a small stored object `{startedAt, games}` per account. It is
+resumed only while the elapsed time is inside the configured limit, so a tab
+opened the next morning is a new session rather than a 19-hour one; a start
+time in the future (a clock that jumped) is treated the same way. Turning auto
+play off clears it, and so does the limit firing: tomorrow should not inherit
+yesterday's exhausted run.
+
 ## The engine floor is a wall, not an opinion
 
 Stockfish's option table is explicit (`src/search.h`, current master):

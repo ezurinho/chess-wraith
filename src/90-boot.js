@@ -12,6 +12,7 @@ const RATING_RETRY_MS = 15 * 60 * 1000;
 // tab hands the wheel over instead of blocking it forever.
 const TAB_KEY = 'chess-wraith-tab-v1';
 const HISTORY_KEY = 'chess-wraith-history-v1';
+const SESSION_KEY = 'chess-wraith-session-v1';
 const TAB_TTL_MS = 9000;
 const TAB_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
 // A move landing while a hand is on the board is the one case where the script
@@ -32,6 +33,7 @@ function adoptAccountSettings(user) {
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
+  resumeSessionState();
   refreshPanel();
   return true;
 }
@@ -70,6 +72,52 @@ function saveHistory() {
   } catch (error) {
     /* storage full or blocked: the panel still shows this session */
   }
+}
+
+function sessionKey() {
+  return `${SESSION_KEY}:${state.settingsAccount || currentAccount()}`;
+}
+
+function readSession() {
+  try {
+    const raw = localStorage.getItem(sessionKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveSession() {
+  try {
+    localStorage.setItem(sessionKey(), JSON.stringify({
+      startedAt: state.sessionStart,
+      games: state.gamesPlayed
+    }));
+  } catch (error) {
+    /* storage blocked: the limit still holds for this tab */
+  }
+}
+
+function clearSession() {
+  try {
+    localStorage.removeItem(sessionKey());
+  } catch (error) {
+    /* nothing to clear */
+  }
+}
+
+// Called once, after a late account name has been adopted: the key is per
+// account and must not be read before the name is known.
+function resumeSessionState() {
+  if (!cfg.autoPlayOnLoad) {
+    clearSession();
+    return;
+  }
+  const next = resumeSession(readSession(), Date.now(), cfg.sessionMaxMs);
+  state.sessionStart = next.startedAt;
+  state.gamesPlayed = Math.max(state.gamesPlayed, next.games);
+  if (next.resumed) noteEvent(`resumed: ${next.games} games, ${Math.round((Date.now() - next.startedAt) / 60000)} min`);
+  saveSession();
 }
 
 function guardKey() {
@@ -670,6 +718,8 @@ function queueRematch() {
     cfg.autoRematch = false;
     state.warn = limit.reason;
     noteEvent(limit.reason);
+    // Tomorrow's run is a new run, not a continuation of a finished one.
+    clearSession();
     saveSettings(cfg);
     refreshPanel();
     return;
@@ -705,6 +755,7 @@ function onNewGame() {
   state.foreignHits = 0;
   state.foreignFen = null;
   state.gamesPlayed += 1;
+  saveSession();
   state.gameOverSeen = false;
   state.rematchTried = false;
   state.rematchAttempts = 0;
@@ -1369,9 +1420,15 @@ function toggleAuto() {
   if (!state.autoPlay) {
     clearAutoTimer();
     clearMoveRetry();
-  }
-  else if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
-    scheduleAutoMove(state.analysis);
+    // A stopped run is finished: the next one starts the clock again.
+    clearSession();
+  } else {
+    state.sessionStart = Date.now();
+    state.gamesPlayed = 1;
+    saveSession();
+    if (state.analysis && state.snapshot && state.analysis.fen === state.snapshot.fen) {
+      scheduleAutoMove(state.analysis);
+    }
   }
   refreshPanel();
 }
