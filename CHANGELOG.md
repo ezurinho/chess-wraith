@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.30.0 — 2026-11-25
+
+The docs prove their numbers.
+
+Twice in two days the test count printed in `AGENTS.md` and in the research
+table described a suite that no longer existed, and nothing failed — including
+the release check. A stale count is small, but it is the kind of small that
+teaches people to stop reading the docs.
+
+- `tests/unit/docs.test.js` counts the `test(` declarations in `tests/unit/`,
+  counts the files, and fails when `AGENTS.md` or `docs/research.md` disagree.
+  Add a test without updating the docs and the suite says so by name.
+- The two documents were rewritten to the current numbers (153 tests, 22 files).
+- 1.29.0's `bundle.test.js` entry is unchanged; this only guards the claims
+  around it.
+
 ## 1.29.0 — 2026-11-25
 
 The artifact is tested, not just the source.
