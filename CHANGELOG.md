@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.52.0 — 2026-11-26
+
+The play button plays the account's move too.
+
+- `playNow` (the panel button and the debug API) only reordered candidates; it
+  never asked the engine about the move the account actually plays. It now runs the
+  same restricted search the timer runs, re-checks the position after the await, and
+  falls back to the old path when the position moved on.
+- It became `async`; every caller already ignored its return value.
+
 ## 1.51.6 — 2026-11-26
 
 `probe N` counts the probes that actually judged a move.

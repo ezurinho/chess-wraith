@@ -1322,7 +1322,7 @@ async function playMove(move, targetFen, choice) {
 
 async function playNow() {
   const snap = state.snapshot;
-  const result = state.analysis;
+  let result = state.analysis;
   if (!snap || !state.boardEl || !result) return false;
   // A finished game keeps the last position and sometimes the last turn on the
   // board; nothing should be played into it.
@@ -1330,6 +1330,32 @@ async function playNow() {
   if (snap.turnCertain === false) return false;
   if (result.fen !== snap.fen) return false;
   const ply = plyOf(snap);
+  // The button asks the same question the timer asks: is this move the account's?
+  // The probe runs here too, and the position is re-checked afterwards because the
+  // board can move while the engine thinks.
+  const shares = ply < OPENING_PLIES ? openingShares() : null;
+  const target = shares ? openingProbeTarget(shares, result.lines) : null;
+  const probe = target ? openingUci(snap, target.san) : null;
+  const probeKey = probe ? `${snap.fen}|${target.san}` : '';
+  if (probe && probeKey !== state.probedKey) {
+    state.probedKey = probeKey;
+    const started = Date.now();
+    const lines = await engine.analyze({
+      fen: snap.fen,
+      uciMoves: result.uciMoves,
+      multiPv: 1,
+      searchmoves: probe,
+      depth: Math.min(cfg.maxDepth, 12),
+      moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs))
+    });
+    state.probeSpentMs = Date.now() - started;
+    if (!state.snapshot || state.snapshot.fen !== snap.fen) return false;
+    const probed = lines && lines[0];
+    if (probed && probed.bestUci === probe) {
+      state.probes += 1;
+      result = { ...result, lines: [...result.lines, { ...probed, opening: true, fen: snap.fen }] };
+    }
+  }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
