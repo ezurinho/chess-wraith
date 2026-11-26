@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.65.0 — 2026-11-27
+
+The improvised move is priced by the engine.
+
+- Measured on 1.64.0, live, at a 133 account: 66.5 cp/move against a 293 band.
+  A static taste can only pick among the moves it can judge, and the ones that
+  hang material are rare; the opponent does not always take them.
+- An improvised move now gets one restricted search over ten legal moves at low
+  depth. The engine prices each candidate and the one nearest the band is played.
+  The panel's loss is that price, not the band.
+- `searchmoves` accepts a list: one line per candidate, up to ten. A single move
+  still forces MultiPV 1.
+- Mate in one is still refused, and the price is thrown away if the board moved
+  while the engine was answering.
+
 ## 1.64.1 — 2026-11-27
 
 The review is the release note.

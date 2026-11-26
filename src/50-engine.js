@@ -416,10 +416,13 @@ class WraithEngine {
     this.#send(hasMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
-    // `searchmoves` makes the engine judge one candidate the wider search left
-    // out, which is how a repertoire move gets an eval of its own.
-    const only = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(String(job.searchmoves || '')) ? ` searchmoves ${job.searchmoves}` : '';
-    this.#send(`go depth ${depth} movetime ${movetime}${only}`);
+    // `searchmoves` makes the engine judge candidates the wider search left
+    // out, which is how a repertoire move gets an eval of its own and how a
+    // beginner move gets a measured price instead of a claimed one. A list is
+    // allowed: the restricted MultiPV reports one line per candidate.
+    const only = searchmoveList(job.searchmoves);
+    const onlyFlag = only.length ? ` searchmoves ${only.join(' ')}` : '';
+    this.#send(`go depth ${depth} movetime ${movetime}${onlyFlag}`);
     this.#armWatchdog(job);
   }
 
@@ -489,9 +492,13 @@ class WraithEngine {
         this.lastOptions.skill = skill;
       }
     }
-    // A restricted search is asked about one move; MultiPV above 1 would ask it
-    // about the same move twice.
-    const multiPv = clampInt(job.searchmoves ? 1 : job.multiPv, 1, 5, 1);
+    // One restricted move is asked about once; a list is asked for one line
+    // each, because the point is comparing the candidates.
+    const restricted = searchmoveList(job.searchmoves).length;
+    const multiPv =
+      restricted > 1
+        ? clampInt(job.multiPv, 1, Math.min(10, restricted), restricted)
+        : clampInt(restricted === 1 ? 1 : job.multiPv, 1, 5, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
       this.lastOptions.multiPv = multiPv;
@@ -523,6 +530,15 @@ class WraithEngine {
     this.booted = null;
     this.lastOptions = {};
   }
+}
+
+// A restricted search may be about one move or about a list of candidates. A
+// malformed entry is dropped, never forwarded as a command.
+function searchmoveList(value) {
+  return String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter((move) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move));
 }
 
 function positionMoves(uciMoves) {

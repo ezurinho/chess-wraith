@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.64.1
+// @version      1.65.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.64.1';
+const VERSION = '1.65.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.64.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.65.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2841,10 +2841,13 @@ class WraithEngine {
     this.#send(hasMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
-    // `searchmoves` makes the engine judge one candidate the wider search left
-    // out, which is how a repertoire move gets an eval of its own.
-    const only = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(String(job.searchmoves || '')) ? ` searchmoves ${job.searchmoves}` : '';
-    this.#send(`go depth ${depth} movetime ${movetime}${only}`);
+    // `searchmoves` makes the engine judge candidates the wider search left
+    // out, which is how a repertoire move gets an eval of its own and how a
+    // beginner move gets a measured price instead of a claimed one. A list is
+    // allowed: the restricted MultiPV reports one line per candidate.
+    const only = searchmoveList(job.searchmoves);
+    const onlyFlag = only.length ? ` searchmoves ${only.join(' ')}` : '';
+    this.#send(`go depth ${depth} movetime ${movetime}${onlyFlag}`);
     this.#armWatchdog(job);
   }
 
@@ -2914,9 +2917,13 @@ class WraithEngine {
         this.lastOptions.skill = skill;
       }
     }
-    // A restricted search is asked about one move; MultiPV above 1 would ask it
-    // about the same move twice.
-    const multiPv = clampInt(job.searchmoves ? 1 : job.multiPv, 1, 5, 1);
+    // One restricted move is asked about once; a list is asked for one line
+    // each, because the point is comparing the candidates.
+    const restricted = searchmoveList(job.searchmoves).length;
+    const multiPv =
+      restricted > 1
+        ? clampInt(job.multiPv, 1, Math.min(10, restricted), restricted)
+        : clampInt(restricted === 1 ? 1 : job.multiPv, 1, 5, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
       this.lastOptions.multiPv = multiPv;
@@ -2948,6 +2955,15 @@ class WraithEngine {
     this.booted = null;
     this.lastOptions = {};
   }
+}
+
+// A restricted search may be about one move or about a list of candidates. A
+// malformed entry is dropped, never forwarded as a command.
+function searchmoveList(value) {
+  return String(value || '')
+    .trim()
+    .split(/\s+/)
+    .filter((move) => /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(move));
 }
 
 function positionMoves(uciMoves) {
@@ -6574,7 +6590,7 @@ function scheduleAutoMove(result) {
   state.searchStartAt = 0;
   state.lastSearchMs = spent;
   state.lastDelayMs = delay;
-  armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
+  armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent), result);
 
   refreshPanel();
 }
@@ -6634,8 +6650,70 @@ function allowsMateInOne(legal, uci) {
   return false;
 }
 
-function armAutoMove(move, targetFen, choice, delay) {
-  state.autoTimer = setTimeout(() => {
+// The improvisation, measured. A static taste can only pick among the moves it
+// can judge, and the ones that hang material are rare: the live sessions
+// delivered 6-66 cp/move against a 293 band. This asks the engine what a dozen
+// legal moves actually cost and takes the one nearest the band. One restricted
+// search, low depth, and only for a move that was going to be improvised anyway.
+async function improveImprovised(snap, result, legal, choice) {
+  const target = Number(choice && choice.cpLoss) || 0;
+  const best = result && result.lines && result.lines[0];
+  if (!target || !best || !Number.isFinite(best.whiteCp) || !engine || !engine.ready) return null;
+  const pool = [];
+  const rest = legal.map(Chess.moveToUci).filter((uci) => uci !== best.bestUci);
+  while (pool.length < 10 && rest.length) {
+    pool.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
+  }
+  if (pool.length < 4) return null;
+  let lines = null;
+  try {
+    lines = await engine.analyze({
+      fen: snap.fen,
+      turn: snap.turn,
+      flipped: snap.flipped,
+      uciMoves: snap.uciMoves,
+      multiPv: pool.length,
+      searchmoves: pool.join(' '),
+      depth: Math.min(cfg.maxDepth, 10),
+      moveTimeMs: 240
+    });
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(lines) || !lines.length) return null;
+  // The board may have moved while the engine was answering. The position the
+  // move was priced for is the only one it may be played on.
+  if (!state.snapshot || state.snapshot.fen !== snap.fen) return null;
+  let pick = null;
+  let bestErr = Infinity;
+  for (const line of lines) {
+    if (!line || !line.bestUci || line.mateIn != null) continue;
+    const loss = myLossFromWhiteCp(snap.turn, best.whiteCp, line.whiteCp);
+    // A near-zero loss is the same lie in the other direction: the move must
+    // cost something like the band, not be a good move that happens to be legal.
+    if (loss == null || loss < Math.round(target * 0.35)) continue;
+    if (allowsMateInOne(legal, line.bestUci)) continue;
+    const err = Math.abs(loss - target);
+    if (err < bestErr) {
+      bestErr = err;
+      pick = { line, loss };
+    }
+  }
+  if (!pick) return null;
+  return {
+    move: pick.line.bestUci,
+    choice: {
+      ...choice,
+      line: { bestUci: pick.line.bestUci, bestSan: pick.line.bestSan },
+      cpLoss: pick.loss,
+      improvised: true,
+      measured: true
+    }
+  };
+}
+
+function armAutoMove(move, targetFen, choice, delay, result) {
+  state.autoTimer = setTimeout(async () => {
     state.autoTimer = null;
     if (!state.autoPlay || !state.snapshot || state.snapshot.fen !== targetFen) return;
     if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
@@ -6650,13 +6728,25 @@ function armAutoMove(move, targetFen, choice, delay) {
         refreshPanel();
         return;
       }
-      armAutoMove(move, targetFen, choice, Math.round(rand(1500, 2600)));
+      armAutoMove(move, targetFen, choice, Math.round(rand(1500, 2600)), result);
       return;
     }
     state.defers = 0;
+    // The move was improvised: price it now, on the position it will be played
+    // on, and play the priced one if the board has not moved.
+    let finalMove = move;
+    let finalChoice = choice;
+    if (choice && choice.improvised && state.snapshot) {
+      const measured = await improveImprovised(state.snapshot, result, Chess.generateLegalMoves(state.snapshot), choice);
+      if (measured) {
+        finalMove = measured.move;
+        finalChoice = measured.choice;
+      }
+    }
+    if (!state.snapshot || state.snapshot.fen !== targetFen) return;
     // A rejected promise here used to leave auto-play on with no timer and no
     // message: the panel said "playing" while nothing was playing.
-    playMove(move, targetFen, choice)
+    playMove(finalMove, targetFen, finalChoice)
       .then((played) => {
         if (played) state.moveMisses = 0;
         else armMoveRetry();
@@ -6796,7 +6886,7 @@ async function playNow() {
     }
   }
   const legal = Chess.generateLegalMoves(snap);
-  const choice = chooseMove(result.lines, slackCfg(), {
+  let choice = chooseMove(result.lines, slackCfg(), {
     accountElo: accountRatingNow() || state.boardRating || 0,
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
@@ -6804,6 +6894,10 @@ async function playNow() {
     openingShares: ply < OPENING_PLIES ? openingShares() : null,
     improvise: improvisedCandidates(legal, snap, ply)
   });
+  // An improvised move is priced by the engine before it is played, so the
+  // band is what the move costs instead of what the model wished it cost.
+  const measured = choice && choice.improvised ? await improveImprovised(snap, result, legal, choice) : null;
+  if (measured) choice = measured.choice;
   let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
   if (choice && choice.improvised && allowsMateInOne(legal, move)) {

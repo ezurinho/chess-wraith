@@ -52,7 +52,8 @@ only version anyone installs.
 - `src/40-board.js` — every chess.com selector. Two move-list shapes exist:
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
 - `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog, and
-  `searchmoves` restricted searches (one move, MultiPV forced to 1).
+  `searchmoves` restricted searches: one move is judged once (MultiPV 1), a list
+  is judged one line per candidate, up to ten.
 - `src/55-pace.js` — `%clk` parsing from public PGN and the per-account pace
   median. Chess.com splits the clock comment across tokens; the parser knows.
 - `src/90-boot.js` — orchestration and the debug API.

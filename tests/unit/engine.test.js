@@ -502,6 +502,32 @@ test('a restricted search asks the engine about one move only', async () => {
   assert.equal(lines.length, 1);
   assert.equal(lines[0].bestUci, 'g1f3');
 
+  // A list of candidates is one line each: that is how an improvised move gets
+  // a measured price before it is played.
+  const many = engine.analyze({
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    turn: 'w',
+    flipped: false,
+    uciMoves: ['e2e4', 'e7e5'],
+    depth: 12,
+    moveTimeMs: 400,
+    multiPv: 3,
+    searchmoves: 'g1f3 b1c3 d2d4',
+    elo: 0,
+    skill: 20
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(worker.sent.includes('setoption name MultiPV value 3'), JSON.stringify(worker.sent.slice(-3)));
+  assert.ok(worker.sent.includes('go depth 12 movetime 400 searchmoves g1f3 b1c3 d2d4'));
+  worker.reply('info depth 12 seldepth 16 multipv 1 score cp 12 nodes 400 pv g1f3 b8c6');
+  worker.reply('info depth 12 seldepth 16 multipv 2 score cp 4 nodes 400 pv b1c3 b8c6');
+  worker.reply('info depth 12 seldepth 16 multipv 3 score cp -38 nodes 400 pv d2d4 d7d5');
+  worker.reply('bestmove g1f3');
+  const three = await many;
+  assert.equal(three.length, 3);
+  assert.equal(three[2].bestUci, 'd2d4');
+  assert.equal(three[2].scoreCp, -38);
+
   // A malformed or missing searchmoves must not reach the engine as a command.
   const plain = engine.analyze({
     fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',

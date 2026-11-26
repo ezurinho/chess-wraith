@@ -1327,7 +1327,7 @@ function scheduleAutoMove(result) {
   state.searchStartAt = 0;
   state.lastSearchMs = spent;
   state.lastDelayMs = delay;
-  armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
+  armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent), result);
 
   refreshPanel();
 }
@@ -1387,8 +1387,70 @@ function allowsMateInOne(legal, uci) {
   return false;
 }
 
-function armAutoMove(move, targetFen, choice, delay) {
-  state.autoTimer = setTimeout(() => {
+// The improvisation, measured. A static taste can only pick among the moves it
+// can judge, and the ones that hang material are rare: the live sessions
+// delivered 6-66 cp/move against a 293 band. This asks the engine what a dozen
+// legal moves actually cost and takes the one nearest the band. One restricted
+// search, low depth, and only for a move that was going to be improvised anyway.
+async function improveImprovised(snap, result, legal, choice) {
+  const target = Number(choice && choice.cpLoss) || 0;
+  const best = result && result.lines && result.lines[0];
+  if (!target || !best || !Number.isFinite(best.whiteCp) || !engine || !engine.ready) return null;
+  const pool = [];
+  const rest = legal.map(Chess.moveToUci).filter((uci) => uci !== best.bestUci);
+  while (pool.length < 10 && rest.length) {
+    pool.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
+  }
+  if (pool.length < 4) return null;
+  let lines = null;
+  try {
+    lines = await engine.analyze({
+      fen: snap.fen,
+      turn: snap.turn,
+      flipped: snap.flipped,
+      uciMoves: snap.uciMoves,
+      multiPv: pool.length,
+      searchmoves: pool.join(' '),
+      depth: Math.min(cfg.maxDepth, 10),
+      moveTimeMs: 240
+    });
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(lines) || !lines.length) return null;
+  // The board may have moved while the engine was answering. The position the
+  // move was priced for is the only one it may be played on.
+  if (!state.snapshot || state.snapshot.fen !== snap.fen) return null;
+  let pick = null;
+  let bestErr = Infinity;
+  for (const line of lines) {
+    if (!line || !line.bestUci || line.mateIn != null) continue;
+    const loss = myLossFromWhiteCp(snap.turn, best.whiteCp, line.whiteCp);
+    // A near-zero loss is the same lie in the other direction: the move must
+    // cost something like the band, not be a good move that happens to be legal.
+    if (loss == null || loss < Math.round(target * 0.35)) continue;
+    if (allowsMateInOne(legal, line.bestUci)) continue;
+    const err = Math.abs(loss - target);
+    if (err < bestErr) {
+      bestErr = err;
+      pick = { line, loss };
+    }
+  }
+  if (!pick) return null;
+  return {
+    move: pick.line.bestUci,
+    choice: {
+      ...choice,
+      line: { bestUci: pick.line.bestUci, bestSan: pick.line.bestSan },
+      cpLoss: pick.loss,
+      improvised: true,
+      measured: true
+    }
+  };
+}
+
+function armAutoMove(move, targetFen, choice, delay, result) {
+  state.autoTimer = setTimeout(async () => {
     state.autoTimer = null;
     if (!state.autoPlay || !state.snapshot || state.snapshot.fen !== targetFen) return;
     if (mySide(state.snapshot.flipped) !== state.snapshot.turn) return;
@@ -1403,13 +1465,25 @@ function armAutoMove(move, targetFen, choice, delay) {
         refreshPanel();
         return;
       }
-      armAutoMove(move, targetFen, choice, Math.round(rand(1500, 2600)));
+      armAutoMove(move, targetFen, choice, Math.round(rand(1500, 2600)), result);
       return;
     }
     state.defers = 0;
+    // The move was improvised: price it now, on the position it will be played
+    // on, and play the priced one if the board has not moved.
+    let finalMove = move;
+    let finalChoice = choice;
+    if (choice && choice.improvised && state.snapshot) {
+      const measured = await improveImprovised(state.snapshot, result, Chess.generateLegalMoves(state.snapshot), choice);
+      if (measured) {
+        finalMove = measured.move;
+        finalChoice = measured.choice;
+      }
+    }
+    if (!state.snapshot || state.snapshot.fen !== targetFen) return;
     // A rejected promise here used to leave auto-play on with no timer and no
     // message: the panel said "playing" while nothing was playing.
-    playMove(move, targetFen, choice)
+    playMove(finalMove, targetFen, finalChoice)
       .then((played) => {
         if (played) state.moveMisses = 0;
         else armMoveRetry();
@@ -1549,7 +1623,7 @@ async function playNow() {
     }
   }
   const legal = Chess.generateLegalMoves(snap);
-  const choice = chooseMove(result.lines, slackCfg(), {
+  let choice = chooseMove(result.lines, slackCfg(), {
     accountElo: accountRatingNow() || state.boardRating || 0,
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
@@ -1557,6 +1631,10 @@ async function playNow() {
     openingShares: ply < OPENING_PLIES ? openingShares() : null,
     improvise: improvisedCandidates(legal, snap, ply)
   });
+  // An improvised move is priced by the engine before it is played, so the
+  // band is what the move costs instead of what the model wished it cost.
+  const measured = choice && choice.improvised ? await improveImprovised(snap, result, legal, choice) : null;
+  if (measured) choice = measured.choice;
   let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
   if (choice && choice.improvised && allowsMateInOne(legal, move)) {
