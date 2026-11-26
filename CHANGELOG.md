@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.65.2 — 2026-11-27
+
+A random list of candidates misses the expensive move.
+
+- Measured on 1.65.1, live: one game at 185.8 cp/move and the next at 6.5 with
+  the same release and the same account. With ten random legal moves, nothing in
+  the list is expensive often enough to pick.
+- Half the candidates now come from the moves that leave material loose, the
+  other half at random. The engine still prices all ten and picks.
+
 ## 1.65.1 — 2026-11-27
 
 Aim above the band, because the opponent declines.

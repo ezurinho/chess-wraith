@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.65.1
+// @version      1.65.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.65.1';
+const VERSION = '1.65.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.65.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.65.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6659,8 +6659,16 @@ async function improveImprovised(snap, result, legal, choice) {
   const target = Number(choice && choice.cpLoss) || 0;
   const best = result && result.lines && result.lines[0];
   if (!target || !best || !Number.isFinite(best.whiteCp) || !engine || !engine.ready) return null;
+  // Half the candidates are chosen because they leave material loose, half at
+  // random: a random list misses the move that actually costs 470 too often, and
+  // the measured mean then swings between 6 and 186 cp/move.
+  const all = legal
+    .map((m) => ({ uci: Chess.moveToUci(m), hanging: hangingAfter(m.nextState.grid, snap.turn) }))
+    .filter((c) => c.uci !== best.bestUci);
   const pool = [];
-  const rest = legal.map(Chess.moveToUci).filter((uci) => uci !== best.bestUci);
+  const loose = all.filter((c) => c.hanging > 0).sort((a, b) => b.hanging - a.hanging);
+  while (pool.length < 5 && loose.length) pool.push(loose.shift().uci);
+  const rest = all.map((c) => c.uci).filter((uci) => !pool.includes(uci));
   while (pool.length < 10 && rest.length) {
     pool.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
   }

@@ -1396,8 +1396,16 @@ async function improveImprovised(snap, result, legal, choice) {
   const target = Number(choice && choice.cpLoss) || 0;
   const best = result && result.lines && result.lines[0];
   if (!target || !best || !Number.isFinite(best.whiteCp) || !engine || !engine.ready) return null;
+  // Half the candidates are chosen because they leave material loose, half at
+  // random: a random list misses the move that actually costs 470 too often, and
+  // the measured mean then swings between 6 and 186 cp/move.
+  const all = legal
+    .map((m) => ({ uci: Chess.moveToUci(m), hanging: hangingAfter(m.nextState.grid, snap.turn) }))
+    .filter((c) => c.uci !== best.bestUci);
   const pool = [];
-  const rest = legal.map(Chess.moveToUci).filter((uci) => uci !== best.bestUci);
+  const loose = all.filter((c) => c.hanging > 0).sort((a, b) => b.hanging - a.hanging);
+  while (pool.length < 5 && loose.length) pool.push(loose.shift().uci);
+  const rest = all.map((c) => c.uci).filter((uci) => !pool.includes(uci));
   while (pool.length < 10 && rest.length) {
     pool.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
   }
