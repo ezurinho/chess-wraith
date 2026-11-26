@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.69.0 — 2026-11-27
+
+A debug helper for the calibration nobody could run.
+
+- The review's first weakness is that the strength band was only ever measured
+  against perfect play, which declines most of the bad moves the band asks for.
+  Measuring against an opponent of the same level needs the legal move list, and
+  the rules module deletes itself from the page globals after boot.
+- `ChessWraith.legalMoves()` returns every legal move in UCI. Debug build only.
+
 ## 1.68.0 — 2026-11-27
 
 Review of 1.67.0, with the sources behind the claims.

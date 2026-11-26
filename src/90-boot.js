@@ -688,6 +688,10 @@ function registerButler() {
       return { valid: true, flipped: scan.flipped, placement: Chess.gridToPlacement(scan.grid), fen: buildSnapshotFen(scan) };
     },
     ready: () => engine.ready,
+    // Every legal move in the position, UCI. Calibration needs an opponent that
+    // is not the engine, and the rules module is deleted from the page globals
+    // after boot; this is the only way back to it from a debug session.
+    legalMoves: () => (state.snapshot ? Chess.generateLegalMoves(state.snapshot).map((m) => Chess.moveToUci(m)) : []),
     retryEngine: () => engine.retryNnue(),
     checkUpdate: () => checkUpdate(true),
     refreshRating: () => syncAccountRatings(true),
