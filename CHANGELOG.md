@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.50.0 — 2026-11-26
+
+The probe's thinking counts as thinking, and a stale result never gets a move.
+
+- The opening probe's 70–400 ms is now subtracted from the pace delay (`spentMs`),
+  so a move with a probe takes the same wall-clock time as one without it.
+- `scheduleAutoMove` refuses a result whose `fen` no longer matches the board: the
+  probe re-enters it a moment later, and a move computed for one position is never
+  armed for another.
+- 192 tests.
+
 ## 1.49.0 — 2026-11-26
 
 The account's own move gets its own search, so the repertoire can be played.

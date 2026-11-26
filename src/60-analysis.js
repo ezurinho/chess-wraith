@@ -190,6 +190,8 @@ function computeDelay(cfg, opts = {}) {
   const skew = (Math.random() + Math.random() + Math.random()) / 3;
   let ms = lo + (hi - lo) * skew;
 
+  // A restricted search already spent part of this move's thinking.
+  ms -= clamp(Number(opts.spentMs) || 0, 0, 4000);
   const ply = Number.isFinite(opts.plyCount) ? opts.plyCount : 16;
   if (ply < 6) ms *= 0.72;
   else if (ply > 60) ms *= 0.86;

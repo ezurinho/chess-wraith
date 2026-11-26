@@ -195,6 +195,23 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The probe spends think time like a person does
+
+The restricted search is not free: 70 ms on a warm worker, up to ~400 ms cold. The
+first version added that on top of the delay `computeDelay` had already chosen, so
+opening moves came out one probe slower than the account's own median — a pace
+regression introduced by the feature that was supposed to fix the opening.
+
+Now the delay is reduced by exactly what the probe spent (`spentMs`, clamped to
+0..4000, floor still 95 ms), so probe + pause is the same think time as a move
+without a probe. Measured in the bundle: `computeDelay(...spentMs: 0)` minus
+`computeDelay(...spentMs: 400)` is 400 ms.
+
+The probe also re-enters `scheduleAutoMove` about 70 ms later, which is long
+enough for the board to have moved on. That function now refuses a `result` whose
+`fen` no longer matches the board: a move computed for one position is never
+armed for another.
+
 ## The account's move gets its own search
 
 1.48.0 could only reorder the moves the engine already had. The signature line
@@ -793,7 +810,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 191 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 192 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

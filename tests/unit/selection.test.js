@@ -341,3 +341,20 @@ test('only a strong habit the search missed is worth a probe', () => {
   // The suffix of a check is not part of the name on either side.
   assert.equal(api.openingProbeTarget({ 'Qh5+': 1 }, [{ bestSan: 'Qh5' }]), null);
 });
+
+test('time already spent thinking is not spent twice', () => {
+  const cfg = { ...baseCfg };
+  const real = Math.random;
+  Math.random = () => 0.5;
+  try {
+    const plain = api.computeDelay(cfg, { plyCount: 12, legalMoveCount: 20, spentMs: 0 });
+    const probed = api.computeDelay(cfg, { plyCount: 12, legalMoveCount: 20, spentMs: 400 });
+    assert.equal(plain - probed, 400, 'the probe is part of the same move');
+    // The floor still holds when the search alone outlasted the whole delay.
+    const floored = api.computeDelay(cfg, { plyCount: 12, legalMoveCount: 20, spentMs: 4000 });
+    assert.ok(floored >= 95 && floored <= 4500, String(floored));
+    assert.equal(api.computeDelay(cfg, { plyCount: 12, legalMoveCount: 20 }), plain, 'absent means zero');
+  } finally {
+    Math.random = real;
+  }
+});

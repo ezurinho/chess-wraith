@@ -187,6 +187,7 @@ const state = {
   // wider search never offered it.
   probedKey: '',
   probeLine: null,
+  probeSpentMs: 0,
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   accountGames: null,
@@ -1082,6 +1083,7 @@ function openingUci(snap, san) {
 // as a normal candidate, flagged so only the opening slack treats it specially.
 function probeOpeningMove(probe, result) {
   state.probedKey = probe.key;
+  const started = Date.now();
   const request = {
     fen: probe.fen,
     uciMoves: Array.isArray(probe.uciMoves) ? probe.uciMoves : [],
@@ -1099,6 +1101,7 @@ function probeOpeningMove(probe, result) {
     })
     .catch(() => [])
     .finally(() => {
+      state.probeSpentMs = Date.now() - started;
       const probed = state.probeLine;
       const known = (result.lines || []).some((line) => line.bestUci === (probed && probed.bestUci));
       const merged = probed && probed.fen === result.fen && !known
@@ -1114,6 +1117,10 @@ function scheduleAutoMove(result) {
   if (!snap || !state.boardEl || !result || !result.lines || result.lines.length === 0) return;
   if (snap.gameOver) return;
   if (snap.turnCertain === false) return;
+  // The probe re-enters this function a fraction of a second later, and the board
+  // can have moved on in between: a move computed for one position must never be
+  // armed for another.
+  if (result.fen !== snap.fen) return;
   if (state.autoMovedFen === result.fen) return;
   // onlyMyTurn keeps the script on its own side; off, it plays both seats.
   if (cfg.onlyMyTurn && mySide(snap.flipped) !== snap.turn) return;
@@ -1159,8 +1166,13 @@ function scheduleAutoMove(result) {
   }
 
   const anchor = paceAnchor();
+  // The probe already spent part of this move's thinking; counting it again would
+  // make the account take longer in the opening than it ever does.
+  const spentMs = state.probeSpentMs;
+  state.probeSpentMs = 0;
   const delay = computeDelay(cfg, {
     plyCount: ply,
+    spentMs,
     legalMoveCount: legal.length,
     isCapture,
     isCheck: /[+#]$/.test(bestSan),
