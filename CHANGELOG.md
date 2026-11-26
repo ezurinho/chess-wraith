@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.54.2 — 2026-11-26
+
+The report shows the hour the account usually plays.
+
+- `report()` adds `usual hour N` to the pace line when the archive had at least
+  three games in that hour. The data was collected in 1.54.1 and had no reader.
+
 ## 1.54.1 — 2026-11-26
 
 The profile learns when the account plays.

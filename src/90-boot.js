@@ -1656,7 +1656,7 @@ function reportText() {
       ? `history ${state.events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join(' | ')}`
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
-    `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
+    `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceProfile && state.paceProfile.session && state.paceProfile.session.peakHour != null ? ` · usual hour ${state.paceProfile.session.peakHour}` : ''}${state.paceError ? ' · ' + state.paceError : ''}`,
     opening
       ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)${state.probes ? ` · probe ${state.probes}` : ''}`
       : '',
