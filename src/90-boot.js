@@ -1416,9 +1416,9 @@ async function improveImprovised(snap, result, legal, choice) {
   // compensate, and live it still delivered 100 cp/move against a 293 band.
   const pool = [best.bestUci];
   const loose = all.filter((c) => c.hanging > 0).sort((a, b) => b.hanging - a.hanging);
-  while (pool.length < 5 && loose.length) pool.push(loose.shift().uci);
+  while (pool.length < 4 && loose.length) pool.push(loose.shift().uci);
   const rest = all.map((c) => c.uci).filter((uci) => !pool.includes(uci));
-  while (pool.length < 10 && rest.length) {
+  while (pool.length < 6 && rest.length) {
     pool.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
   }
   if (pool.length < 4) return null;
@@ -1431,8 +1431,11 @@ async function improveImprovised(snap, result, legal, choice) {
       uciMoves: snap.uciMoves,
       multiPv: pool.length,
       searchmoves: pool.join(' '),
-      depth: Math.min(cfg.maxDepth, 10),
-      moveTimeMs: 240
+      // The price has to be measured at the depth the loss is measured at. At
+      // depth 10 with 240 ms the same candidate was priced at 293 and realised
+      // at 0: the search had not converged, and the script paid for the noise.
+      depth: cfg.maxDepth,
+      moveTimeMs: 900
     });
   } catch {
     return null;

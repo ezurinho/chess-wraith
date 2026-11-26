@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.72.0 — 2026-11-27
+
+Priced at the depth the loss is measured at.
+
+- 1.71.0 priced the candidates with a depth-10 restricted search while the loss
+  is measured by a depth-14 analysis, and against a same-level opponent it
+  delivered 7-21 cp/move: the shallow search had not converged, so a move priced
+  at 293 realised at 0. The script was paying for search noise.
+- The improvised search now runs at `cfg.maxDepth` with a 900 ms budget and six
+  candidates instead of ten, so the price and the measurement share a depth.
+
 ## 1.71.0 — 2026-11-27
 
 The price of an improvised move was a depth difference.

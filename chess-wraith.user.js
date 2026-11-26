@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.71.0
+// @version      1.72.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.71.0';
+const VERSION = '1.72.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.71.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.72.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6690,9 +6690,9 @@ async function improveImprovised(snap, result, legal, choice) {
   // compensate, and live it still delivered 100 cp/move against a 293 band.
   const pool = [best.bestUci];
   const loose = all.filter((c) => c.hanging > 0).sort((a, b) => b.hanging - a.hanging);
-  while (pool.length < 5 && loose.length) pool.push(loose.shift().uci);
+  while (pool.length < 4 && loose.length) pool.push(loose.shift().uci);
   const rest = all.map((c) => c.uci).filter((uci) => !pool.includes(uci));
-  while (pool.length < 10 && rest.length) {
+  while (pool.length < 6 && rest.length) {
     pool.push(rest.splice(Math.floor(Math.random() * rest.length), 1)[0]);
   }
   if (pool.length < 4) return null;
@@ -6705,8 +6705,11 @@ async function improveImprovised(snap, result, legal, choice) {
       uciMoves: snap.uciMoves,
       multiPv: pool.length,
       searchmoves: pool.join(' '),
-      depth: Math.min(cfg.maxDepth, 10),
-      moveTimeMs: 240
+      // The price has to be measured at the depth the loss is measured at. At
+      // depth 10 with 240 ms the same candidate was priced at 293 and realised
+      // at 0: the search had not converged, and the script paid for the noise.
+      depth: cfg.maxDepth,
+      moveTimeMs: 900
     });
   } catch {
     return null;
