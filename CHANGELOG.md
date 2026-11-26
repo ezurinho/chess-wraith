@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.51.5 — 2026-11-26
+
+The probe count belongs to the account that earned it.
+
+- Switching accounts in one tab keeps its own settings, history and now its own
+  probe counter: `probes`, `probeLine` and `probedKey` reset in
+  `adoptAccountSettings`, so the report never adds one login's probes to another's
+  repertoire line.
+
 ## 1.51.4 — 2026-11-26
 
 The probe never outlasts the search the user chose.

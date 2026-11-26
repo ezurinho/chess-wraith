@@ -34,6 +34,11 @@ function adoptAccountSettings(user) {
   syncRepertoire();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
+  // The probe count belongs to the account it was counted for; the report would
+  // otherwise add one login's probes to another's repertoire line.
+  state.probes = 0;
+  state.probeLine = null;
+  state.probedKey = '';
   resumeSessionState();
   refreshPanel();
   return true;
