@@ -829,6 +829,34 @@ states "We can detect if you are using any of these programs". Their
 [fair-play explainer](https://www.chess.com/cheating) says about 85% of closures
 are automated and lists 100+ gameplay factors.
 
+## What the 2026 public scripts ship, and what none of them does
+
+Read on 2026-11-26 from GreasyFork and GitHub, not from their screenshots:
+
+| | Complete Move Guide (563087) | Chess.com Bot 7.1 (597658) | chess-sniper | Chessvision.ai | chess.com Game Review | chess-wraith 1.58.0 |
+|---|---|---|---|---|---|---|
+| Move source | local Stockfish, depth 1–25 | Stockfish 16 WASM NNUE | native Stockfish via a Python bridge | its own cloud engine | server-side, after the game | Stockfish 19 NNUE in a blob worker |
+| Shown on the board | from/to circles | tactical threats, undefended pieces | no overlay | scans a diagram, not the live board | arrows inside the review page | green move arrow + red reply arrow |
+| Follows the account's rating | no | no | no (it is built for maximum strength) | n/a | n/a | `UCI_Elo` + pace + slack, per account |
+| Plays by itself | no | yes, with a human delay | yes (snipe targets) | no | no | yes, with measured pacing and AFK rematch |
+| Persistence | none | none documented | `config.json` on disk | account | cloud | per-account settings, session, pace, history, reports |
+| Tests in the repo | none | none | none | closed source | n/a | 210 node tests, 7 of them boot the whole script |
+| Fair-play stance | silent | silent | advertises streamsniping | training tool | official | states the risk and refuses to hide it |
+
+Two things stand out. First, none of the public scripts anchors the engine to the
+**account's own published rating**; they either play full strength or expose a
+depth slider, so the account's moves do not match the account's history — the one
+statistical signal chess.com's fair-play page says it weighs most. Second, the
+ones that do play for you have no test suite; chess-sniper needs a native
+Stockfish install and a Python bridge, which rules out the one-tab model.
+
+Sources: [563087](https://greasyfork.org/en/scripts/563087-chess-com-complete-move-guide),
+[597658](https://greasyfork.org/en/scripts/597658-chess-com-bot-stockfish-16-wasm-nnue-tactical-analysis-reupload),
+[chess-sniper](https://github.com/Akira-Development-Team/chess-sniper),
+[chessvision.ai](https://chessvision.ai/),
+[Game Review](https://support.chess.com/en/articles/8584089-how-does-game-review-work),
+[fair play](https://www.chess.com/cheating).
+
 ## 3. How this compares with nitro-wraith
 
 | | `nitro-wraith` | `chess-wraith` |
@@ -838,7 +866,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 23 files | 206 tests in 23 files (7 of them boot the whole script) |
+| Tests | 24 files | 210 tests in 24 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

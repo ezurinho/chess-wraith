@@ -926,6 +926,8 @@ function onNewGame() {
   // would rate a 1-minute game as rapid and pace it like a 10-minute one.
   state.clockPeak = 0;
   state.tempoSamples = [];
+  // The old game's arrow is not this game's plan.
+  paintBoardOverlay(state.snapshot && state.snapshot.boardEl, null, false, true);
   if (cfg.autoRematch) state.autoPlay = true;
 }
 
@@ -1019,6 +1021,11 @@ function statusView() {
 
 function refreshPanel() {
   panel.render(statusView());
+  // The board overlay follows the same state as the panel, including the
+  // toggle, so one place keeps it from going stale after a setting change.
+  if (state.snapshot) {
+    paintBoardOverlay(state.snapshot.boardEl, state.analysis && state.analysis.lines, state.snapshot.flipped, cfg.arrows);
+  }
 }
 
 // The opponent's centipawn loss is only knowable once the position after their

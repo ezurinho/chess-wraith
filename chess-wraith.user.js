@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.57.0
+// @version      1.58.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.57.0';
+const VERSION = '1.58.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -105,7 +105,9 @@ const CONFIG = {
   theme: 'carbon', // 'carbon' | 'aurora' | 'sunset' | 'ice' | 'violet' | 'rgb'
 
   panelCollapsed: false,
-  showLines: 3
+  showLines: 3,
+  // Paint the engine's move on the board, not only in the panel.
+  arrows: true
 };
 
 // There is one way to play and it is the honest one: no GM/rage presets, no
@@ -115,7 +117,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.57.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.58.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2295,6 +2297,127 @@ function scanBoard(mySide) {
     myRating: readMyRating(mySide, flipped),
     gameOver: isGameOverDom()
   };
+}
+
+// The panel can say 'Nf3', but a player reads an arrow faster than a SAN line.
+// This paints the engine's choice on the board itself: one SVG, no innerHTML,
+// no pointer events, and the same eight-by-eight grid the reader already uses.
+const OVERLAY_ATTR = 'data-cw-overlay';
+const OVERLAY_OURS = '#5cf2a0';
+const OVERLAY_THREAT = '#ff6f6f';
+const OVERLAY_NS = 'http://www.w3.org/2000/svg';
+
+function overlayCell(square, flipped) {
+  const parsed = Chess.parseSquare(square);
+  if (!parsed) return null;
+  return {
+    x: flipped ? 7 - parsed.file : parsed.file,
+    y: flipped ? parsed.rank : 7 - parsed.rank
+  };
+}
+
+// Cell centres, shortened at both ends: an arrow that starts under the piece
+// and ends under the target hides the two squares the user wants to see.
+function overlayArrow(uci, flipped) {
+  if (typeof uci !== 'string' || uci.length < 4) return null;
+  const from = overlayCell(uci.slice(0, 2), flipped);
+  const to = overlayCell(uci.slice(2, 4), flipped);
+  if (!from || !to) return null;
+  const ax = from.x + 0.5;
+  const ay = from.y + 0.5;
+  const bx = to.x + 0.5;
+  const by = to.y + 0.5;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const length = Math.hypot(dx, dy);
+  if (!length) return null;
+  const ux = dx / length;
+  const uy = dy / length;
+  return {
+    x1: ax + ux * 0.20,
+    y1: ay + uy * 0.20,
+    x2: bx - ux * 0.42,
+    y2: by - uy * 0.42,
+    ux,
+    uy,
+    length
+  };
+}
+
+function overlaySvg(boardEl) {
+  if (!boardEl || typeof boardEl.querySelector !== 'function') return null;
+  let svg = boardEl.querySelector(`svg[${OVERLAY_ATTR}]`);
+  if (svg) return svg;
+  svg = document.createElementNS(OVERLAY_NS, 'svg');
+  svg.setAttribute(OVERLAY_ATTR, '1');
+  svg.setAttribute('viewBox', '0 0 8 8');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.position = 'absolute';
+  svg.style.left = '0';
+  svg.style.top = '0';
+  svg.style.width = '100%';
+  svg.style.height = '100%';
+  svg.style.pointerEvents = 'none';
+  svg.style.zIndex = '6';
+  svg.style.overflow = 'visible';
+  boardEl.appendChild(svg);
+  return svg;
+}
+
+function drawOverlayArrow(svg, arrow, color, width, opacity) {
+  if (!svg || !arrow || arrow.length < 0.25) return;
+  const line = document.createElementNS(OVERLAY_NS, 'line');
+  line.setAttribute('x1', String(arrow.x1));
+  line.setAttribute('y1', String(arrow.y1));
+  line.setAttribute('x2', String(arrow.x2));
+  line.setAttribute('y2', String(arrow.y2));
+  line.setAttribute('stroke', color);
+  line.setAttribute('stroke-width', String(width));
+  line.setAttribute('stroke-linecap', 'round');
+  line.setAttribute('opacity', String(opacity));
+  line.setAttribute('data-cw-arrow', 'shaft');
+  const head = 0.26;
+  const half = 0.15;
+  const tipX = arrow.x2 + arrow.ux * head;
+  const tipY = arrow.y2 + arrow.uy * head;
+  const poly = document.createElementNS(OVERLAY_NS, 'polygon');
+  poly.setAttribute('points', [
+    `${tipX},${tipY}`,
+    `${arrow.x2 - arrow.uy * half},${arrow.y2 + arrow.ux * half}`,
+    `${arrow.x2 + arrow.uy * half},${arrow.y2 - arrow.ux * half}`
+  ].join(' '));
+  poly.setAttribute('fill', color);
+  poly.setAttribute('opacity', String(opacity));
+  poly.setAttribute('data-cw-arrow', 'head');
+  svg.appendChild(line);
+  svg.appendChild(poly);
+}
+
+// lines is the engine's formatted MultiPV list. The top line is our move; its
+// second ply is the opponent's best answer, drawn thinner and red so the two
+// cannot be confused when they cross.
+function paintBoardOverlay(boardEl, lines, flipped, enabled) {
+  if (!boardEl || typeof boardEl.querySelector !== 'function') return;
+  const svg = boardEl.querySelector(`svg[${OVERLAY_ATTR}]`);
+  const first = enabled && Array.isArray(lines) ? lines[0] : null;
+  const best = first && typeof first.bestUci === 'string' ? first.bestUci : '';
+  const reply = best && Array.isArray(first.pv) && typeof first.pv[1] === 'string' ? first.pv[1] : '';
+  if (!best) {
+    if (svg) {
+      svg.textContent = '';
+      svg.removeAttribute('data-sig');
+    }
+    return;
+  }
+  const target = overlaySvg(boardEl);
+  const sig = `${flipped ? 'b' : 'w'}|${best}|${reply}`;
+  if (target.getAttribute('data-sig') === sig) return;
+  target.setAttribute('data-sig', sig);
+  target.textContent = '';
+  const theirs = reply ? overlayArrow(reply, flipped) : null;
+  const ours = overlayArrow(best, flipped);
+  if (theirs) drawOverlayArrow(target, theirs, OVERLAY_THREAT, 0.07, 0.55);
+  if (ours) drawOverlayArrow(target, ours, OVERLAY_OURS, 0.095, 0.9);
 }
 
 // Local Stockfish 19 NNUE. The engine ships as a classic worker script plus a
@@ -4513,6 +4636,10 @@ const PANEL_HTML = `
           <div class="set"><span class="set-lbl">Lines shown</span><span class="set-val"><input class="num" type="number" data-el="showLines" min="1" max="4" step="1"></span></div>
         </div>
         <div class="card">
+          <div class="card-h"><span class="card-t">Board</span><span class="card-s">drawn on the page</span></div>
+          <div class="set"><span class="set-lbl">Board arrows<i>best move and the reply, on the squares</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="arrows" aria-checked="true" aria-label="Board arrows"></button></span></div>
+        </div>
+        <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
           <div class="set"><span class="set-lbl">Always auto<i>never stops at the cap; rolls the session</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="alwaysAuto" aria-checked="true" aria-label="Always auto"></button></span></div>
           <div class="set"><span class="set-lbl">Auto rematch<i>queue the next game when one ends</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="autoRematch" aria-checked="false" aria-label="Auto rematch"></button></span></div>
@@ -5920,6 +6047,8 @@ function onNewGame() {
   // would rate a 1-minute game as rapid and pace it like a 10-minute one.
   state.clockPeak = 0;
   state.tempoSamples = [];
+  // The old game's arrow is not this game's plan.
+  paintBoardOverlay(state.snapshot && state.snapshot.boardEl, null, false, true);
   if (cfg.autoRematch) state.autoPlay = true;
 }
 
@@ -6013,6 +6142,11 @@ function statusView() {
 
 function refreshPanel() {
   panel.render(statusView());
+  // The board overlay follows the same state as the panel, including the
+  // toggle, so one place keeps it from going stale after a setting change.
+  if (state.snapshot) {
+    paintBoardOverlay(state.snapshot.boardEl, state.analysis && state.analysis.lines, state.snapshot.flipped, cfg.arrows);
+  }
 }
 
 // The opponent's centipawn loss is only knowable once the position after their

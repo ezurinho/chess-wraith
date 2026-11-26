@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.58.0 — 2026-11-26
+
+The engine's move, on the board.
+
+- `src/45-overlay.js` draws the top line as a green arrow from square to square
+  and the opponent's best answer as a thinner red one, inside the board element
+  (`viewBox="0 0 8 8"`, `pointer-events: none`, no innerHTML).
+- It follows the board's flip, keeps one SVG per board, skips a repaint when the
+  move has not changed, clears on a new game and on a turn it cannot read.
+- `Board arrows` in Tune turns it off; the default is on.
+- `docs/review.md`: a graded review (7.6/10) with the eight weakest points,
+  including the unexplained `gameOverSeen` flake under load.
+- `docs/research.md`: what the 2026 public scripts actually ship (Complete Move
+  Guide, Chess.com Bot 7.1, chess-sniper, Chessvision, Game Review) and the one
+  thing none of them does — anchor the engine to the account's own rating.
+
 ## 1.57.0 — 2026-11-26
 
 A Stats tab: the shape of the night, not one card.

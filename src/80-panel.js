@@ -329,6 +329,10 @@ const PANEL_HTML = `
           <div class="set"><span class="set-lbl">Lines shown</span><span class="set-val"><input class="num" type="number" data-el="showLines" min="1" max="4" step="1"></span></div>
         </div>
         <div class="card">
+          <div class="card-h"><span class="card-t">Board</span><span class="card-s">drawn on the page</span></div>
+          <div class="set"><span class="set-lbl">Board arrows<i>best move and the reply, on the squares</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="arrows" aria-checked="true" aria-label="Board arrows"></button></span></div>
+        </div>
+        <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
           <div class="set"><span class="set-lbl">Always auto<i>never stops at the cap; rolls the session</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="alwaysAuto" aria-checked="true" aria-label="Always auto"></button></span></div>
           <div class="set"><span class="set-lbl">Auto rematch<i>queue the next game when one ends</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="autoRematch" aria-checked="false" aria-label="Auto rematch"></button></span></div>

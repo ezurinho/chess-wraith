@@ -24,6 +24,7 @@ const MODULES = [
   '30-chess.js',
   '35-chess-glue.js',
   '40-board.js',
+  '45-overlay.js',
   '50-engine.js',
   '55-pace.js',
   '60-analysis.js',
