@@ -195,6 +195,25 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The account's move gets its own search
+
+1.48.0 could only reorder the moves the engine already had. The signature line
+of the measured account proves the hole: after 1.e4 e5 it plays **2.Ne2 in 9 of 9**
+games, and a MultiPV 4 search at that position answers Nf3 / Nc6 / Nc3 / Bc4
+territory — 2.Ne2 is not on the table at any price, so the tree was silent in
+exactly the case that matters.
+
+`probeOpeningMove` asks a second, restricted question: `go depth 12 movetime 400
+searchmoves g1e2` (MultiPV forced to 1, since a restricted search has one line).
+The answer is merged into the main result as a normal candidate flagged
+`opening`; the slack for it is `slack + 70` cp and the eval spread is 3x the
+normal one, because in the opening the evidence is the account's record, not the
+eval. A probed move that loses more than that is not played at all.
+
+Table weights were also compressed: `0.2 + 4.5 * share` turned a 60-of-60 habit
+into an 89 % pick. `0.02 + share` turns it into 95 %, and a 60/40 habit into
+60/40, which is what the shares mean.
+
 ## The repertoire is a tree, and above four plies the tree is thin
 
 1.47.0 read only the first move, so the third was the engine's again. Reading
@@ -774,7 +793,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 187 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 191 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

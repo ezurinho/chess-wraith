@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, fatigueFactor, sideScore, clamp, clampInt, median, pushBounded, depthForAccount, LEGIT }`
+  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, fatigueFactor, sideScore, clamp, clampInt, median, pushBounded, depthForAccount, openingProbeTarget, LEGIT }`
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -270,4 +270,74 @@ test('a conditioned reply is not diluted by the moves it answers', () => {
   }
   assert.ok(counts.e5 > 300, JSON.stringify(counts));
   assert.ok(counts.c5 < 40, JSON.stringify(counts));
+});
+
+test('a 60-of-60 habit is played almost every time, not three times in four', () => {
+  const lines = [
+    { bestUci: 'e2e4', bestSan: 'e4', scoreCp: 30, mateIn: null, evalText: '' },
+    { bestUci: 'd2d4', bestSan: 'd4', scoreCp: 28, mateIn: null, evalText: '' },
+    { bestUci: 'g1f3', bestSan: 'Nf3', scoreCp: 26, mateIn: null, evalText: '' }
+  ];
+  const cfg = { ...baseCfg, humanSlackCp: 60 };
+  const counts = { e4: 0, d4: 0, Nf3: 0 };
+  for (let i = 0; i < 400; i++) {
+    const pick = api.chooseMove(lines, cfg, { oppElo: 1600, openingShares: { e4: 1 } });
+    counts[pick.line.bestSan] += 1;
+  }
+  assert.ok(counts.e4 > 360, JSON.stringify(counts));
+  // And a 60/40 habit really is 60/40.
+  const two = { e4: 0, d4: 0 };
+  for (let i = 0; i < 400; i++) {
+    const pick = api.chooseMove(lines, cfg, { oppElo: 1600, openingShares: { e4: 0.6, d4: 0.4 } });
+    if (pick.line.bestSan === 'Nf3') continue;
+    two[pick.line.bestSan] += 1;
+  }
+  const ratio = two.e4 / (two.e4 + two.d4);
+  assert.ok(ratio > 0.55 && ratio < 0.65, JSON.stringify(two));
+});
+
+test('a probed line is the account move, and only the opening lets it in', () => {
+  // The engine's own four candidates never included 2.Ne2, so it arrives from a
+  // restricted search carrying an 80 cp cost: outside the slack, inside the
+  // opening allowance.
+  const probed = { bestUci: 'g1e2', bestSan: 'Ne2', scoreCp: -50, mateIn: null, evalText: '', opening: true };
+  const lines = [
+    { bestUci: 'g1f3', bestSan: 'Nf3', scoreCp: 30, mateIn: null, evalText: '' },
+    { bestUci: 'f1c4', bestSan: 'Bc4', scoreCp: 25, mateIn: null, evalText: '' },
+    probed
+  ];
+  const cfg = { ...baseCfg, humanSlackCp: 60 };
+  let ne2 = 0;
+  for (let i = 0; i < 400; i++) {
+    const pick = api.chooseMove(lines, cfg, { oppElo: 1600, openingShares: { Ne2: 1 } });
+    if (pick.line.bestSan === 'Ne2') ne2 += 1;
+  }
+  assert.ok(ne2 > 300, 'the probed move is played: ' + ne2);
+  let unflagged = 0;
+  for (let i = 0; i < 400; i++) {
+    const pick = api.chooseMove([lines[0], lines[1], { ...probed, opening: false }], cfg, { oppElo: 1600, openingShares: { Ne2: 1 } });
+    if (pick.line.bestSan === 'Ne2') unflagged += 1;
+  }
+  assert.equal(unflagged, 0, 'without the flag the slack still rules');
+  // And a probed move that loses the position is not played at all.
+  const losing = { ...probed, scoreCp: -400 };
+  let blunder = 0;
+  for (let i = 0; i < 100; i++) {
+    const pick = api.chooseMove([lines[0], lines[1], losing], cfg, { oppElo: 1600, openingShares: { Ne2: 1 } });
+    if (pick.line.bestSan === 'Ne2') blunder += 1;
+  }
+  assert.equal(blunder, 0);
+});
+
+test('only a strong habit the search missed is worth a probe', () => {
+  const lines = [
+    { bestUci: 'g1f3', bestSan: 'Nf3', scoreCp: 30, mateIn: null, evalText: '' },
+    { bestUci: 'f1c4', bestSan: 'Bc4', scoreCp: 25, mateIn: null, evalText: '' }
+  ];
+  assert.equal(api.openingProbeTarget({ Nf3: 1 }, lines), null, 'already a candidate');
+  assert.equal(api.openingProbeTarget({ Ne2: 0.4 }, lines), null, 'a 40% move is not a habit');
+  assert.deepEqual(JSON.parse(JSON.stringify(api.openingProbeTarget({ Ne2: 0.9, d4: 0.1 }, lines))), { san: 'Ne2', share: 0.9 });
+  assert.equal(api.openingProbeTarget(null, lines), null);
+  // The suffix of a check is not part of the name on either side.
+  assert.equal(api.openingProbeTarget({ 'Qh5+': 1 }, [{ bestSan: 'Qh5' }]), null);
 });

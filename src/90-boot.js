@@ -183,6 +183,10 @@ const state = {
   // time class on, but it still deserves the account's repertoire.
   repertoire: null,
   repertoirePending: false,
+  // One restricted search per position for the move the account plays when the
+  // wider search never offered it.
+  probedKey: '',
+  probeLine: null,
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   accountGames: null,
@@ -1063,6 +1067,47 @@ function slackCfg() {
   };
 }
 
+// A SAN move the account plays, as UCI on this board. The tracker already knows
+// how to match one; a table entry that does not match is not played.
+function openingUci(snap, san) {
+  try {
+    const move = Chess.matchSanMove(snap, san);
+    return move ? Chess.moveToUci(move) : null;
+  } catch {
+    return null;
+  }
+}
+
+// One restricted search for that move. Its eval is merged into the main result
+// as a normal candidate, flagged so only the opening slack treats it specially.
+function probeOpeningMove(probe, result) {
+  state.probedKey = probe.key;
+  const request = {
+    fen: probe.fen,
+    uciMoves: Array.isArray(probe.uciMoves) ? probe.uciMoves : [],
+    multiPv: 1,
+    searchmoves: probe.uci,
+    depth: Math.min(cfg.maxDepth, 12),
+    moveTimeMs: 400
+  };
+  engine
+    .analyze(request)
+    .then((lines) => {
+      const line = lines && lines[0];
+      if (!line || line.bestUci !== probe.uci) return;
+      state.probeLine = { ...line, opening: true, fen: probe.fen };
+    })
+    .catch(() => [])
+    .finally(() => {
+      const probed = state.probeLine;
+      const known = (result.lines || []).some((line) => line.bestUci === (probed && probed.bestUci));
+      const merged = probed && probed.fen === result.fen && !known
+        ? { ...result, lines: [...result.lines, probed] }
+        : result;
+      scheduleAutoMove(merged);
+    });
+}
+
 function scheduleAutoMove(result) {
   clearAutoTimer();
   const snap = state.snapshot;
@@ -1077,11 +1122,23 @@ function scheduleAutoMove(result) {
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
 
   const ply = plyOf(snap);
+  const shares = ply < OPENING_PLIES ? openingShares() : null;
+  // The account's move when the search never offered it: one extra search so the
+  // repertoire can be played, not only reordered.
+  const target = openingProbeTarget(shares, result.lines);
+  const probeKey = target ? `${snap.fen}|${target.san}` : '';
+  if (target && state.probedKey !== probeKey) {
+    const uci = openingUci(snap, target.san);
+    if (uci) {
+      probeOpeningMove({ key: probeKey, uci, fen: snap.fen, uciMoves: snap.uciMoves }, result);
+      return;
+    }
+  }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply < OPENING_PLIES ? openingShares() : null
+    openingShares: shares
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;

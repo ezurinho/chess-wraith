@@ -416,7 +416,10 @@ class WraithEngine {
     this.#send(hasMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
-    this.#send(`go depth ${depth} movetime ${movetime}`);
+    // `searchmoves` makes the engine judge one candidate the wider search left
+    // out, which is how a repertoire move gets an eval of its own.
+    const only = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(String(job.searchmoves || '')) ? ` searchmoves ${job.searchmoves}` : '';
+    this.#send(`go depth ${depth} movetime ${movetime}${only}`);
     this.#armWatchdog(job);
   }
 
@@ -486,7 +489,9 @@ class WraithEngine {
         this.lastOptions.skill = skill;
       }
     }
-    const multiPv = clampInt(job.multiPv, 1, 5, 1);
+    // A restricted search is asked about one move; MultiPV above 1 would ask it
+    // about the same move twice.
+    const multiPv = clampInt(job.searchmoves ? 1 : job.multiPv, 1, 5, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
       this.lastOptions.multiPv = multiPv;

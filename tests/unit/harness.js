@@ -141,7 +141,7 @@ function bootSource(source, options = {}) {
   // built bundle closes over its own IIFE and only leaves `ChessWraith` behind.
   const tail = options.export === false
     ? ''
-    : '\n;globalThis.__cw = { state, cfg, engine, panel, scanBoard, isGameOverDom, adoptAccountSettings, report: reportText, openingShares, selftest: ChessWraith.selftest };';
+    : '\n;globalThis.__cw = { state, cfg, engine, panel, scanBoard, isGameOverDom, adoptAccountSettings, report: reportText, openingShares, openingProbeTarget, selftest: ChessWraith.selftest };';
   vm.runInContext(`${source}\n${tail}`, context, {
     filename: options.filename || 'chess-wraith-boot.js'
   });

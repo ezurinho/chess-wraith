@@ -91,6 +91,18 @@ function weightedPick(items) {
   return items[items.length - 1];
 }
 
+// The account's own move, when the search never put it on the table: the one
+// case a repertoire table cannot win on its own.
+function openingProbeTarget(shares, lines) {
+  if (!shares) return null;
+  const known = new Set((lines || []).map((line) => sanKey(line && line.bestSan)));
+  const rows = Object.entries(shares)
+    .filter(([san, share]) => Number(share) >= 0.6 && !known.has(sanKey(san)))
+    .sort((a, b) => b[1] - a[1]);
+  if (!rows.length) return null;
+  return { san: sanKey(rows[0][0]), share: Number(rows[0][1]) };
+}
+
 function chooseMove(lines, cfg, opts = {}) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
   const best = lines[0];
@@ -128,8 +140,15 @@ function chooseMove(lines, cfg, opts = {}) {
 
   const eligible = [];
   for (const cand of legal) {
-    if (cand.cpLoss > profile.slack) continue;
-    let weight = Math.exp(-cand.cpLoss / Math.max(18, profile.slack / 2));
+    // A probed line carries the move this account actually plays, which the
+    // search never offered: the slack is the wrong ruler for it, and a bounded
+    // allowance is what makes the repertoire playable instead of decorative.
+    const allowance = cand.line.opening && opts.openingShares ? 70 : 0;
+    if (cand.cpLoss > profile.slack + allowance) continue;
+    // In the opening the account's own move is the evidence, not the eval spread:
+    // a pet line that costs 80 cp is still the line this player plays every game.
+    const spread = cand.line.opening && opts.openingShares ? Math.max(120, profile.slack * 3) : Math.max(18, profile.slack / 2);
+    let weight = Math.exp(-cand.cpLoss / spread);
     // Repeatedly taking #1 is the one pattern that reads as a machine. Once the
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
     if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
@@ -138,7 +157,10 @@ function chooseMove(lines, cfg, opts = {}) {
     // repertoire is the most stable thing about a player's games, and four first
     // moves at 25% each is the opposite of a repertoire.
     const share = opts.openingShares ? Number(opts.openingShares[sanKey(cand.line.bestSan)]) || 0 : 0;
-    if (opts.openingShares) weight *= 0.2 + 4.5 * share;
+    // The shares are the truth, so the weight is nearly the share itself: an
+    // account that played 1.e4 in 60 of 60 games should not open 1.d4 one game in
+    // five.
+    if (opts.openingShares) weight *= 0.02 + share;
     // The same first move every game is its own tell, separate from move choice
     // — unless it is the move this account actually plays that often.
     if (opts.repeatUci && cand.line.bestUci === opts.repeatUci && share < 0.3) weight *= 0.28;

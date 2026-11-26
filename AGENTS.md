@@ -51,14 +51,15 @@ only version anyone installs.
   `module.exports` guard so tests can `require` it directly.
 - `src/40-board.js` — every chess.com selector. Two move-list shapes exist:
   `[data-ply]` nodes and `.node` rows inside `wc-simple-move-list`.
-- `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog.
+- `src/50-engine.js` — worker lifecycle, UCI, WDL, MultiPV, watchdog, and
+  `searchmoves` restricted searches (one move, MultiPV forced to 1).
 - `src/55-pace.js` — `%clk` parsing from public PGN and the per-account pace
   median. Chess.com splits the clock comment across tokens; the parser knows.
 - `src/90-boot.js` — orchestration and the debug API.
 - `tests/unit/` — pure logic, jsdom board fixtures, a fake-worker engine test, the
   pace parser, per-account settings, input geometry, the promotion poll, the
   move retry plan, the game-over transition, engine recovery, the clock bounds
-  and timer throttling. **187 tests.** The real wasm download and compile still
+  and timer throttling. **191 tests.** The real wasm download and compile still
   need a browser; the UCI protocol, options, queued searches and fallback are
   covered in a browser-shaped environment.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the

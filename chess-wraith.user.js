@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.48.0
+// @version      1.49.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.48.0';
+const VERSION = '1.49.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.48.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.49.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2623,7 +2623,10 @@ class WraithEngine {
     this.#send(hasMoves ? positionMoves(job.uciMoves) : `position fen ${job.fen}`);
     const depth = clampInt(job.depth, 4, 22, CONFIG.maxDepth);
     const movetime = clampInt(job.moveTimeMs, 120, 6000, CONFIG.moveTimeMs);
-    this.#send(`go depth ${depth} movetime ${movetime}`);
+    // `searchmoves` makes the engine judge one candidate the wider search left
+    // out, which is how a repertoire move gets an eval of its own.
+    const only = /^[a-h][1-8][a-h][1-8][qrbn]?$/.test(String(job.searchmoves || '')) ? ` searchmoves ${job.searchmoves}` : '';
+    this.#send(`go depth ${depth} movetime ${movetime}${only}`);
     this.#armWatchdog(job);
   }
 
@@ -2693,7 +2696,9 @@ class WraithEngine {
         this.lastOptions.skill = skill;
       }
     }
-    const multiPv = clampInt(job.multiPv, 1, 5, 1);
+    // A restricted search is asked about one move; MultiPV above 1 would ask it
+    // about the same move twice.
+    const multiPv = clampInt(job.searchmoves ? 1 : job.multiPv, 1, 5, 1);
     if (this.lastOptions.multiPv !== multiPv) {
       this.#send(`setoption name MultiPV value ${multiPv}`);
       this.lastOptions.multiPv = multiPv;
@@ -3225,6 +3230,18 @@ function weightedPick(items) {
   return items[items.length - 1];
 }
 
+// The account's own move, when the search never put it on the table: the one
+// case a repertoire table cannot win on its own.
+function openingProbeTarget(shares, lines) {
+  if (!shares) return null;
+  const known = new Set((lines || []).map((line) => sanKey(line && line.bestSan)));
+  const rows = Object.entries(shares)
+    .filter(([san, share]) => Number(share) >= 0.6 && !known.has(sanKey(san)))
+    .sort((a, b) => b[1] - a[1]);
+  if (!rows.length) return null;
+  return { san: sanKey(rows[0][0]), share: Number(rows[0][1]) };
+}
+
 function chooseMove(lines, cfg, opts = {}) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
   const best = lines[0];
@@ -3262,8 +3279,15 @@ function chooseMove(lines, cfg, opts = {}) {
 
   const eligible = [];
   for (const cand of legal) {
-    if (cand.cpLoss > profile.slack) continue;
-    let weight = Math.exp(-cand.cpLoss / Math.max(18, profile.slack / 2));
+    // A probed line carries the move this account actually plays, which the
+    // search never offered: the slack is the wrong ruler for it, and a bounded
+    // allowance is what makes the repertoire playable instead of decorative.
+    const allowance = cand.line.opening && opts.openingShares ? 70 : 0;
+    if (cand.cpLoss > profile.slack + allowance) continue;
+    // In the opening the account's own move is the evidence, not the eval spread:
+    // a pet line that costs 80 cp is still the line this player plays every game.
+    const spread = cand.line.opening && opts.openingShares ? Math.max(120, profile.slack * 3) : Math.max(18, profile.slack / 2);
+    let weight = Math.exp(-cand.cpLoss / spread);
     // Repeatedly taking #1 is the one pattern that reads as a machine. Once the
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
     if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
@@ -3272,7 +3296,10 @@ function chooseMove(lines, cfg, opts = {}) {
     // repertoire is the most stable thing about a player's games, and four first
     // moves at 25% each is the opposite of a repertoire.
     const share = opts.openingShares ? Number(opts.openingShares[sanKey(cand.line.bestSan)]) || 0 : 0;
-    if (opts.openingShares) weight *= 0.2 + 4.5 * share;
+    // The shares are the truth, so the weight is nearly the share itself: an
+    // account that played 1.e4 in 60 of 60 games should not open 1.d4 one game in
+    // five.
+    if (opts.openingShares) weight *= 0.02 + share;
     // The same first move every game is its own tell, separate from move choice
     // — unless it is the move this account actually plays that often.
     if (opts.repeatUci && cand.line.bestUci === opts.repeatUci && share < 0.3) weight *= 0.28;
@@ -4705,6 +4732,10 @@ const state = {
   // time class on, but it still deserves the account's repertoire.
   repertoire: null,
   repertoirePending: false,
+  // One restricted search per position for the move the account plays when the
+  // wider search never offered it.
+  probedKey: '',
+  probeLine: null,
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   accountGames: null,
@@ -5585,6 +5616,47 @@ function slackCfg() {
   };
 }
 
+// A SAN move the account plays, as UCI on this board. The tracker already knows
+// how to match one; a table entry that does not match is not played.
+function openingUci(snap, san) {
+  try {
+    const move = Chess.matchSanMove(snap, san);
+    return move ? Chess.moveToUci(move) : null;
+  } catch {
+    return null;
+  }
+}
+
+// One restricted search for that move. Its eval is merged into the main result
+// as a normal candidate, flagged so only the opening slack treats it specially.
+function probeOpeningMove(probe, result) {
+  state.probedKey = probe.key;
+  const request = {
+    fen: probe.fen,
+    uciMoves: Array.isArray(probe.uciMoves) ? probe.uciMoves : [],
+    multiPv: 1,
+    searchmoves: probe.uci,
+    depth: Math.min(cfg.maxDepth, 12),
+    moveTimeMs: 400
+  };
+  engine
+    .analyze(request)
+    .then((lines) => {
+      const line = lines && lines[0];
+      if (!line || line.bestUci !== probe.uci) return;
+      state.probeLine = { ...line, opening: true, fen: probe.fen };
+    })
+    .catch(() => [])
+    .finally(() => {
+      const probed = state.probeLine;
+      const known = (result.lines || []).some((line) => line.bestUci === (probed && probed.bestUci));
+      const merged = probed && probed.fen === result.fen && !known
+        ? { ...result, lines: [...result.lines, probed] }
+        : result;
+      scheduleAutoMove(merged);
+    });
+}
+
 function scheduleAutoMove(result) {
   clearAutoTimer();
   const snap = state.snapshot;
@@ -5599,11 +5671,23 @@ function scheduleAutoMove(result) {
   if (isPromotionWindowOpen() || hasPremove(state.boardEl)) return;
 
   const ply = plyOf(snap);
+  const shares = ply < OPENING_PLIES ? openingShares() : null;
+  // The account's move when the search never offered it: one extra search so the
+  // repertoire can be played, not only reordered.
+  const target = openingProbeTarget(shares, result.lines);
+  const probeKey = target ? `${snap.fen}|${target.san}` : '';
+  if (target && state.probedKey !== probeKey) {
+    const uci = openingUci(snap, target.san);
+    if (uci) {
+      probeOpeningMove({ key: probeKey, uci, fen: snap.fen, uciMoves: snap.uciMoves }, result);
+      return;
+    }
+  }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply < OPENING_PLIES ? openingShares() : null
+    openingShares: shares
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;

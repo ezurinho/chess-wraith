@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.49.0 — 2026-11-26
+
+The account's own move gets its own search, so the repertoire can be played.
+
+- `searchmoves`: the engine can now be asked about one move (`go depth 12 movetime
+  400 searchmoves g1e2`, MultiPV forced to 1).
+- When the tree's top move has a share of 0.6 or more and the main search never
+  offered it, auto-play runs that restricted search and merges the answer as a
+  candidate flagged `opening`, once per position.
+- That candidate is allowed `slack + 70` cp and a 3× wider eval spread: in the
+  opening the evidence is the account's record, not the eval. A probed move that
+  loses more than that is never played.
+- Shares are no longer compressed: `0.02 + share` instead of `0.2 + 4.5 * share`,
+  so a 60-of-60 habit is now a 95 % pick (was 89 %) and a 60/40 habit is 60/40.
+- 191 tests.
+
 ## 1.48.0 — 2026-11-26
 
 The openings come from the whole tree, not just the first move.

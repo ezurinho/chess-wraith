@@ -470,3 +470,55 @@ test('the label comes from the engine, not from a constant', async () => {
   assert.equal(api.engineLabel('', true), 'Stockfish 19 NNUE', 'no id line, the shipped build');
   assert.equal(api.engineLabel('Stockfish 11 64', false), 'Stockfish 2019 JS', 'the fallback keeps its name');
 });
+
+test('a restricted search asks the engine about one move only', async () => {
+  const { api, workers } = harness();
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const worker = workers[workers.length - 1];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+
+  const done = engine.analyze({
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    turn: 'w',
+    flipped: false,
+    uciMoves: ['e2e4', 'e7e5'],
+    depth: 12,
+    moveTimeMs: 400,
+    multiPv: 4,
+    searchmoves: 'g1f3',
+    elo: 0,
+    skill: 20
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(worker.sent.includes('setoption name MultiPV value 1'), 'a restricted search has one line');
+  assert.ok(worker.sent.includes('go depth 12 movetime 400 searchmoves g1f3'), JSON.stringify(worker.sent.slice(-4)));
+  worker.reply('info depth 12 seldepth 16 multipv 1 score cp 12 nodes 400 pv g1f3 b8c6');
+  worker.reply('bestmove g1f3');
+  const lines = await done;
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].bestUci, 'g1f3');
+
+  // A malformed or missing searchmoves must not reach the engine as a command.
+  const plain = engine.analyze({
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    turn: 'w',
+    flipped: false,
+    uciMoves: ['e2e4'],
+    depth: 10,
+    moveTimeMs: 300,
+    multiPv: 4,
+    searchmoves: 'not-a-move',
+    elo: 0,
+    skill: 20
+  });
+  await new Promise((r) => setImmediate(r));
+  assert.ok(worker.sent.some((c) => c === 'go depth 10 movetime 300'), 'the junk flag is dropped');
+  worker.reply('info depth 10 seldepth 14 multipv 1 score cp 20 nodes 100 pv e2e4');
+  worker.reply('bestmove e2e4');
+  await plain;
+  engine.destroy();
+});
