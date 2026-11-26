@@ -285,7 +285,7 @@ const PANEL_HTML = `
         <div class="band">
           <div class="band-h"><span>Target</span><b data-el="target2">–</b></div>
           <div class="band-bar"><i data-el="bandFill"></i></div>
-          <div class="band-f"><span>accuracy <b data-el="acpl2">–</b></span><span>band <b data-el="bandCap">–</b></span></div>
+          <div class="band-f"><span>loss/move <b data-el="acpl2">–</b></span><span>band <b data-el="bandCap">–</b></span></div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Lines</span><span class="card-s live" data-el="engineTag">waiting</span><span class="card-age" data-el="depth">–</span></div>

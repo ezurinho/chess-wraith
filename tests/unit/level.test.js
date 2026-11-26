@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  '{ acplBand, levelPlayTarget, styleProfile, chooseMove, LEGIT }'
+  '{ acplBand, levelPlayTarget, improvisationChance, styleProfile, chooseMove, LEGIT }'
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -51,6 +51,36 @@ test('a low account plays moves of its own size, not the best one', () => {
   const mean = total / 200;
   assert.ok(mean >= 110, `mean loss was ${mean}`);
   assert.ok(far >= 100, `only ${far}/200 were 100 cp or worse`);
+});
+
+test('the improvisation rate only exists below the floor and never reaches half', () => {
+  assert.equal(api.improvisationChance(0), 0);
+  assert.equal(api.improvisationChance(100), 0);
+  assert.ok(Math.abs(api.improvisationChance(293) - 0.412) < 0.01);
+  assert.equal(api.improvisationChance(600), 0.5);
+});
+
+test('an improvised move comes from the legal list, not from the engine', () => {
+  const pool = ['a2a3', 'h2h4', 'g2g4', 'b2b3', 'f2f3', 'c2c3'].map((uci) => ({ uci }));
+  const lines = [line('e2e4', 0), line('d2d4', -15), line('g1f3', -30)];
+  const forced = api.chooseMove(lines, cfg, { accountElo: 133, improvise: pool, rng: () => 0 });
+  assert.equal(forced.improvised, true);
+  assert.equal(forced.reason, 'level');
+  assert.ok(pool.some((p) => p.uci === forced.line.bestUci));
+  assert.equal(forced.cpLoss, api.acplBand(133), 'the model counts the move at its own target');
+  const engine = api.chooseMove(lines, cfg, { accountElo: 133, improvise: pool, rng: () => 0.99 });
+  assert.notEqual(engine.improvised, true);
+  assert.ok(['e2e4', 'd2d4', 'g1f3'].includes(engine.line.bestUci));
+});
+
+test('fourteen lines put the delivered loss in the account range', () => {
+  const losses = [0, 15, 35, 55, 75, 100, 125, 155, 190, 225, 260, 300, 340, 380];
+  const lines = losses.map((l) => line('e2e4', -l));
+  let total = 0;
+  for (let i = 0; i < 400; i++) total += api.chooseMove(lines, cfg, { accountElo: 133 }).cpLoss;
+  const mean = total / 400;
+  assert.ok(mean >= 150, `mean loss was ${mean}, the four-line set delivered 43`);
+  assert.ok(mean <= 290, `mean loss was ${mean}`);
 });
 
 test('turning level play off restores the near-best chooser', () => {

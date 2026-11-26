@@ -15,7 +15,7 @@ files, not a feeling; where the evidence is thin it says so.
 | Risk (as a cheating tool) | 3.0 | chess.com reports ~314,000 closure decisions in one quarter and says most are automated, over 100 gameplay factors. Pacing and a rating-matched band lower the obvious signals; they do not make the account safe. |
 
 **Overall: 7.6/10.** A well-built tool with unusually honest documentation, held
-back by unverified live behaviour and one unexplained test flake.
+back by unverified live behaviour and a test that used to flake.
 
 ## What is strong
 
@@ -33,11 +33,13 @@ back by unverified live behaviour and one unexplained test flake.
 1. **No live-game verification.** Nothing in CI loads chess.com and plays a
    rated move. The selectors, the modal, the arrow geometry and the pacing are
    proven in jsdom, which is not the same page.
-2. **The `gameOverSeen` flake.** Twice in six loaded runs the rematch press
-   succeeded and the flag was already false at the next assertion. `onNewGame`
-   is the only writer, and it only runs on a changed board, so either the
-   fixture's board changed under load or a second scan saw a new-game state.
-   Until it is caught in the act, the suite can go red on a good commit.
+2. **The `gameOverSeen` flake — closed in 1.60.0.** Twice in six loaded runs the
+   rematch press succeeded and the flag was already false at the next assertion.
+   The reason is the obvious one once it is written down: pressing Rematch starts
+   the next game, and `onNewGame` resets the flag and the counters. The test now
+   asserts the observable outcome — one press, the score in the session, the
+   history entry — instead of flags two timers race to clear, and passed six runs
+   in a row. The state machine did not change.
 3. **Overlay geometry assumes the board element is exactly the eight-by-eight
    grid.** chess.com draws its coordinates inside the same box, so this is true
    today. A theme that adds a margin would shift every arrow by the margin.

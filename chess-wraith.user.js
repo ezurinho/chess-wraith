@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.59.0
+// @version      1.60.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.59.0';
+const VERSION = '1.60.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.59.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.60.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3455,6 +3455,18 @@ function levelPlayTarget(accountElo, cfg) {
   return clampInt(acplBand(account), 60, 320, 60);
 }
 
+// The engine's tenth-best move is still a master's tenth-best move: below its
+// floor, re-weighting its own list cannot reach the account's loss rate. The
+// moves that are missing get improvised instead, uniformly from the legal
+// moves, at a rate that closes the gap between what the search offers and the
+// target. Measured: at 133 the ten best lines average 157 cp/move against a 293
+// target, so roughly four moves in ten have to be improvised.
+function improvisationChance(target) {
+  const t = Number(target) || 0;
+  if (!(t > 120)) return 0;
+  return clamp((t - 120) / 420, 0, 0.5);
+}
+
 // The throttle nothing else has: when the account is playing far above its own
 // rating, hand it more slack until the numbers look human again. It only ever
 // moves in small steps, and only after 15 moves of evidence.
@@ -3545,6 +3557,25 @@ function chooseMove(lines, cfg, opts = {}) {
   }
   if (legal.length === 0) return { line: best, cpLoss: 0, reason: 'best' };
 
+  const target = profile.level || 0;
+  // A move the search never saw, because it is not good enough to be in the top
+  // N. This is what a beginner's move actually is.
+  if (target > 0 && Array.isArray(opts.improvise) && opts.improvise.length > 5) {
+    const rnd = typeof opts.rng === 'function' ? opts.rng : Math.random;
+    if (rnd() < improvisationChance(target)) {
+      const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);
+      if (pool.length) {
+        const pick = pool[Math.min(pool.length - 1, Math.floor(rnd() * pool.length))];
+        return {
+          line: { bestUci: pick.uci, bestSan: pick.san || '' },
+          cpLoss: target,
+          reason: 'level',
+          improvised: true
+        };
+      }
+    }
+  }
+
   // A deliberate miss. Only the weaker presets carry a rate, it is capped at
   // 2.5x the normal slack so it stays plausible for the level, and it never
   // throws away a forced mate.
@@ -3557,7 +3588,6 @@ function chooseMove(lines, cfg, opts = {}) {
   }
 
   const eligible = [];
-  const target = profile.level || 0;
   for (const cand of legal) {
     // A probed line carries the move this account actually plays, which the
     // search never offered: the slack is the wrong ruler for it, and a bounded
@@ -4624,7 +4654,7 @@ const PANEL_HTML = `
         <div class="band">
           <div class="band-h"><span>Target</span><b data-el="target2">–</b></div>
           <div class="band-bar"><i data-el="bandFill"></i></div>
-          <div class="band-f"><span>accuracy <b data-el="acpl2">–</b></span><span>band <b data-el="bandCap">–</b></span></div>
+          <div class="band-f"><span>loss/move <b data-el="acpl2">–</b></span><span>band <b data-el="bandCap">–</b></span></div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">Lines</span><span class="card-s live" data-el="engineTag">waiting</span><span class="card-age" data-el="depth">–</span></div>
@@ -6248,6 +6278,7 @@ function analyze(snapshot, force) {
   refreshPanel();
 
   const anchor = resolveElo();
+  const levelTarget = levelPlayTarget(accountRatingNow() || state.boardRating || 0, cfg);
   const request = {
     fen: snapshot.fen,
     uciMoves: snapshot.uciMoves,
@@ -6256,7 +6287,11 @@ function analyze(snapshot, force) {
     depth: depthForAccount(cfg.maxDepth, anchor),
     clockSeconds: state.clockSeconds,
     moveTimeMs: clockBoundMoveTime(phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)), state.clockSeconds),
-    multiPv: Math.max(1, cfg.multiPv),
+    // Below the engine floor the move this account would play is not in the top
+    // four at all: the four best lines are all good, which is why the panel used
+    // to promise a 293 cp/move account and deliver ~60. Ten lines reach the size
+    // of move the account actually makes.
+    multiPv: Math.max(1, levelTarget > 0 ? Math.max(cfg.multiPv, 10) : cfg.multiPv),
     elo: anchor,
     skill: 20
   };
@@ -6377,21 +6412,30 @@ function scheduleAutoMove(result) {
       return;
     }
   }
+  const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: shares
+    openingShares: shares,
+    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
   });
-  const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
+  let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
-
-  const legal = Chess.generateLegalMoves(snap);
+  // An improvised move is allowed to be bad, not to hand over mate in one.
+  if (choice && choice.improvised && allowsMateInOne(legal, move)) {
+    move = result.bestmove;
+    choice.improvised = false;
+    choice.cpLoss = 0;
+    choice.line = result.lines[0];
+  }
   const toRank = move.charCodeAt(3) - 49;
   const toFile = move.charCodeAt(2) - 97;
   const isCapture = Boolean(snap.grid[toRank] && snap.grid[toRank][toFile]);
   const gapCp = result.lines.length > 1 ? Math.abs(sideScore(result.lines[0]) - sideScore(result.lines[1])) : null;
-  const bestSan = (choice && choice.line && choice.line.bestSan) || '';
+  const bestSan =
+    (choice && choice.line && choice.line.bestSan) ||
+    (choice && choice.improvised ? Chess.pvToSan(snap.fen, [move])[0] || '' : '');
 
   // The opponent just moved while we were on their time: that gap is their
   // think time, and it is the only tempo signal on the page.
@@ -6433,6 +6477,19 @@ function scheduleAutoMove(result) {
   armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
 
   refreshPanel();
+}
+
+// Mate in one is the one loss the promise does not allow. A move that hands one
+// over is replaced by the engine's own, which keeps the improvisation honest
+// without pretending every legal move is safe.
+function allowsMateInOne(legal, uci) {
+  const chosen = legal.find((m) => Chess.moveToUci(m) === uci);
+  if (!chosen) return true;
+  for (const reply of Chess.generateLegalMoves(chosen.nextState)) {
+    if (!Chess.isKingInCheck(reply.nextState.grid, reply.nextState.turn)) continue;
+    if (Chess.generateLegalMoves(reply.nextState).length === 0) return true;
+  }
+  return false;
 }
 
 function armAutoMove(move, targetFen, choice, delay) {
@@ -6575,14 +6632,22 @@ async function playNow() {
       result = { ...result, lines: [...result.lines, { ...probed, opening: true, fen: snap.fen }] };
     }
   }
+  const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply < OPENING_PLIES ? openingShares() : null
+    openingShares: ply < OPENING_PLIES ? openingShares() : null,
+    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
   });
-  const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
+  let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
+  if (choice && choice.improvised && allowsMateInOne(legal, move)) {
+    move = result.bestmove;
+    choice.improvised = false;
+    choice.cpLoss = 0;
+    choice.line = result.lines[0];
+  }
   return playMove(move, snap.fen, choice);
 }
 

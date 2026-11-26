@@ -1087,6 +1087,7 @@ function analyze(snapshot, force) {
   refreshPanel();
 
   const anchor = resolveElo();
+  const levelTarget = levelPlayTarget(accountRatingNow() || state.boardRating || 0, cfg);
   const request = {
     fen: snapshot.fen,
     uciMoves: snapshot.uciMoves,
@@ -1095,7 +1096,11 @@ function analyze(snapshot, force) {
     depth: depthForAccount(cfg.maxDepth, anchor),
     clockSeconds: state.clockSeconds,
     moveTimeMs: clockBoundMoveTime(phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)), state.clockSeconds),
-    multiPv: Math.max(1, cfg.multiPv),
+    // Below the engine floor the move this account would play is not in the top
+    // four at all: the four best lines are all good, which is why the panel used
+    // to promise a 293 cp/move account and deliver ~60. Ten lines reach the size
+    // of move the account actually makes.
+    multiPv: Math.max(1, levelTarget > 0 ? Math.max(cfg.multiPv, 10) : cfg.multiPv),
     elo: anchor,
     skill: 20
   };
@@ -1216,21 +1221,30 @@ function scheduleAutoMove(result) {
       return;
     }
   }
+  const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: shares
+    openingShares: shares,
+    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
   });
-  const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
+  let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
-
-  const legal = Chess.generateLegalMoves(snap);
+  // An improvised move is allowed to be bad, not to hand over mate in one.
+  if (choice && choice.improvised && allowsMateInOne(legal, move)) {
+    move = result.bestmove;
+    choice.improvised = false;
+    choice.cpLoss = 0;
+    choice.line = result.lines[0];
+  }
   const toRank = move.charCodeAt(3) - 49;
   const toFile = move.charCodeAt(2) - 97;
   const isCapture = Boolean(snap.grid[toRank] && snap.grid[toRank][toFile]);
   const gapCp = result.lines.length > 1 ? Math.abs(sideScore(result.lines[0]) - sideScore(result.lines[1])) : null;
-  const bestSan = (choice && choice.line && choice.line.bestSan) || '';
+  const bestSan =
+    (choice && choice.line && choice.line.bestSan) ||
+    (choice && choice.improvised ? Chess.pvToSan(snap.fen, [move])[0] || '' : '');
 
   // The opponent just moved while we were on their time: that gap is their
   // think time, and it is the only tempo signal on the page.
@@ -1272,6 +1286,19 @@ function scheduleAutoMove(result) {
   armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
 
   refreshPanel();
+}
+
+// Mate in one is the one loss the promise does not allow. A move that hands one
+// over is replaced by the engine's own, which keeps the improvisation honest
+// without pretending every legal move is safe.
+function allowsMateInOne(legal, uci) {
+  const chosen = legal.find((m) => Chess.moveToUci(m) === uci);
+  if (!chosen) return true;
+  for (const reply of Chess.generateLegalMoves(chosen.nextState)) {
+    if (!Chess.isKingInCheck(reply.nextState.grid, reply.nextState.turn)) continue;
+    if (Chess.generateLegalMoves(reply.nextState).length === 0) return true;
+  }
+  return false;
 }
 
 function armAutoMove(move, targetFen, choice, delay) {
@@ -1414,14 +1441,22 @@ async function playNow() {
       result = { ...result, lines: [...result.lines, { ...probed, opening: true, fen: snap.fen }] };
     }
   }
+  const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
-    openingShares: ply < OPENING_PLIES ? openingShares() : null
+    openingShares: ply < OPENING_PLIES ? openingShares() : null,
+    improvise: legal.map((m) => ({ uci: Chess.moveToUci(m) }))
   });
-  const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
+  let move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
+  if (choice && choice.improvised && allowsMateInOne(legal, move)) {
+    move = result.bestmove;
+    choice.improvised = false;
+    choice.cpLoss = 0;
+    choice.line = result.lines[0];
+  }
   return playMove(move, snap.fen, choice);
 }
 

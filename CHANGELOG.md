@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.60.0 — 2026-11-27
+
+Beginner moves, not a beginner-shaped re-weighting.
+
+- Measured what level play actually delivered instead of assuming: the chooser over
+  the four MultiPV lines averaged 43 cp/move against a 293 target. The four best
+  moves are all good, so the bell around the target was flat and the pick was a
+  coin toss between near-best moves.
+- Below the floor the search now returns ten lines (157 cp/move measured on the
+  same harness) and four moves in ten are improvised uniformly from the legal
+  moves, the way a beginner's are. The delivered loss lands near the account's
+  band instead of near the engine's.
+- An improvised move that hands over mate in one is swapped for the engine's own,
+  so the promise survives the improvisation.
+- The band caption read `accuracy 19 cp` for what is a loss per move; it says
+  `loss/move`.
+
 ## 1.59.0 — 2026-11-26
 
 Play at your level, not at the engine's floor.

@@ -56,6 +56,18 @@ function levelPlayTarget(accountElo, cfg) {
   return clampInt(acplBand(account), 60, 320, 60);
 }
 
+// The engine's tenth-best move is still a master's tenth-best move: below its
+// floor, re-weighting its own list cannot reach the account's loss rate. The
+// moves that are missing get improvised instead, uniformly from the legal
+// moves, at a rate that closes the gap between what the search offers and the
+// target. Measured: at 133 the ten best lines average 157 cp/move against a 293
+// target, so roughly four moves in ten have to be improvised.
+function improvisationChance(target) {
+  const t = Number(target) || 0;
+  if (!(t > 120)) return 0;
+  return clamp((t - 120) / 420, 0, 0.5);
+}
+
 // The throttle nothing else has: when the account is playing far above its own
 // rating, hand it more slack until the numbers look human again. It only ever
 // moves in small steps, and only after 15 moves of evidence.
@@ -146,6 +158,25 @@ function chooseMove(lines, cfg, opts = {}) {
   }
   if (legal.length === 0) return { line: best, cpLoss: 0, reason: 'best' };
 
+  const target = profile.level || 0;
+  // A move the search never saw, because it is not good enough to be in the top
+  // N. This is what a beginner's move actually is.
+  if (target > 0 && Array.isArray(opts.improvise) && opts.improvise.length > 5) {
+    const rnd = typeof opts.rng === 'function' ? opts.rng : Math.random;
+    if (rnd() < improvisationChance(target)) {
+      const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);
+      if (pool.length) {
+        const pick = pool[Math.min(pool.length - 1, Math.floor(rnd() * pool.length))];
+        return {
+          line: { bestUci: pick.uci, bestSan: pick.san || '' },
+          cpLoss: target,
+          reason: 'level',
+          improvised: true
+        };
+      }
+    }
+  }
+
   // A deliberate miss. Only the weaker presets carry a rate, it is capped at
   // 2.5x the normal slack so it stays plausible for the level, and it never
   // throws away a forced mate.
@@ -158,7 +189,6 @@ function chooseMove(lines, cfg, opts = {}) {
   }
 
   const eligible = [];
-  const target = profile.level || 0;
   for (const cand of legal) {
     // A probed line carries the move this account actually plays, which the
     // search never offered: the slack is the wrong ruler for it, and a bounded
