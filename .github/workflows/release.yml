@@ -46,7 +46,7 @@ jobs:
         run: |
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git add package.json package-lock.json src README.md CHANGELOG.md chess-wraith.user.js chess-wraith.meta.js
+          git add package.json package-lock.json src README.md CHANGELOG.md chess-wraith.user.js chess-wraith.meta.js update.json
           git commit -m "release: ${{ inputs.version }} [skip ci]"
           git tag -a "v${{ inputs.version }}" -m "CHESS WRAITH ${{ inputs.version }}"
           git push origin HEAD:main
@@ -60,4 +60,4 @@ jobs:
           gh release create "v${{ inputs.version }}" --verify-tag \
             --title "CHESS WRAITH — ${{ inputs.version }}" \
             --notes-file .release-notes.md \
-            chess-wraith.user.js chess-wraith.meta.js
+            chess-wraith.user.js chess-wraith.meta.js update.json

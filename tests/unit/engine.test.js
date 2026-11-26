@@ -11,11 +11,43 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const nodeCrypto = require('node:crypto');
 const { JSDOM } = require('jsdom');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, 'src', rel), 'utf8');
 const FRAGMENTS = ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '40-board.js', '50-engine.js'];
+// The real vendored bytes: the harness now has to pass SHA-256, and using the
+// files the release ships keeps every existing engine test honest.
+const VENDOR = {
+  nnueJs: fs.readFileSync(path.join(ROOT, 'vendor', 'stockfish-19-lite-single.js')),
+  nnueWasm: fs.readFileSync(path.join(ROOT, 'vendor', 'stockfish-19-lite-single.wasm')),
+  fallbackJs: fs.readFileSync(path.join(ROOT, 'vendor', 'stockfish.js'))
+};
+const bytesOf = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+const engineResponse = (kind, bytes = VENDOR[kind]) => ({
+  ok: true,
+  status: 200,
+  arrayBuffer: async () => bytesOf(bytes),
+  text: async () => bytes.toString('utf8')
+});
+const engineFor = (url) => {
+  const value = String(url);
+  if (value.endsWith('/stockfish-19-lite-single.js')) return 'nnueJs';
+  if (value.endsWith('/stockfish-19-lite-single.wasm')) return 'nnueWasm';
+  if (value.endsWith('/stockfish.js')) return 'fallbackJs';
+  return null;
+};
+// Compute synchronously inside the promise: the real subtle crypto uses a
+// thread pool, and a test should not race the worker on that latency. The
+// digest API and the comparison are still the ones production runs.
+const digest = async (algorithm, data) => {
+  const bytes = ArrayBuffer.isView(data)
+    ? Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+    : Buffer.from(data);
+  const result = nodeCrypto.createHash('sha256').update(bytes).digest();
+  return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
+};
 
 function harness({ nnueSkip = true, fetchImpl = null } = {}) {
   const dom = new JSDOM('<!doctype html><body></body>', { url: 'https://www.chess.com/play/online' });
@@ -63,7 +95,9 @@ function harness({ nnueSkip = true, fetchImpl = null } = {}) {
     Blob: dom.window.Blob,
     Worker: FakeWorker,
     URL: { createObjectURL: () => 'blob:fake', revokeObjectURL: () => {} },
-    fetch: fetchImpl || (async () => ({ ok: true, status: 200, text: async () => '/* engine */' })),
+    crypto: { subtle: { digest } },
+    TextDecoder,
+    fetch: fetchImpl || (async (url) => engineResponse(engineFor(url))),
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
       setItem: (k, v) => storage.set(k, String(v)),
@@ -74,7 +108,7 @@ function harness({ nnueSkip = true, fetchImpl = null } = {}) {
   const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { WraithEngine, positionMoves, CONFIG, ENGINE_MIRROR, engineLabel };';
   vm.runInContext(source, context, { filename: 'engine-harness.js' });
   const api = vm.runInContext('globalThis.__t', context);
-  return { api, dom, workers, storage, advance };
+  return { api, dom, workers, storage, advance, VENDOR, engineResponse };
 }
 
 test('the UCI handshake ends with a ready engine and a mode', async () => {
@@ -329,8 +363,8 @@ test('an offline boot is retried on a backoff instead of staying dead', async ()
     nnueSkip: false,
     fetchImpl: async () => {
       calls += 1;
-      if (calls <= 2) throw new TypeError('Failed to fetch');
-      return { ok: true, status: 200, text: async () => '/* engine */' };
+      if (calls <= 3) throw new TypeError('Failed to fetch');
+      return engineResponse('fallbackJs');
     }
   });
   const engine = new api.WraithEngine();
@@ -362,7 +396,7 @@ test('a network failure does not remember the NNUE skip for a week', async () =>
     fetchImpl: async () => {
       calls += 1;
       if (calls === 1) throw new TypeError('Failed to fetch');
-      return { ok: true, status: 200, text: async () => '/* engine */' };
+      return engineResponse('fallbackJs');
     }
   });
   const engine = new api.WraithEngine();
@@ -388,7 +422,7 @@ test('a 404 on the NNUE script still remembers the skip', async () => {
     fetchImpl: async () => {
       calls += 1;
       if (calls === 1) throw new Error('HTTP 404 for nnue.js');
-      return { ok: true, status: 200, text: async () => '/* engine */' };
+      return engineResponse('fallbackJs');
     }
   });
   const engine = new api.WraithEngine();
@@ -401,6 +435,59 @@ test('a 404 on the NNUE script still remembers the skip', async () => {
   assert.equal(storage.has('chess-wraith-nnue-skip-v1'), true, 'a real 404 is a verdict');
   engine.destroy();
 });
+test('a SHA-256 mismatch stops the engine before a worker is created', async () => {
+  const corrupted = Buffer.from(VENDOR.fallbackJs);
+  corrupted[0] ^= 0xff;
+  const { api, workers, storage, engineResponse } = harness({
+    nnueSkip: false,
+    fetchImpl: async () => engineResponse('fallbackJs', corrupted)
+  });
+  // Pin the JS build so the assertion is about the fallback hash, not NNUE.
+  storage.set('chess-wraith-nnue-skip-v1', JSON.stringify({ mirror: api.ENGINE_MIRROR, at: Date.now() }));
+  const engine = new api.WraithEngine();
+  const errors = [];
+  engine.onError = (message) => errors.push(message);
+  await assert.rejects(
+    () => engine.boot(),
+    /engine integrity: SHA-256 mismatch for fallbackJs/
+  );
+  assert.equal(workers.length, 0, 'no Worker may be constructed from unverified bytes');
+  assert.equal(engine.mode, 'offline');
+  assert.equal(engine.retryAttempt, 1, 'the failure still enters the backoff');
+  assert.ok(errors.some((line) => /SHA-256 mismatch/.test(line)), 'the reason reaches the panel');
+  engine.destroy();
+});
+
+test('a corrupted NNUE sidecar falls back only to the verified JS engine', async () => {
+  const { api, workers, engineResponse, VENDOR } = harness({
+    nnueSkip: false,
+    fetchImpl: async (url) => {
+      const kind = engineFor(url);
+      if (kind === 'nnueWasm') {
+        const corrupted = Buffer.from(VENDOR.nnueWasm);
+        corrupted[corrupted.length - 1] ^= 0xff;
+        return engineResponse(kind, corrupted);
+      }
+      return engineResponse(kind);
+    }
+  });
+  const engine = new api.WraithEngine();
+  const errors = [];
+  engine.onError = (message) => errors.push(message);
+  const booting = engine.boot();
+  await flush();
+  const worker = workers[workers.length - 1];
+  assert.ok(worker, 'the verified fallback spawned once NNUE failed');
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+  assert.equal(engine.nnue, false);
+  assert.equal(engine.mode, 'Stockfish 2019 JS');
+  assert.equal(workers.length, 1, 'the NNUE worker was never created');
+  assert.ok(errors.some((line) => /SHA-256 mismatch for nnueWasm/.test(line)));
+  engine.destroy();
+});
+
 test('a worker that never says uciok enters the backoff instead of dying there', async () => {
   const { api, workers, advance, storage } = harness({ nnueSkip: false });
   // Pin the plain engine: the handshake deadline is the 4 s one, not NNUE's 6.5 s.

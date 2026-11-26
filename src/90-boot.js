@@ -252,6 +252,8 @@ const state = {
   foreignHits: 0,
   foreignFen: null,
   updateLatest: '',
+  updateManifest: null,
+  updateVerified: false,
   updateAt: 0,
   updateError: '',
   updateChecking: false
@@ -591,6 +593,23 @@ async function readVersion(url) {
   return String(parsed.version || parsed.tag_name || '').replace(/^v/i, '');
 }
 
+// The manifest carries the artifact's size and SHA-256 as well as its version.
+// It is still fetched from public static hosting, but a malformed or empty
+// manifest is treated as no proof at all, never as "probably fine".
+async function readUpdateManifest() {
+  const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
+  const response = await fetch(UPDATE_MANIFEST_URL, {
+    cache: 'no-store',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    signal
+  });
+  if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+  const manifest = parseUpdateManifest(await response.text());
+  if (!manifest) throw new Error('invalid manifest');
+  return manifest;
+}
+
 const UPDATE_CACHE_KEY = 'chess-wraith-update-v1';
 
 // The last known version, so a reload paints the button immediately instead of
@@ -604,9 +623,9 @@ function readUpdateCache() {
   }
 }
 
-function writeUpdateCache(latest) {
+function writeUpdateCache(latest, manifest) {
   try {
-    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ latest, at: Date.now() }));
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ latest, manifest: manifest || null, at: Date.now() }));
   } catch {
     /* private mode: the in-memory value is still correct */
   }
@@ -617,6 +636,11 @@ function restoreUpdateCache() {
   if (!cached) return;
   state.updateAt = Number(cached.at) || 0;
   if (versionNewer(cached.latest, VERSION)) state.updateLatest = cached.latest;
+  const manifest = parseUpdateManifest(cached.manifest);
+  if (manifest && manifest.version === cached.latest) {
+    state.updateManifest = manifest;
+    state.updateVerified = true;
+  }
 }
 
 async function checkUpdate(force) {
@@ -625,21 +649,26 @@ async function checkUpdate(force) {
   state.updateChecking = true;
   refreshPanel();
   try {
-    const answers = await Promise.all([
+    const [apiVersion, manifest] = await Promise.all([
       readVersion(UPDATE_API_URL).catch(() => ''),
-      readVersion(UPDATE_META_URL).catch(() => '')
+      readUpdateManifest().catch(() => null)
     ]);
-    let latest = '';
-    for (const answer of answers) {
-      if (!versionParts(answer)) continue;
-      if (!latest || versionNewer(answer, latest)) latest = answer;
-    }
+    let latest = manifest ? manifest.version : '';
+    if (versionParts(apiVersion) && (!latest || versionNewer(apiVersion, latest))) latest = apiVersion;
     if (!latest) throw new Error('no version');
+    // A manifest is trustworthy for the exact version it names. If the release
+    // API already knows a newer tag the CDN has not caught up with, the answer
+    // is still useful but the panel must not print "verified".
+    const verified = Boolean(manifest && manifest.version === latest);
     state.updateLatest = latest;
+    state.updateManifest = verified ? manifest : null;
+    state.updateVerified = verified;
     state.updateError = '';
-    writeUpdateCache(latest);
+    writeUpdateCache(latest, state.updateManifest);
   } catch (error) {
     state.updateLatest = '';
+    state.updateManifest = null;
+    state.updateVerified = false;
     state.updateError = String((error && error.message) || error).slice(0, 60);
   } finally {
     state.updateChecking = false;
@@ -1022,6 +1051,8 @@ function statusView() {
     slackBoost: state.slackBoost,
     passiveTab: state.passiveTab,
     updateLatest: state.updateLatest,
+    updateManifest: state.updateManifest,
+    updateVerified: state.updateVerified,
     updateAt: state.updateAt,
     updateError: state.updateError,
     updateChecking: state.updateChecking,

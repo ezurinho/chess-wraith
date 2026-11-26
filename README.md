@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.89.1-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.89.2-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -109,7 +109,7 @@ until jsDelivr serves the new tag. A failing check never reaches a tag.
 | **No stalls** | A 2 s tick that sees your turn, a fresh analysis and nothing armed re-arms the move: the panel used to say `playing` while a swallowed callback left it sitting there. |
 | **Hidden tab** | Chrome batches a hidden tab's timers to roughly one per minute, and chess.com keeps the clock running either way. A 1 s worker ticker pings the page while the tab is out of sight; a worker's timer budget is separate in most browsers, though that is not a documented guarantee. The reliable half is the detection: when the 2 s tick itself arrives more than 1.8× late the panel says `tab hidden · timers batched`, so the user knows it is the tab and not the board. |
 | **Pauses** | Promotion dialog, premove on the board, low clock, hidden tab while AFK is off, Stop. A finished game is not a pause: it queues the next one. |
-| **Updates** | The panel checks `cdn.jsdelivr.net/gh/ezurinho/chess-wraith@latest/package.json` on boot and every six hours (GitHub's release API as fallback), and again whenever you come back to the tab, the window regains focus or the network returns, at most once every five minutes. The last answer is cached, so a reload paints the `UPDATE vX.Y.Z` pill immediately instead of four seconds later. Both requests are public static files; nothing about the account leaves the tab. |
+| **Updates** | The panel checks `cdn.jsdelivr.net/gh/ezurinho/chess-wraith@latest/update.json` on boot and every six hours (GitHub's release API as fallback), and again whenever you come back to the tab, the window regains focus or the network returns, at most once every five minutes. `update.json` carries the version, size and SHA-256 of the release userscript; the panel shows `verified` only for a valid manifest of the latest version and `unverified` otherwise. The last answer is cached, so a reload paints the `UPDATE vX.Y.Z` pill immediately instead of four seconds later. Both requests are public static files; nothing about the account leaves the tab. |
 | **Panel** | Closed Shadow DOM, no page styles and no light-DOM ids, draggable and collapsible. A target strip with the accuracy band and a fill bar, live ACPL, the opponent estimate, your pace, their tempo, games played, time left and an account card with the signed-in user. |
 
 ## Verified on the real board
@@ -138,10 +138,11 @@ primary sources.
   markup changes, the selectors in `src/40-board.js` need updating. The panel
   will show `waiting for a board…` instead of failing silently.
 - **NNUE is not guaranteed.** Stockfish 19 Lite WASM boots in ~110 ms here and
-  runs at ~776 kN/s single-threaded, but it depends on a 1.2 MB download from
-  jsDelivr and on `WebAssembly` inside a blob worker. If either is blocked the
-  script falls back to the 2019 JS build, which is weaker and has no WDL bar.
-  The panel always names the engine that is running.
+  runs at ~776 kN/s single-threaded, but it depends on a 1.8 MB verified download
+  from jsDelivr and on `WebAssembly` inside a blob worker. If either is blocked
+  the script falls back to the verified 2019 JS build, which is weaker and has no
+  WDL bar. If neither hash matches, it stays offline instead of running bytes it
+  cannot identify. The panel always names the engine that is running.
 - **Synthetic events are not trusted events.** Moves are dispatched as
   `PointerEvent`s; `event.isTrusted` is `false` for them and no userscript can
   change that (see [research](docs/research.md)). If chess.com ever checks that
@@ -159,18 +160,22 @@ primary sources.
 
 ## How the engine is loaded
 
-The userscript is a single file; the 1.2 MB engine is not embedded. On boot it
-fetches `vendor/stockfish-19-lite-single.js` through jsDelivr, prefixes it with a
-shim and starts it as a blob worker. The shim exists because the build asks for
-its wasm at a URL it builds from `self.location.href` plus a content hash
-(`https://www.chess.comhttps://www.chess.com/554211df-…`); a blob worker has no
-directory to resolve that against, so every request that is not the engine's own
-script is answered with the wasm bytes from the mirror. `uciok` arrives in about
-110 ms and the panel shows `Stockfish 19 NNUE` with WDL.
+The userscript is a single file; the 1.8 MB engine is not embedded. On boot it
+fetches `stockfish-19-lite-single.js` and `.wasm` through jsDelivr, checks each
+body's byte length and SHA-256 against the constants pinned in
+`src/10-config.js`, and only then starts a worker. The wasm is handed over as a
+blob URL of the already-verified bytes, so the worker never downloads it a second
+time. The shim exists because the build asks for its wasm at a URL it builds from
+`self.location.href` plus a content hash
+(`https://www.chess.comhttps://www.chess.com/554211df-…`); the verified blob
+answers that request. `uciok` arrives in about 110 ms and the panel shows
+`Stockfish 19 NNUE` with WDL.
 
-If the worker does not answer within four seconds, or the boot throws, the script
-falls back to `vendor/stockfish.js` (Stockfish 2019, no WASM) from the same
-mirror. Nothing is fetched from anywhere else.
+If the worker does not answer within four seconds, or the NNUE verification
+fails, the script falls back to `vendor/stockfish.js` (Stockfish 2019, no WASM)
+from the same mirror — only after that file's hash matches too. If neither file
+matches, no worker is created and the engine stays in its retry backoff. Nothing
+is executed before it has been verified and nothing is fetched from anywhere else.
 
 Measured on chess.com, MultiPV 3 with WDL:
 

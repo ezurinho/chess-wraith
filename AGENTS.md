@@ -31,10 +31,10 @@ only version anyone installs.
    `tools/build.js` owns the order; a new fragment must be added there or it is
    silently dropped. `npm run build:check` catches a stale bundle, not a missing
    fragment.
-2. The version lives in five places (`package.json`, `src/00-header.js`,
-   `src/10-config.js`, `ENGINE_MIRROR`, the README badge) plus the top
-   `CHANGELOG.md` section. `node tools/release.js prepare <v>` moves all of them
-   and rebuilds; `check` fails when they disagree. Do not hand-edit one.
+2. The version lives in six places (`package.json`, `src/00-header.js`,
+   `src/10-config.js`, `ENGINE_MIRROR`, the README badge, `update.json`) plus the
+   top `CHANGELOG.md` section. `node tools/release.js prepare <v>` moves all of
+   them and rebuilds; `check` fails when they disagree. Do not hand-edit one.
 3. `ENGINE_MIRROR` is pinned to a release tag, and it must stay equal to the
    package version: the release is what jsDelivr can serve. The tag is created by
    the release workflow after the checks pass.
@@ -60,7 +60,7 @@ only version anyone installs.
 - `tests/unit/` — pure logic, jsdom board fixtures, a fake-worker engine test, the
   pace parser, per-account settings, input geometry, the promotion poll, the
   move retry plan, the game-over transition, engine recovery, the clock bounds
-  and timer throttling, and the beginner improvisation rate. **232 tests.** AUTO
+  and timer throttling, and the beginner improvisation rate. **238 tests.** AUTO
   is an invariant: boot, account adoption and the end of a game pin it on,
   except after a persisted session stop; only an explicit resume clears that, and
   a passive tab taking the lease back cannot rearm it. The

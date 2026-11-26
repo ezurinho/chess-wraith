@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.89.1
+// @version      1.89.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -42,13 +42,15 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.89.1';
+const VERSION = '1.89.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
 // static files, so the request carries nothing about the account.
 const UPDATE_REPO = 'ezurinho/chess-wraith';
-const UPDATE_META_URL = `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@latest/package.json`;
+// Version, size and SHA-256 of the release artifact. package.json still answers
+// the API fallback, but only a valid manifest makes the download "verified".
+const UPDATE_MANIFEST_URL = `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@latest/update.json`;
 const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
 const UPDATE_DOWNLOAD_URL = `https://github.com/${UPDATE_REPO}/releases/latest/download/chess-wraith.user.js`;
 const UPDATE_PAGE_URL = `https://github.com/${UPDATE_REPO}/releases/latest`;
@@ -134,12 +136,25 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
   fallbackJs: `${ENGINE_MIRROR}/stockfish.js`
 };
+// The bytes are pinned, not just the URL: a tag can be moved and an edge can
+// serve a partial body, and neither may reach a Worker before SHA-256 matches.
+// Size is checked first so a truncated download fails before hashing.
+const ENGINE_BYTES = Object.freeze({
+  nnueJs: 28230,
+  nnueWasm: 1845971,
+  fallbackJs: 1579948
+});
+const ENGINE_SHA256 = Object.freeze({
+  nnueJs: 'ccb130d7ff29408531c47d859a49f91d59d4f482d05a53eb1a3231a4f624c91a',
+  nnueWasm: 'ee4f115bdb2d32cadf96cada104a05b5ec257d7ad6f57582190b49bc71f096de',
+  fallbackJs: '723fda70117bfa8d5053a7bc4ae50cdc96dc9e3fd41b57627e4dfa0a0025957a'
+});
 
 
 // Bump the engine pin and the NNUE verdict is re-earned: a new build may fix
@@ -230,6 +245,30 @@ function versionNewer(next, current) {
     if (x !== y) return x > y;
   }
   return false;
+}
+
+// A manifest is the only update answer that carries proof of the bytes. Bad
+// JSON, a missing hash or a size of zero is not "unverified but installable";
+// it is no manifest at all, so the panel says unverified and never claims more.
+function parseUpdateManifest(value) {
+  let data = value;
+  if (typeof value === 'string') {
+    try {
+      data = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const version = String(data.version == null ? '' : data.version).trim().replace(/^v/i, '');
+  if (!versionParts(version)) return null;
+  const size = Number(data.size);
+  const sha256 = String(data.sha256 == null ? '' : data.sha256).trim().toLowerCase();
+  const file = data.file == null ? 'chess-wraith.user.js' : String(data.file);
+  if (!Number.isSafeInteger(size) || size <= 0) return null;
+  if (!/^[a-f0-9]{64}$/.test(sha256)) return null;
+  if (file !== 'chess-wraith.user.js') return null;
+  return { version, size, sha256, file };
 }
 
 function tabLeaseDecision(entry, now, ttlMs, myId) {
@@ -2497,6 +2536,19 @@ function isNetworkError(err) {
   return /^HTTP 5\d\d/.test(String(err.message || ''));
 }
 
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// SHA-256 is the gate in front of every Worker. In a non-secure context there
+// is no subtle crypto; that is a reason to stay offline, not a reason to run
+// unverified bytes.
+async function sha256Hex(buffer) {
+  const subtle = globalThis.crypto && globalThis.crypto.subtle;
+  if (!subtle || typeof subtle.digest !== 'function') throw new Error('SHA-256 unavailable in this context');
+  return toHex(await subtle.digest('SHA-256', buffer));
+}
+
 // What the engine says it is, not what we hoped it was. The panel prints this
 // string and the debug report repeats it, so a build served from another tag
 // must not be mislabelled by a constant: the vendored worker answers
@@ -2535,6 +2587,20 @@ class WraithEngine {
     this.retryAttempt = 0;
     this.retryDelay = 0;
     this.retryAt = 0;
+    // A verified wasm body is handed to the worker as a blob URL. It must live
+    // as long as that worker and be revoked when the worker is replaced.
+    this.assetUrls = [];
+  }
+
+  #clearAssetUrls() {
+    for (const url of this.assetUrls) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* already revoked */
+      }
+    }
+    this.assetUrls = [];
   }
 
   async boot() {
@@ -2565,8 +2631,15 @@ class WraithEngine {
     // first failure the four second handshake is pure delay. Remember the
     // verdict for a week instead of paying it on every page load.
     if (readNnueSkip()) {
-      await this.#spawn(false);
-      return;
+      try {
+        await this.#spawn(false);
+        return;
+      } catch (err) {
+        // A pinned hash failure is not a reason to stay quietly offline: the
+        // backoff may see a repaired mirror, and until then no worker exists.
+        this.#scheduleRetry(err);
+        throw err;
+      }
     }
     try {
       try {
@@ -2636,6 +2709,7 @@ class WraithEngine {
     this.searching = false;
     this.search = null;
     this.lines = new Map();
+    this.#clearAssetUrls();
     this.onError && this.onError(reason);
     if (pending && pending.resolve) pending.resolve([]);
     this.#bootInner()
@@ -2660,6 +2734,7 @@ class WraithEngine {
     this.worker = null;
     this.ready = false;
     this.searching = false;
+    this.#clearAssetUrls();
 
     const source = preferNnue ? await this.#nnueWorkerSource() : await this.#plainWorkerSource();
     this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish 2019 JS';
@@ -2726,19 +2801,47 @@ class WraithEngine {
     }, preferNnue ? 6500 : 4000);
   }
 
-  async #fetchText(url) {
+  async #fetchBytes(url) {
     const res = await fetch(url, { cache: 'force-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    return res.text();
+    if (!res || !res.ok) throw new Error(`HTTP ${res ? res.status : 0} for ${url}`);
+    const bytes = await res.arrayBuffer();
+    if (!bytes || !bytes.byteLength) throw new Error(`empty engine body for ${url}`);
+    return bytes;
+  }
+
+  // The only place engine bytes enter the page. Size first, then hash: a body
+  // that passed both is the body the release pinned, and only then is it
+  // allowed to become a Worker (or an inlined script).
+  async #verifiedBytes(kind) {
+    const bytes = await this.#fetchBytes(ENGINE_FILES[kind]);
+    const expectedSize = ENGINE_BYTES[kind];
+    const expectedHash = ENGINE_SHA256[kind];
+    if (!expectedHash) throw new Error(`engine integrity: no SHA-256 pinned for ${kind}`);
+    if (bytes.byteLength !== expectedSize) {
+      throw new Error(`engine integrity: size mismatch for ${kind} (${bytes.byteLength} != ${expectedSize})`);
+    }
+    const actual = await sha256Hex(bytes);
+    if (actual !== expectedHash) {
+      throw new Error(`engine integrity: SHA-256 mismatch for ${kind} (${actual.slice(0, 12)}... != ${expectedHash.slice(0, 12)}...)`);
+    }
+    return bytes;
   }
 
   async #nnueWorkerSource() {
-    const code = await this.#fetchText(ENGINE_FILES.nnueJs);
-    return buildNnueShim(ENGINE_FILES.nnueWasm, ENGINE_FILES.nnueJs) + code;
+    const [js, wasm] = await Promise.all([
+      this.#verifiedBytes('nnueJs'),
+      this.#verifiedBytes('nnueWasm')
+    ]);
+    // The shim needs a URL, but the bytes are already verified. A blob keeps the
+    // worker from fetching the sidecar a second time behind our back.
+    const wasmUrl = URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }));
+    this.assetUrls.push(wasmUrl);
+    const code = new TextDecoder().decode(js);
+    return buildNnueShim(wasmUrl, ENGINE_FILES.nnueJs) + code;
   }
 
   async #plainWorkerSource() {
-    return this.#fetchText(ENGINE_FILES.fallbackJs);
+    return new TextDecoder().decode(await this.#verifiedBytes('fallbackJs'));
   }
 
   #send(cmd) {
@@ -2935,6 +3038,7 @@ class WraithEngine {
     this.booted = null;
     this.searching = false;
     this.search = null;
+    this.#clearAssetUrls();
     await this.boot();
     return this.mode;
   }
@@ -2988,6 +3092,7 @@ class WraithEngine {
     this.worker = null;
     this.search = null;
     this.searching = false;
+    this.#clearAssetUrls();
     // A destroyed engine that still reports ready is a trap: the next search
     // posts into nothing and the watchdog pays the whole budget to find out.
     this.ready = false;
@@ -4869,6 +4974,7 @@ const PANEL_HTML = `
           <div class="rows">
             <div class="row"><span>Installed</span><b data-el="installed">–</b></div>
             <div class="row"><span>Latest</span><b data-el="latest">–</b></div>
+            <div class="row"><span>Manifest</span><b data-el="updateVerified">unverified</b></div>
             <div class="row"><span>Checked</span><b data-el="checked">never</b></div>
           </div>
           <div class="card-actions">
@@ -5372,19 +5478,26 @@ class WraithPanel {
       // Only the number: the header has 322 px and the word plus a version
       // ellipsised the title to "CHESS WRA…".
       this.el.update.querySelector('span').textContent = latest;
-      this.el.update.title = `Download v${latest} from GitHub`;
+      this.el.update.title = v.updateVerified
+        ? `Download v${latest} (manifest verified)`
+        : `Download v${latest} from GitHub (manifest unverified)`;
       this.el.update.setAttribute('aria-label', `Update available: v${latest}`);
     }
     this.el.latest.textContent = latest ? latest : '–';
+    const manifest = v.updateManifest;
+    this.el.updateVerified.textContent = v.updateVerified && manifest ? 'verified' : 'unverified';
+    this.el.updateVerified.title = v.updateVerified && manifest
+      ? `${manifest.file} · ${manifest.size} bytes · sha256 ${manifest.sha256.slice(0, 16)}…`
+      : 'No valid update.json for the latest release';
     this.el.checked.textContent = v.updateAt ? formatAge(Date.now() - v.updateAt) : 'never';
     this.el.updateState.textContent = v.updateChecking
       ? 'checking…'
       : v.updateError
         ? `failed · ${v.updateError}`
         : newer
-          ? 'newer available'
+          ? (v.updateVerified ? 'newer · verified' : 'newer · unverified')
           : latest
-            ? 'up to date'
+            ? (v.updateVerified ? 'up to date · verified' : 'up to date · unverified')
             : 'not checked';
     this.el.kaInfo.textContent = v.keepAlive || 'off';
     // The card after the last game. `lastReport` is null until one finished,
@@ -5701,6 +5814,8 @@ const state = {
   foreignHits: 0,
   foreignFen: null,
   updateLatest: '',
+  updateManifest: null,
+  updateVerified: false,
   updateAt: 0,
   updateError: '',
   updateChecking: false
@@ -6040,6 +6155,23 @@ async function readVersion(url) {
   return String(parsed.version || parsed.tag_name || '').replace(/^v/i, '');
 }
 
+// The manifest carries the artifact's size and SHA-256 as well as its version.
+// It is still fetched from public static hosting, but a malformed or empty
+// manifest is treated as no proof at all, never as "probably fine".
+async function readUpdateManifest() {
+  const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined;
+  const response = await fetch(UPDATE_MANIFEST_URL, {
+    cache: 'no-store',
+    credentials: 'omit',
+    referrerPolicy: 'no-referrer',
+    signal
+  });
+  if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+  const manifest = parseUpdateManifest(await response.text());
+  if (!manifest) throw new Error('invalid manifest');
+  return manifest;
+}
+
 const UPDATE_CACHE_KEY = 'chess-wraith-update-v1';
 
 // The last known version, so a reload paints the button immediately instead of
@@ -6053,9 +6185,9 @@ function readUpdateCache() {
   }
 }
 
-function writeUpdateCache(latest) {
+function writeUpdateCache(latest, manifest) {
   try {
-    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ latest, at: Date.now() }));
+    localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify({ latest, manifest: manifest || null, at: Date.now() }));
   } catch {
     /* private mode: the in-memory value is still correct */
   }
@@ -6066,6 +6198,11 @@ function restoreUpdateCache() {
   if (!cached) return;
   state.updateAt = Number(cached.at) || 0;
   if (versionNewer(cached.latest, VERSION)) state.updateLatest = cached.latest;
+  const manifest = parseUpdateManifest(cached.manifest);
+  if (manifest && manifest.version === cached.latest) {
+    state.updateManifest = manifest;
+    state.updateVerified = true;
+  }
 }
 
 async function checkUpdate(force) {
@@ -6074,21 +6211,26 @@ async function checkUpdate(force) {
   state.updateChecking = true;
   refreshPanel();
   try {
-    const answers = await Promise.all([
+    const [apiVersion, manifest] = await Promise.all([
       readVersion(UPDATE_API_URL).catch(() => ''),
-      readVersion(UPDATE_META_URL).catch(() => '')
+      readUpdateManifest().catch(() => null)
     ]);
-    let latest = '';
-    for (const answer of answers) {
-      if (!versionParts(answer)) continue;
-      if (!latest || versionNewer(answer, latest)) latest = answer;
-    }
+    let latest = manifest ? manifest.version : '';
+    if (versionParts(apiVersion) && (!latest || versionNewer(apiVersion, latest))) latest = apiVersion;
     if (!latest) throw new Error('no version');
+    // A manifest is trustworthy for the exact version it names. If the release
+    // API already knows a newer tag the CDN has not caught up with, the answer
+    // is still useful but the panel must not print "verified".
+    const verified = Boolean(manifest && manifest.version === latest);
     state.updateLatest = latest;
+    state.updateManifest = verified ? manifest : null;
+    state.updateVerified = verified;
     state.updateError = '';
-    writeUpdateCache(latest);
+    writeUpdateCache(latest, state.updateManifest);
   } catch (error) {
     state.updateLatest = '';
+    state.updateManifest = null;
+    state.updateVerified = false;
     state.updateError = String((error && error.message) || error).slice(0, 60);
   } finally {
     state.updateChecking = false;
@@ -6471,6 +6613,8 @@ function statusView() {
     slackBoost: state.slackBoost,
     passiveTab: state.passiveTab,
     updateLatest: state.updateLatest,
+    updateManifest: state.updateManifest,
+    updateVerified: state.updateVerified,
     updateAt: state.updateAt,
     updateError: state.updateError,
     updateChecking: state.updateChecking,

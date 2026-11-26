@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.89.2 — 2026-11-26
+
+The engine and the update answer have a hash to prove themselves.
+
+- The NNUE JavaScript, its wasm sidecar and the 2019 fallback are pinned by byte
+  length and SHA-256 in `src/10-config.js`. Both are checked on the main thread
+  before any Worker is constructed; the wasm is handed to the worker as a blob of
+  the verified bytes, and a mismatch fails closed instead of running the body.
+- `update.json` is generated from the exact released userscript with its version,
+  size and SHA-256. The updater prefers it, falls back to the release API, and the
+  panel says `verified` or `unverified` instead of guessing.
+- Two engine regressions cover a corrupted fallback (no Worker is created) and a
+  corrupted NNUE sidecar (only the verified JS fallback runs); a third pins the
+  vendor hashes and the manifest to the committed artifact.
+
 ## 1.89.1 — 2026-11-26
 
 A passive tab can no longer rearm a stopped session.

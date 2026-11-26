@@ -88,6 +88,30 @@ function versionNewer(next, current) {
   return false;
 }
 
+// A manifest is the only update answer that carries proof of the bytes. Bad
+// JSON, a missing hash or a size of zero is not "unverified but installable";
+// it is no manifest at all, so the panel says unverified and never claims more.
+function parseUpdateManifest(value) {
+  let data = value;
+  if (typeof value === 'string') {
+    try {
+      data = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+  const version = String(data.version == null ? '' : data.version).trim().replace(/^v/i, '');
+  if (!versionParts(version)) return null;
+  const size = Number(data.size);
+  const sha256 = String(data.sha256 == null ? '' : data.sha256).trim().toLowerCase();
+  const file = data.file == null ? 'chess-wraith.user.js' : String(data.file);
+  if (!Number.isSafeInteger(size) || size <= 0) return null;
+  if (!/^[a-f0-9]{64}$/.test(sha256)) return null;
+  if (file !== 'chess-wraith.user.js') return null;
+  return { version, size, sha256, file };
+}
+
 function tabLeaseDecision(entry, now, ttlMs, myId) {
   if (!entry || typeof entry !== 'object') return 'claim';
   const at = Number(entry.at);

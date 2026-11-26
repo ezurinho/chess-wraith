@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 'use strict';
 
-// Version bookkeeping for the four places the version lives. The release
-// workflow runs prepare -> build -> check before it tags anything, so a tag
-// can never point at a bundle that disagrees with itself.
+// Version bookkeeping for every place the version lives. The release workflow
+// runs prepare -> build -> check before it tags anything, so a tag can never
+// point at a bundle or manifest that disagrees with itself.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -34,6 +34,13 @@ function versions() {
     config: (/const VERSION = '([^']+)'/.exec(read('src/10-config.js')) || [])[1],
     readme: (/version-(\d+\.\d+\.\d+)-/.exec(read('README.md')) || [])[1],
     mirror: (/@v(\d+\.\d+\.\d+)\/vendor/.exec(read('src/10-config.js')) || [])[1],
+    manifest: (() => {
+      try {
+        return JSON.parse(read('update.json')).version;
+      } catch {
+        return '';
+      }
+    })(),
     changelog: (/^## (\d+\.\d+\.\d+)/m.exec(read('CHANGELOG.md')) || [])[1]
   };
 }

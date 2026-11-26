@@ -1,10 +1,12 @@
-const VERSION = '1.89.1';
+const VERSION = '1.89.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
 // static files, so the request carries nothing about the account.
 const UPDATE_REPO = 'ezurinho/chess-wraith';
-const UPDATE_META_URL = `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@latest/package.json`;
+// Version, size and SHA-256 of the release artifact. package.json still answers
+// the API fallback, but only a valid manifest makes the download "verified".
+const UPDATE_MANIFEST_URL = `https://cdn.jsdelivr.net/gh/${UPDATE_REPO}@latest/update.json`;
 const UPDATE_API_URL = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
 const UPDATE_DOWNLOAD_URL = `https://github.com/${UPDATE_REPO}/releases/latest/download/chess-wraith.user.js`;
 const UPDATE_PAGE_URL = `https://github.com/${UPDATE_REPO}/releases/latest`;
@@ -90,10 +92,23 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
   fallbackJs: `${ENGINE_MIRROR}/stockfish.js`
 };
+// The bytes are pinned, not just the URL: a tag can be moved and an edge can
+// serve a partial body, and neither may reach a Worker before SHA-256 matches.
+// Size is checked first so a truncated download fails before hashing.
+const ENGINE_BYTES = Object.freeze({
+  nnueJs: 28230,
+  nnueWasm: 1845971,
+  fallbackJs: 1579948
+});
+const ENGINE_SHA256 = Object.freeze({
+  nnueJs: 'ccb130d7ff29408531c47d859a49f91d59d4f482d05a53eb1a3231a4f624c91a',
+  nnueWasm: 'ee4f115bdb2d32cadf96cada104a05b5ec257d7ad6f57582190b49bc71f096de',
+  fallbackJs: '723fda70117bfa8d5053a7bc4ae50cdc96dc9e3fd41b57627e4dfa0a0025957a'
+});
 

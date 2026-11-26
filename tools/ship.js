@@ -48,7 +48,8 @@ function notesFor(v) {
 async function waitForCdn(v) {
   const urls = [
     `https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v${v}/vendor/stockfish-19-lite-single.wasm`,
-    `https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v${v}/vendor/stockfish.js`
+    `https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v${v}/vendor/stockfish.js`,
+    `https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v${v}/update.json`
   ];
   const deadline = Date.now() + 180000;
   while (Date.now() < deadline) {
@@ -77,7 +78,7 @@ async function waitForCdn(v) {
   run('git', ['tag', '-a', `v${version}`, '-m', `chess-wraith ${version}`]);
   run('git', ['push', 'origin', 'main']);
   run('git', ['push', 'origin', `v${version}`]);
-  run('gh', ['release', 'create', `v${version}`, 'chess-wraith.user.js', 'chess-wraith.meta.js', '--title', title, '--notes-file', '.release-notes.md']);
+  run('gh', ['release', 'create', `v${version}`, 'chess-wraith.user.js', 'chess-wraith.meta.js', 'update.json', '--title', title, '--notes-file', '.release-notes.md']);
   const cdn = await waitForCdn(version);
   const url = `https://github.com/ezurinho/chess-wraith/releases/tag/v${version}`;
   console.log(`\nship: ${url}`);

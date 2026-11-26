@@ -4,8 +4,34 @@
 // `bundle.test.js` runs the file that ships. The artifact is what users load, and
 // a fragment dropped by tools/build.js would keep every other test green.
 
+const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
+const nodeCrypto = require('node:crypto');
 const { JSDOM } = require('jsdom');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const VENDOR = {
+  nnueJs: fs.readFileSync(path.join(ROOT, 'vendor', 'stockfish-19-lite-single.js')),
+  nnueWasm: fs.readFileSync(path.join(ROOT, 'vendor', 'stockfish-19-lite-single.wasm')),
+  fallbackJs: fs.readFileSync(path.join(ROOT, 'vendor', 'stockfish.js'))
+};
+const vendorFor = (url) => {
+  const value = String(url);
+  if (value.endsWith('/stockfish-19-lite-single.js')) return VENDOR.nnueJs;
+  if (value.endsWith('/stockfish-19-lite-single.wasm')) return VENDOR.nnueWasm;
+  if (value.endsWith('/stockfish.js')) return VENDOR.fallbackJs;
+  return null;
+};
+const arrayBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+// A test should not wait on libuv's hash pool before the fake worker appears.
+const digest = async (algorithm, data) => {
+  const bytes = ArrayBuffer.isView(data)
+    ? Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+    : Buffer.from(data);
+  const result = nodeCrypto.createHash('sha256').update(bytes).digest();
+  return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
+};
 
 const START = [
   ['br', '18'], ['bn', '28'], ['bb', '38'], ['bq', '48'], ['bk', '58'], ['bb', '68'], ['bn', '78'], ['br', '88'],
@@ -72,21 +98,30 @@ function bootSource(source, options = {}) {
     }
     return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0 };
   };
-  // Two callers: the engine downloads its source as text (a fake worker never
-  // runs it), and the account lookup asks the public API for stats.
+  // Two callers: the engine downloads bytes that must match the pinned hashes
+  // (a fake worker never runs them), and the account lookup asks for stats.
   window.fetch = async (url) => {
     if (options.signedOut && String(url).includes('/pub/player/')) {
       return { ok: false, status: 404, json: async () => ({}) };
     }
+    const engine = vendorFor(url);
+    if (engine) {
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => arrayBuffer(engine),
+        text: async () => engine.toString('utf8')
+      };
+    }
     return ({
-    ok: true,
-    status: 200,
-    text: async () => '/* stubbed engine source */',
-    arrayBuffer: async () => new ArrayBuffer(8),
-    json: async () => ({
-      chess_rapid: { last: { rating: 1480 }, record: { win: 40, loss: 38, draw: 2 } }
-    })
-  });
+      ok: true,
+      status: 200,
+      text: async () => '{"version":"0.0.0"}',
+      arrayBuffer: async () => new ArrayBuffer(0),
+      json: async () => ({
+        chess_rapid: { last: { rating: 1480 }, record: { win: 40, loss: 38, draw: 2 } }
+      })
+    });
   }
   if (options.signedOut) {
     const user = window.document.getElementById('user-username-component');
@@ -128,6 +163,8 @@ function bootSource(source, options = {}) {
     cancelAnimationFrame: (id) => clearTimeout(id),
     URL: window.URL,
     Blob: window.Blob,
+    crypto: { subtle: { digest } },
+    TextDecoder,
     Worker: FakeWorker,
     fetch: window.fetch,
     performance: window.performance,

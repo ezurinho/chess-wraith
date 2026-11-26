@@ -1,6 +1,6 @@
 {
   "name": "chess-wraith",
-  "version": "1.89.1",
+  "version": "1.89.2",
   "private": true,
   "description": "CHESS WRAITH — human-paced Chess.com userscript with local Stockfish",
   "scripts": {

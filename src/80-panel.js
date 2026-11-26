@@ -381,6 +381,7 @@ const PANEL_HTML = `
           <div class="rows">
             <div class="row"><span>Installed</span><b data-el="installed">–</b></div>
             <div class="row"><span>Latest</span><b data-el="latest">–</b></div>
+            <div class="row"><span>Manifest</span><b data-el="updateVerified">unverified</b></div>
             <div class="row"><span>Checked</span><b data-el="checked">never</b></div>
           </div>
           <div class="card-actions">
@@ -884,19 +885,26 @@ class WraithPanel {
       // Only the number: the header has 322 px and the word plus a version
       // ellipsised the title to "CHESS WRA…".
       this.el.update.querySelector('span').textContent = latest;
-      this.el.update.title = `Download v${latest} from GitHub`;
+      this.el.update.title = v.updateVerified
+        ? `Download v${latest} (manifest verified)`
+        : `Download v${latest} from GitHub (manifest unverified)`;
       this.el.update.setAttribute('aria-label', `Update available: v${latest}`);
     }
     this.el.latest.textContent = latest ? latest : '–';
+    const manifest = v.updateManifest;
+    this.el.updateVerified.textContent = v.updateVerified && manifest ? 'verified' : 'unverified';
+    this.el.updateVerified.title = v.updateVerified && manifest
+      ? `${manifest.file} · ${manifest.size} bytes · sha256 ${manifest.sha256.slice(0, 16)}…`
+      : 'No valid update.json for the latest release';
     this.el.checked.textContent = v.updateAt ? formatAge(Date.now() - v.updateAt) : 'never';
     this.el.updateState.textContent = v.updateChecking
       ? 'checking…'
       : v.updateError
         ? `failed · ${v.updateError}`
         : newer
-          ? 'newer available'
+          ? (v.updateVerified ? 'newer · verified' : 'newer · unverified')
           : latest
-            ? 'up to date'
+            ? (v.updateVerified ? 'up to date · verified' : 'up to date · unverified')
             : 'not checked';
     this.el.kaInfo.textContent = v.keepAlive || 'off';
     // The card after the last game. `lastReport` is null until one finished,

@@ -35,6 +35,19 @@ function isNetworkError(err) {
   return /^HTTP 5\d\d/.test(String(err.message || ''));
 }
 
+function toHex(buffer) {
+  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// SHA-256 is the gate in front of every Worker. In a non-secure context there
+// is no subtle crypto; that is a reason to stay offline, not a reason to run
+// unverified bytes.
+async function sha256Hex(buffer) {
+  const subtle = globalThis.crypto && globalThis.crypto.subtle;
+  if (!subtle || typeof subtle.digest !== 'function') throw new Error('SHA-256 unavailable in this context');
+  return toHex(await subtle.digest('SHA-256', buffer));
+}
+
 // What the engine says it is, not what we hoped it was. The panel prints this
 // string and the debug report repeats it, so a build served from another tag
 // must not be mislabelled by a constant: the vendored worker answers
@@ -73,6 +86,20 @@ class WraithEngine {
     this.retryAttempt = 0;
     this.retryDelay = 0;
     this.retryAt = 0;
+    // A verified wasm body is handed to the worker as a blob URL. It must live
+    // as long as that worker and be revoked when the worker is replaced.
+    this.assetUrls = [];
+  }
+
+  #clearAssetUrls() {
+    for (const url of this.assetUrls) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* already revoked */
+      }
+    }
+    this.assetUrls = [];
   }
 
   async boot() {
@@ -103,8 +130,15 @@ class WraithEngine {
     // first failure the four second handshake is pure delay. Remember the
     // verdict for a week instead of paying it on every page load.
     if (readNnueSkip()) {
-      await this.#spawn(false);
-      return;
+      try {
+        await this.#spawn(false);
+        return;
+      } catch (err) {
+        // A pinned hash failure is not a reason to stay quietly offline: the
+        // backoff may see a repaired mirror, and until then no worker exists.
+        this.#scheduleRetry(err);
+        throw err;
+      }
     }
     try {
       try {
@@ -174,6 +208,7 @@ class WraithEngine {
     this.searching = false;
     this.search = null;
     this.lines = new Map();
+    this.#clearAssetUrls();
     this.onError && this.onError(reason);
     if (pending && pending.resolve) pending.resolve([]);
     this.#bootInner()
@@ -198,6 +233,7 @@ class WraithEngine {
     this.worker = null;
     this.ready = false;
     this.searching = false;
+    this.#clearAssetUrls();
 
     const source = preferNnue ? await this.#nnueWorkerSource() : await this.#plainWorkerSource();
     this.mode = preferNnue ? 'Stockfish 19 NNUE' : 'Stockfish 2019 JS';
@@ -264,19 +300,47 @@ class WraithEngine {
     }, preferNnue ? 6500 : 4000);
   }
 
-  async #fetchText(url) {
+  async #fetchBytes(url) {
     const res = await fetch(url, { cache: 'force-cache' });
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    return res.text();
+    if (!res || !res.ok) throw new Error(`HTTP ${res ? res.status : 0} for ${url}`);
+    const bytes = await res.arrayBuffer();
+    if (!bytes || !bytes.byteLength) throw new Error(`empty engine body for ${url}`);
+    return bytes;
+  }
+
+  // The only place engine bytes enter the page. Size first, then hash: a body
+  // that passed both is the body the release pinned, and only then is it
+  // allowed to become a Worker (or an inlined script).
+  async #verifiedBytes(kind) {
+    const bytes = await this.#fetchBytes(ENGINE_FILES[kind]);
+    const expectedSize = ENGINE_BYTES[kind];
+    const expectedHash = ENGINE_SHA256[kind];
+    if (!expectedHash) throw new Error(`engine integrity: no SHA-256 pinned for ${kind}`);
+    if (bytes.byteLength !== expectedSize) {
+      throw new Error(`engine integrity: size mismatch for ${kind} (${bytes.byteLength} != ${expectedSize})`);
+    }
+    const actual = await sha256Hex(bytes);
+    if (actual !== expectedHash) {
+      throw new Error(`engine integrity: SHA-256 mismatch for ${kind} (${actual.slice(0, 12)}... != ${expectedHash.slice(0, 12)}...)`);
+    }
+    return bytes;
   }
 
   async #nnueWorkerSource() {
-    const code = await this.#fetchText(ENGINE_FILES.nnueJs);
-    return buildNnueShim(ENGINE_FILES.nnueWasm, ENGINE_FILES.nnueJs) + code;
+    const [js, wasm] = await Promise.all([
+      this.#verifiedBytes('nnueJs'),
+      this.#verifiedBytes('nnueWasm')
+    ]);
+    // The shim needs a URL, but the bytes are already verified. A blob keeps the
+    // worker from fetching the sidecar a second time behind our back.
+    const wasmUrl = URL.createObjectURL(new Blob([wasm], { type: 'application/wasm' }));
+    this.assetUrls.push(wasmUrl);
+    const code = new TextDecoder().decode(js);
+    return buildNnueShim(wasmUrl, ENGINE_FILES.nnueJs) + code;
   }
 
   async #plainWorkerSource() {
-    return this.#fetchText(ENGINE_FILES.fallbackJs);
+    return new TextDecoder().decode(await this.#verifiedBytes('fallbackJs'));
   }
 
   #send(cmd) {
@@ -473,6 +537,7 @@ class WraithEngine {
     this.booted = null;
     this.searching = false;
     this.search = null;
+    this.#clearAssetUrls();
     await this.boot();
     return this.mode;
   }
@@ -526,6 +591,7 @@ class WraithEngine {
     this.worker = null;
     this.search = null;
     this.searching = false;
+    this.#clearAssetUrls();
     // A destroyed engine that still reports ready is a trap: the next search
     // posts into nothing and the watchdog pays the whole budget to find out.
     this.ready = false;
