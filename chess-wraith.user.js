@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.52.1
+// @version      1.52.2
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.52.1';
+const VERSION = '1.52.2';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.52.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.52.2/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -5646,6 +5646,13 @@ function slackCfg() {
 
 // A SAN move the account plays, as UCI on this board. The tracker already knows
 // how to match one; a table entry that does not match is not played.
+// One budget for the restricted search, whoever asks for it: a hand on the button
+// has no more right to think than the timer has.
+function probeBudgetMs() {
+  const paced = Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6);
+  return Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, paced)));
+}
+
 function openingUci(snap, san) {
   try {
     const move = Chess.matchSanMove(snap, san);
@@ -5669,7 +5676,7 @@ function probeOpeningMove(probe, result) {
     // A fixed 400 ms is a rapid budget: on 1+0 the probe would spend most of the
     // move's search on a move the account plays without thinking.
     // The 180 ms floor must never outlast a search the user set shorter than that.
-    moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6))))
+    moveTimeMs: probeBudgetMs()
   };
   engine
     .analyze(request)
@@ -5918,7 +5925,7 @@ async function playNow() {
       depth: Math.min(cfg.maxDepth, 12),
       // Same budget the timer uses: the manual path must not think harder than
       // the clock allows just because a human pressed the button.
-      moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6))))
+      moveTimeMs: probeBudgetMs()
     });
     state.probeSpentMs = Date.now() - started;
     if (!state.snapshot || state.snapshot.fen !== snap.fen) return false;

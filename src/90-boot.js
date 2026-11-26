@@ -1076,6 +1076,13 @@ function slackCfg() {
 
 // A SAN move the account plays, as UCI on this board. The tracker already knows
 // how to match one; a table entry that does not match is not played.
+// One budget for the restricted search, whoever asks for it: a hand on the button
+// has no more right to think than the timer has.
+function probeBudgetMs() {
+  const paced = Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6);
+  return Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, paced)));
+}
+
 function openingUci(snap, san) {
   try {
     const move = Chess.matchSanMove(snap, san);
@@ -1099,7 +1106,7 @@ function probeOpeningMove(probe, result) {
     // A fixed 400 ms is a rapid budget: on 1+0 the probe would spend most of the
     // move's search on a move the account plays without thinking.
     // The 180 ms floor must never outlast a search the user set shorter than that.
-    moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6))))
+    moveTimeMs: probeBudgetMs()
   };
   engine
     .analyze(request)
@@ -1348,7 +1355,7 @@ async function playNow() {
       depth: Math.min(cfg.maxDepth, 12),
       // Same budget the timer uses: the manual path must not think harder than
       // the clock allows just because a human pressed the button.
-      moveTimeMs: Math.max(80, Math.min(400, cfg.moveTimeMs, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6))))
+      moveTimeMs: probeBudgetMs()
     });
     state.probeSpentMs = Date.now() - started;
     if (!state.snapshot || state.snapshot.fen !== snap.fen) return false;

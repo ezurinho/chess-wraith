@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.52.2 — 2026-11-26
+
+One probe budget, one place.
+
+- The restricted-search budget existed as two copies of the same formula, one per
+  caller, and the second copy drifted in 1.52.0. `probeBudgetMs()` now owns it and
+  both the timer and the button call it.
+
 ## 1.52.1 — 2026-11-26
 
 The button's probe obeys the same budget as the timer's.
