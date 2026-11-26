@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.51.2 — 2026-11-26
+
+The report says whether the repertoire was really consulted.
+
+- `report()` adds `probe N` next to the repertoire line: the count of restricted
+  searches that answered this session, the only visible sign that the account's own
+  move was judged instead of merely reordered.
+- 194 tests.
+
 ## 1.51.1 — 2026-11-26
 
 A long session keeps reading the archive instead of the hour it booted.

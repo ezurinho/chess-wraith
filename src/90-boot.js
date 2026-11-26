@@ -188,6 +188,7 @@ const state = {
   probedKey: '',
   probeLine: null,
   probeSpentMs: 0,
+  // How many times a restricted search has been asked this session: the only
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   accountGames: null,
@@ -1097,6 +1098,7 @@ function probeOpeningMove(probe, result) {
     .then((lines) => {
       const line = lines && lines[0];
       if (!line || line.bestUci !== probe.uci) return;
+      state.probes += 1;
       state.probeLine = { ...line, opening: true, fen: probe.fen };
     })
     .catch(() => [])
@@ -1609,7 +1611,7 @@ function reportText() {
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     opening
-      ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)`
+      ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)${state.probes ? ` · probe ${state.probes}` : ''}`
       : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',

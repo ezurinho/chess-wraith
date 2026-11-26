@@ -226,6 +226,10 @@ Now the delay is reduced by exactly what the probe spent (`spentMs`, clamped to
 without a probe. Measured in the bundle: `computeDelay(...spentMs: 0)` minus
 `computeDelay(...spentMs: 400)` is 400 ms.
 
+`report()` carries `probe N` next to the repertoire line once a restricted search
+has fired, so the panel says out loud whether the account's own move was judged
+or only reordered.
+
 The probe also re-enters `scheduleAutoMove` about 70 ms later, which is long
 enough for the board to have moved on. That function now refuses a `result` whose
 `fen` no longer matches the board: a move computed for one position is never
