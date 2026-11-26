@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.38.0
+// @version      1.39.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.38.0';
+const VERSION = '1.39.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.38.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.39.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -411,6 +411,37 @@ function eloToSkill(elo) {
 // The engine plays at the floor and nothing said so, so the panel does now, and
 // the move chooser compensates with slack instead of pretending the number took.
 const ELO_FLOOR = 1320;
+
+// A night is not one strength. Two accounts at the same rating do not play the
+// same moves, and nobody plays their rating exactly on every game: form drifts
+// by a few dozen points and comes back. This is a stable pseudo-random offset
+// keyed by the account and the game number, so every game differs and the same
+// game always asks for the same strength.
+function formOffset(key, span) {
+  const text = String(key || '');
+  const width = clampInt(span, 0, 60, 30);
+  if (!text || !width) return 0;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (Math.abs(hash) % (width * 2 + 1)) - width;
+}
+
+// The profile rating is cached for six hours, which is right for page loads and
+// wrong for a session: an account that climbs during the night would be played
+// at the strength it had at boot. Refreshed at game boundaries, no more often
+// than every twenty minutes, and only after a few games have gone by.
+const RATING_REFRESH_MS = 20 * 60 * 1000;
+
+function ratingRefreshDue(now, lastAt, gamesPlayed, gamesAtFetch) {
+  const games = Math.max(0, Math.round(Number(gamesPlayed) || 0));
+  const atFetch = Math.max(0, Math.round(Number(gamesAtFetch) || 0));
+  if (games - atFetch < 3) return false;
+  const last = Number(lastAt) || 0;
+  return !(last > 0) || now - last >= RATING_REFRESH_MS;
+}
 
 function strengthFloor(elo) {
   const e = Number(elo);
@@ -2883,7 +2914,10 @@ function effectiveElo(cfg, opts = {}) {
   const anchored = opp ? opp + 130 : base;
   const hi = Math.min(base + 25, 3190);
   const lo = Math.min(base - 75, hi);
-  return Math.round(clamp(Math.min(anchored, hi), lo, hi));
+  // Form only moves inside the account's envelope: a bad game is the account
+  // minus a few points, never a different player.
+  const form = account ? clampInt(opts.form, -60, 60, 0) : 0;
+  return Math.round(clamp(Math.min(anchored, hi) + form, lo, hi));
 }
 
 // How many centipawns a human at this rating actually loses per move. Rough
@@ -4403,6 +4437,8 @@ const state = {
   accountRatings: null,
   accountGames: null,
   ratingAt: 0,
+  ratingGames: 0,
+  formOffset: 0,
   ratingError: '',
   ratingPending: false,
   ratingClass: 'blitz',
@@ -4466,11 +4502,16 @@ function provisionalRating() {
 
 function resolveElo() {
   const account = anchoredRating();
+  // Form is per game, keyed by the account and the game number: the same night
+  // asks for the same strength on the same game, and the next one differs.
+  const form = account ? formOffset(`${currentAccount()}:${state.gamesPlayed}`, 30) : 0;
   const elo = effectiveElo(cfg, {
     accountElo: account,
-    oppElo: state.oppEloEstimate || state.opponentRating
+    oppElo: state.oppEloEstimate || state.opponentRating,
+    form
   });
   state.effectiveElo = elo;
+  state.formOffset = form;
   state.eloSource = account ? 'account' : Number(cfg.targetElo) > 0 ? 'target' : 'default';
   return elo;
 }
@@ -4526,6 +4567,7 @@ async function syncAccountRatings(force) {
     state.accountRatings = ratings;
     state.accountGames = normalizeGameCounts(payload);
     state.ratingAt = Date.now();
+    state.ratingGames = state.gamesPlayed;
     state.ratingError = '';
     persistRating({ at: state.ratingAt, ratings, games: state.accountGames });
   } catch (error) {
@@ -4985,6 +5027,13 @@ function onNewGame() {
   state.foreignFen = null;
   state.gamesPlayed += 1;
   state.resultGame = 0;
+  // The account's rating is the anchor, so a long session has to follow it:
+  // three games and twenty minutes is often enough to have moved, and rare
+  // enough to keep the public endpoint quiet.
+  if (ratingRefreshDue(Date.now(), state.ratingAt, state.gamesPlayed, state.ratingGames)) {
+    syncAccountRatings(true);
+  }
+  resolveElo();
   saveSession();
   state.gameOverSeen = false;
   state.rematchTried = false;

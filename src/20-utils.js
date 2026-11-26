@@ -292,6 +292,37 @@ function eloToSkill(elo) {
 // the move chooser compensates with slack instead of pretending the number took.
 const ELO_FLOOR = 1320;
 
+// A night is not one strength. Two accounts at the same rating do not play the
+// same moves, and nobody plays their rating exactly on every game: form drifts
+// by a few dozen points and comes back. This is a stable pseudo-random offset
+// keyed by the account and the game number, so every game differs and the same
+// game always asks for the same strength.
+function formOffset(key, span) {
+  const text = String(key || '');
+  const width = clampInt(span, 0, 60, 30);
+  if (!text || !width) return 0;
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (Math.abs(hash) % (width * 2 + 1)) - width;
+}
+
+// The profile rating is cached for six hours, which is right for page loads and
+// wrong for a session: an account that climbs during the night would be played
+// at the strength it had at boot. Refreshed at game boundaries, no more often
+// than every twenty minutes, and only after a few games have gone by.
+const RATING_REFRESH_MS = 20 * 60 * 1000;
+
+function ratingRefreshDue(now, lastAt, gamesPlayed, gamesAtFetch) {
+  const games = Math.max(0, Math.round(Number(gamesPlayed) || 0));
+  const atFetch = Math.max(0, Math.round(Number(gamesAtFetch) || 0));
+  if (games - atFetch < 3) return false;
+  const last = Number(lastAt) || 0;
+  return !(last > 0) || now - last >= RATING_REFRESH_MS;
+}
+
 function strengthFloor(elo) {
   const e = Number(elo);
   if (!Number.isFinite(e) || e <= 0) return { requested: 1500, floor: 1500, gap: 0 };

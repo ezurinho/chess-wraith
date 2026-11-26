@@ -26,7 +26,10 @@ function effectiveElo(cfg, opts = {}) {
   const anchored = opp ? opp + 130 : base;
   const hi = Math.min(base + 25, 3190);
   const lo = Math.min(base - 75, hi);
-  return Math.round(clamp(Math.min(anchored, hi), lo, hi));
+  // Form only moves inside the account's envelope: a bad game is the account
+  // minus a few points, never a different player.
+  const form = account ? clampInt(opts.form, -60, 60, 0) : 0;
+  return Math.round(clamp(Math.min(anchored, hi) + form, lo, hi));
 }
 
 // How many centipawns a human at this rating actually loses per move. Rough

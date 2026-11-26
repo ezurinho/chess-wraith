@@ -180,6 +180,8 @@ const state = {
   accountRatings: null,
   accountGames: null,
   ratingAt: 0,
+  ratingGames: 0,
+  formOffset: 0,
   ratingError: '',
   ratingPending: false,
   ratingClass: 'blitz',
@@ -243,11 +245,16 @@ function provisionalRating() {
 
 function resolveElo() {
   const account = anchoredRating();
+  // Form is per game, keyed by the account and the game number: the same night
+  // asks for the same strength on the same game, and the next one differs.
+  const form = account ? formOffset(`${currentAccount()}:${state.gamesPlayed}`, 30) : 0;
   const elo = effectiveElo(cfg, {
     accountElo: account,
-    oppElo: state.oppEloEstimate || state.opponentRating
+    oppElo: state.oppEloEstimate || state.opponentRating,
+    form
   });
   state.effectiveElo = elo;
+  state.formOffset = form;
   state.eloSource = account ? 'account' : Number(cfg.targetElo) > 0 ? 'target' : 'default';
   return elo;
 }
@@ -303,6 +310,7 @@ async function syncAccountRatings(force) {
     state.accountRatings = ratings;
     state.accountGames = normalizeGameCounts(payload);
     state.ratingAt = Date.now();
+    state.ratingGames = state.gamesPlayed;
     state.ratingError = '';
     persistRating({ at: state.ratingAt, ratings, games: state.accountGames });
   } catch (error) {
@@ -762,6 +770,13 @@ function onNewGame() {
   state.foreignFen = null;
   state.gamesPlayed += 1;
   state.resultGame = 0;
+  // The account's rating is the anchor, so a long session has to follow it:
+  // three games and twenty minutes is often enough to have moved, and rare
+  // enough to keep the public endpoint quiet.
+  if (ratingRefreshDue(Date.now(), state.ratingAt, state.gamesPlayed, state.ratingGames)) {
+    syncAccountRatings(true);
+  }
+  resolveElo();
   saveSession();
   state.gameOverSeen = false;
   state.rematchTried = false;

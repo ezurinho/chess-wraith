@@ -172,3 +172,16 @@ test('a game played as black scores from the colour on screen, not a default', a
     stop();
   }
 });
+test('the strength asked of the engine is the account\'s own rating', async () => {
+  // The harness profile is 1480 rapid with 80 games, so the rating is settled.
+  const { api, stop } = boot();
+  try {
+    assert.equal(await until(() => api.state.eloSource === 'account', 9000), true, 'the profile rating is adopted');
+    assert.ok(api.state.formOffset >= -30 && api.state.formOffset <= 30, 'form stays a bad day or a good one');
+    assert.ok(api.state.effectiveElo >= 1405 && api.state.effectiveElo <= 1505,
+      `effectiveElo ${api.state.effectiveElo} outside the account envelope`);
+    assert.ok(api.state.effectiveElo <= 1480 + 25, 'never asked to play above the account plus a hair');
+  } finally {
+    stop();
+  }
+});

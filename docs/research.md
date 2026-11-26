@@ -195,6 +195,38 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The strength follows the account, and keeps following it
+
+`effectiveElo` has always been anchored to the account: `base` is the published
+rating in the class the clock says, the ceiling is `base + 25`, the floor is
+`base - 75`, and a stronger opponent cannot pull it up past that ceiling. What
+was missing was time. Two things:
+
+- **Form.** One strength for a whole night is its own fingerprint. Each game now
+  carries a deterministic offset in ±30 points, keyed by `account:gameNumber`, so
+  the same game always asks for the same strength and the next one differs. It is
+  applied inside the envelope and only when an account rating exists.
+- **The anchor moved while the tab was open.** The profile cache is six hours
+  (`RATING_TTL_MS`) and nothing refreshed it mid-session, so a night of wins was
+  played at the rating the account had at boot. `ratingRefreshDue` re-reads the
+  profile at game boundaries after three games and twenty minutes, and the panel
+  keeps working while the fetch is in flight.
+
+Measured with `effectiveElo` and the five form offsets -30/-15/0/+15/+30
+(min..max asked of the engine):
+
+| Account | vs 200 lower | vs same | vs 200 higher |
+|---|---|---|---|
+| 1200 | 1245..1245 | 1300..1345 | 1315..1345 |
+| 1400 | 1325..1360 | 1395..1425 | 1395..1425 |
+| 1800 | 1725..1760 | 1795..1825 | 1795..1825 |
+| 2400 | 2325..2360 | 2395..2425 | 2395..2425 |
+
+No row exceeds `account + 25`: against a stronger opponent the script plays its
+own level and loses more often, which is the trade a legitimate account makes.
+Below 1320 the engine clamps at its own floor (the 1200 row reads 1245 because
+`base` clamps to 1320 and the window is `-75`); the compensation there is the
+wider slack, 84 cp for a 900-rated account.
 ## The archive page has no move list at all
 
 Probed 2026-11-25 on `https://www.chess.com/game/live/168072860134`, signed out:
@@ -525,7 +557,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 167 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 170 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

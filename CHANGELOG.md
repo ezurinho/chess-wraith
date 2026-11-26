@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.39.0 — 2026-11-26
+
+The strength stays the account's while the night moves the account.
+
+- Form: each game asks for a deterministic ±30 point offset keyed by the
+  account and the game number, inside the existing `-75/+25` envelope. One
+  strength for a whole session is a fingerprint; a player has good and bad days.
+- The profile rating used to be cached for six hours and never refreshed while
+  the tab was open, so a session was played at the rating the account had at
+  boot. It is now re-read at game boundaries after three games and twenty
+  minutes (`ratingRefreshDue`), and the panel says when it was last measured.
+- 170 tests, including the envelope at the boot level: a 1480 account is never
+  asked to play above 1505.
+
 ## 1.38.0 — 2026-11-25
 
 The score no longer depends on a move list that the page does not render.

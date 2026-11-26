@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js'],
-  `{ timeClassFromSeconds, normalizeRatings, pickRating, normalizeGameCounts, ratingWeight, settledRating, strengthFloor, floorSlack, ELO_FLOOR, RATING_CLASSES }`
+  `{ timeClassFromSeconds, normalizeRatings, pickRating, normalizeGameCounts, ratingWeight, settledRating, strengthFloor, floorSlack, ELO_FLOOR, RATING_CLASSES, formOffset, ratingRefreshDue, RATING_REFRESH_MS }`
 );
 
 test('the clock decides which published rating applies', () => {
@@ -91,4 +91,27 @@ test('the published classes map to the public endpoint keys', () => {
     JSON.stringify(api.RATING_CLASSES),
     JSON.stringify({ bullet: 'chess_bullet', blitz: 'chess_blitz', rapid: 'chess_rapid', daily: 'chess_daily' })
   );
+});
+test('form is per game and never repeats a constant strength', () => {
+  const spans = new Set();
+  for (let game = 0; game < 24; game += 1) spans.add(api.formOffset(`tester:${game}`, 30));
+  assert.ok(spans.size > 8, `24 games produced only ${spans.size} distinct forms`);
+  for (const value of spans) {
+    assert.ok(Number.isInteger(value) && Math.abs(value) <= 30, `form ${value} outside ±30`);
+  }
+  // Same game, same strength: a re-scan must not move the dial.
+  assert.equal(api.formOffset('tester:7', 30), api.formOffset('tester:7', 30));
+  assert.notEqual(api.formOffset('tester:7', 30), api.formOffset('tester:8', 30));
+  assert.equal(api.formOffset('', 30), 0, 'no account, no form');
+  assert.equal(api.formOffset('tester', 0), 0);
+});
+
+test('the profile rating is re-read during a session, but not on every game', () => {
+  const now = 1_000_000_000;
+  const min = api.RATING_REFRESH_MS;
+  assert.equal(api.ratingRefreshDue(now, now - min, 4, 0), true, 'four games after boot');
+  assert.equal(api.ratingRefreshDue(now, now - min, 2, 0), false, 'only two games in');
+  assert.equal(api.ratingRefreshDue(now, now - 1000, 9, 0), false, 'a minute ago is too soon');
+  assert.equal(api.ratingRefreshDue(now, 0, 5, 0), true, 'never fetched');
+  assert.equal(api.ratingRefreshDue(now, now - min, 9, 8), false, 'one game since the last fetch');
 });
