@@ -195,6 +195,29 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## "tester wonRematch"
+
+The game-over dialog is the only place chess.com states a result, and it states
+the *winner*, not the outcome: "tester won", "tester won by resignation", or a
+bare "Draw". Turning that into a session score needs three decisions:
+
+1. **Whose name.** The dialog says who won, and `#user-username-component` says
+   who we are. A name we do not recognise returns `null` rather than assuming a
+   win; a wrong score is worse than no score.
+2. **Glued text.** `textContent` concatenates sibling blocks without a space, so
+   the header and the Rematch button arrive as "tester wonRematch" and a strict
+   `\bwon\b` never matches. A space at the lower→upper case boundary is what the
+   page looks like to a reader, and it is what the parser inserts.
+3. **Counting once.** A dialog that survives into the next scan, or a rematch
+   where the old modal lingers, would count the same game twice. The result is
+   tagged with the game number that produced it and ignored while that number
+   has not changed.
+
+The first attempt at this scored zero because `resumeSessionState()` runs twice —
+once at boot and again when a late account name is adopted — and the second call
+assigned the stored session's empty results over a score that had just been
+counted. It now adopts the stored results only when the session was actually
+resumed, the same shape as the `Math.max` already guarding the game count.
 ## Silence is a failure
 
 The first version of the backoff only covered a fetch that threw. Three other
@@ -396,7 +419,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 159 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 163 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

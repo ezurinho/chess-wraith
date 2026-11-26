@@ -230,15 +230,24 @@ function eventLabel(at, now) {
 // Tampermonkey update at 03:00 could keep the account playing until dawn.
 // Resumed only while the run is still plausibly the same one — a tab opened
 // the next day is a new session, not a 19-hour one.
+// A session's score is a claim about games that were played, so a stored value
+// is rounded and clamped; anything else is zeros.
+function normalizeResults(raw) {
+  const pick = (value) => Math.min(999, Math.max(0, Math.round(Number(value) || 0)));
+  return raw && typeof raw === 'object'
+    ? { win: pick(raw.win), loss: pick(raw.loss), draw: pick(raw.draw) }
+    : { win: 0, loss: 0, draw: 0 };
+}
+
 function resumeSession(stored, now, maxMs) {
   const at = Number(now) || 0;
   const ttl = Math.max(0, Number(maxMs) || 0) || 12 * 3600 * 1000;
   const startedAt = Number(stored && stored.startedAt) || 0;
   const games = Math.max(1, Math.round(Number(stored && stored.games) || 1));
   if (!startedAt || startedAt > at + 60000 || at - startedAt > ttl) {
-    return { startedAt: at, games: 1, resumed: false };
+    return { startedAt: at, games: 1, resumed: false, results: normalizeResults(null) };
   }
-  return { startedAt, games, resumed: true };
+  return { startedAt, games, resumed: true, results: normalizeResults(stored && stored.results) };
 }
 
 function searchBudgetMs(job) {

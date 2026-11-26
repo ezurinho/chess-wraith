@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.33.0
+// @version      1.34.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.33.0';
+const VERSION = '1.34.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.33.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.34.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -350,15 +350,24 @@ function eventLabel(at, now) {
 // Tampermonkey update at 03:00 could keep the account playing until dawn.
 // Resumed only while the run is still plausibly the same one — a tab opened
 // the next day is a new session, not a 19-hour one.
+// A session's score is a claim about games that were played, so a stored value
+// is rounded and clamped; anything else is zeros.
+function normalizeResults(raw) {
+  const pick = (value) => Math.min(999, Math.max(0, Math.round(Number(value) || 0)));
+  return raw && typeof raw === 'object'
+    ? { win: pick(raw.win), loss: pick(raw.loss), draw: pick(raw.draw) }
+    : { win: 0, loss: 0, draw: 0 };
+}
+
 function resumeSession(stored, now, maxMs) {
   const at = Number(now) || 0;
   const ttl = Math.max(0, Number(maxMs) || 0) || 12 * 3600 * 1000;
   const startedAt = Number(stored && stored.startedAt) || 0;
   const games = Math.max(1, Math.round(Number(stored && stored.games) || 1));
   if (!startedAt || startedAt > at + 60000 || at - startedAt > ttl) {
-    return { startedAt: at, games: 1, resumed: false };
+    return { startedAt: at, games: 1, resumed: false, results: normalizeResults(null) };
   }
-  return { startedAt, games, resumed: true };
+  return { startedAt, games, resumed: true, results: normalizeResults(stored && stored.results) };
 }
 
 function searchBudgetMs(job) {
@@ -3165,6 +3174,38 @@ function findRematchButton(skipTexts) {
   return index >= 0 ? nodes[index] : null;
 }
 
+// The dialog names the winner rather than the result: "tester won",
+// "tester won by resignation", or just "Draw". The account's own name is the
+// only thing that says which side of that sentence is us, so an unknown name
+// returns null instead of guessing a win.
+function parseGameResult(text, account) {
+  // textContent glues sibling blocks together without a space: "tester won"
+  // followed by a Rematch button reads "tester wonRematch". A space at the case
+  // boundary is what the page actually looks like.
+  const line = String(text || '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!line) return null;
+  if (/\byou resigned\b|\byou lost\b|\byou were checkmated\b/.test(line)) return 'loss';
+  if (/\byou won\b|\byou win\b/.test(line)) return 'win';
+  if (/\bdraw\b|\bstalemate\b|\binsufficient material\b|\bthreefold\b|\bfifty-move\b/.test(line)) return 'draw';
+  if (!/\bwon\b/.test(line)) return null;
+  const me = normalizeAccountName(account);
+  if (!me) return null;
+  const esc = me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9_-])${esc}([^a-z0-9_-]|$)`).test(line) ? 'win' : 'loss';
+}
+
+// Bounded on purpose: the dialog is small, but a page-level fallback can be the
+// whole document and regular expressions over a megabyte of markup are not.
+function readGameResult() {
+  const root = gameOverRoot();
+  if (!root) return null;
+  return parseGameResult(String(root.textContent || '').slice(0, 2000), currentAccount());
+}
+
 function hasGameOverModal() {
   return isGameOverDom();
 }
@@ -3576,6 +3617,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .row b{font:600 11px/1.45 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .row b.good{color:var(--acc)}
 .row b.warn{color:var(--ink-warn)}
+.row b .score{color:var(--dim);font-weight:500}
 
 .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:8px}
 .seg button{all:unset;display:grid;place-items:center;padding:6px 2px;border-radius:8px;cursor:pointer;text-align:center;
@@ -3708,7 +3750,7 @@ const PANEL_HTML = `
           <div class="rows">
             <div class="row"><span>User</span><b data-el="account">anonymous</b></div>
             <div class="row"><span>Rating</span><b data-el="rating">–</b></div>
-            <div class="row"><span>Session</span><b data-el="sessionLen">–</b></div>
+            <div class="row"><span>Session</span><b><span data-el="sessionLen">–</span> <span data-el="sessionScore" class="score"></span></b></div>
             <div class="row"><span>Guard</span><b data-el="guard">off</b></div>
           </div>
         </div>
@@ -4012,6 +4054,10 @@ class WraithPanel {
     this.el.games.textContent = String(Number(v.games) || 1);
     this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
     this.el.sessionLen.textContent = clockText(v.sessionMs);
+    const tally = v.results || {};
+    const played = (tally.win || 0) + (tally.loss || 0) + (tally.draw || 0);
+    // Only after a game has ended: "0-0-0" next to the clock is noise.
+    this.el.sessionScore.textContent = played > 0 ? `${tally.win || 0}-${tally.loss || 0}-${tally.draw || 0}` : '';
     this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
     this.el.rating.textContent = v.accountRating
       ? `${v.accountRating} ${v.ratingClass || ''}`.trim()
@@ -4197,7 +4243,8 @@ function saveSession() {
   try {
     localStorage.setItem(sessionKey(), JSON.stringify({
       startedAt: state.sessionStart,
-      games: state.gamesPlayed
+      games: state.gamesPlayed,
+      results: state.results
     }));
   } catch (error) {
     /* storage blocked: the limit still holds for this tab */
@@ -4222,6 +4269,9 @@ function resumeSessionState() {
   const next = resumeSession(readSession(), Date.now(), cfg.sessionMaxMs);
   state.sessionStart = next.startedAt;
   state.gamesPlayed = Math.max(state.gamesPlayed, next.games);
+  // Adopting a late account name runs this a second time: a stored session that
+  // is not resumed (or a fresh one) must not wipe a score already counted here.
+  if (next.resumed) state.results = next.results;
   if (next.resumed) noteEvent(`resumed: ${next.games} games, ${Math.round((Date.now() - next.startedAt) / 60000)} min`);
   saveSession();
 }
@@ -4256,6 +4306,8 @@ const state = {
   clockSeconds: null,
   opponentRating: null,
   gameOverSeen: false,
+  results: { win: 0, loss: 0, draw: 0 },
+  resultGame: 0,
   rematchTried: false,
   rematchTimer: null,
   rematchAttempts: 0,
@@ -4861,6 +4913,7 @@ function onNewGame() {
   state.foreignHits = 0;
   state.foreignFen = null;
   state.gamesPlayed += 1;
+  state.resultGame = 0;
   saveSession();
   state.gameOverSeen = false;
   state.rematchTried = false;
@@ -4954,6 +5007,7 @@ function statusView() {
     updateError: state.updateError,
     updateChecking: state.updateChecking,
     throttled: state.throttled,
+    results: state.results,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -5316,6 +5370,14 @@ function runScan() {
     state.snapshot = snapshot;
     if (!state.gameOverSeen) {
       state.gameOverSeen = true;
+      // One result per game: a lingering dialog that is scanned twice must not
+      // count twice, so the game number that produced a result is remembered.
+      const result = readGameResult();
+      if (result && state.gamesPlayed > 0 && state.resultGame !== state.gamesPlayed) {
+        state.resultGame = state.gamesPlayed;
+        state.results[result] += 1;
+        saveSession();
+      }
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
       clearAutoTimer();
       clearMoveRetry();

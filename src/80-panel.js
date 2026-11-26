@@ -165,6 +165,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
 .row b{font:600 11px/1.45 var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .row b.good{color:var(--acc)}
 .row b.warn{color:var(--ink-warn)}
+.row b .score{color:var(--dim);font-weight:500}
 
 .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-bottom:8px}
 .seg button{all:unset;display:grid;place-items:center;padding:6px 2px;border-radius:8px;cursor:pointer;text-align:center;
@@ -297,7 +298,7 @@ const PANEL_HTML = `
           <div class="rows">
             <div class="row"><span>User</span><b data-el="account">anonymous</b></div>
             <div class="row"><span>Rating</span><b data-el="rating">–</b></div>
-            <div class="row"><span>Session</span><b data-el="sessionLen">–</b></div>
+            <div class="row"><span>Session</span><b><span data-el="sessionLen">–</span> <span data-el="sessionScore" class="score"></span></b></div>
             <div class="row"><span>Guard</span><b data-el="guard">off</b></div>
           </div>
         </div>
@@ -601,6 +602,10 @@ class WraithPanel {
     this.el.games.textContent = String(Number(v.games) || 1);
     this.el.rest.textContent = Number(v.restMs) > 0 ? clockText(v.restMs) : 'limit reached';
     this.el.sessionLen.textContent = clockText(v.sessionMs);
+    const tally = v.results || {};
+    const played = (tally.win || 0) + (tally.loss || 0) + (tally.draw || 0);
+    // Only after a game has ended: "0-0-0" next to the clock is noise.
+    this.el.sessionScore.textContent = played > 0 ? `${tally.win || 0}-${tally.loss || 0}-${tally.draw || 0}` : '';
     this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
     this.el.rating.textContent = v.accountRating
       ? `${v.accountRating} ${v.ratingClass || ''}`.trim()

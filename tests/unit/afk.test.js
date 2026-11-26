@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '65-afk.js'],
-  `{ pickRematchButton, nextGameDelay, sessionLimit, REMATCH_PRIORITY, REMATCH_RETRY_MS }`
+  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS }`
 );
 
 test('rematch wins over a new game when both are offered', () => {
@@ -102,4 +102,37 @@ test('a zero or missing cap disables that half and never divides by zero', () =>
   assert.equal(api.sessionLimit({ startedAt: 0, games: 999, now: 0, maxGames: 0, maxMs: 0 }).stop, false);
   assert.equal(api.sessionLimit({}).stop, false);
   assert.equal(api.sessionLimit({ games: NaN, now: NaN, maxGames: Infinity, maxMs: NaN }).stop, false);
+});
+test('the dialog names the winner, so the account name decides the result', () => {
+  assert.equal(api.parseGameResult('tester won', 'tester'), 'win');
+  assert.equal(api.parseGameResult('tester won by resignation', 'tester'), 'win');
+  assert.equal(api.parseGameResult('tester won', 'someoneelse'), 'loss');
+  assert.equal(api.parseGameResult('  TESTER  WON  ', 'Tester'), 'win');
+  // The modal's textContent glues the header to the Rematch button.
+  assert.equal(api.parseGameResult('tester wonRematch', 'tester'), 'win');
+  assert.equal(api.parseGameResult('tester wonNewGame', 'someoneelse'), 'loss');
+});
+
+test('draws never depend on a name', () => {
+  assert.equal(api.parseGameResult('Draw', 'tester'), 'draw');
+  assert.equal(api.parseGameResult('Draw by agreement', ''), 'draw');
+  assert.equal(api.parseGameResult('Draw by stalemate', 'x'), 'draw');
+});
+
+test('a sentence that is not a result is null, not a guess', () => {
+  assert.equal(api.parseGameResult('', 'tester'), null);
+  assert.equal(api.parseGameResult('Game Review', 'tester'), null);
+  assert.equal(api.parseGameResult('tester won', ''), null, 'no account name means no verdict');
+});
+
+test('a session keeps its score across a reload and drops nonsense', () => {
+  const now = 1_700_000_000_000;
+  const same = api.resumeSession({ startedAt: now - 60_000, games: 4, results: { win: 3, loss: 1, draw: 0 } }, now, 3 * 3600e3);
+  assert.equal(same.resumed, true);
+  assert.deepEqual({ ...same.results }, { win: 3, loss: 1, draw: 0 });
+  const junk = api.resumeSession({ startedAt: now - 60_000, games: 4, results: { win: -5, loss: 'x', draw: 2.7 } }, now, 3 * 3600e3);
+  assert.deepEqual({ ...junk.results }, { win: 0, loss: 0, draw: 3 });
+  const old = api.resumeSession({ startedAt: now - 40 * 3600e3, games: 4, results: { win: 3 } }, now, 3 * 3600e3);
+  assert.equal(old.resumed, false);
+  assert.deepEqual({ ...old.results }, { win: 0, loss: 0, draw: 0 });
 });

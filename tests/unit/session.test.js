@@ -71,6 +71,10 @@ test('a finished game with AFK on presses the button a person would press', asyn
     assert.deepEqual(pressed, ['Rematch'], 'the first choice, not a random button');
     assert.equal(api.state.gameOverSeen, true, 'the game over was seen');
     assert.equal(api.state.rematchAttempts, 1, 'pressed once, not in a loop');
+    assert.equal(api.state.results.win, 1, 'the dialog said "tester won" and the account is tester');
+    assert.equal(api.state.results.loss, 0);
+    const stored = JSON.parse(window.localStorage.getItem('chess-wraith-session-v1:tester'));
+    assert.deepEqual({ ...stored.results }, { win: 1, loss: 0, draw: 0 }, 'and the score is in the session, not just in memory');
     const last = api.state.events[api.state.events.length - 1];
     assert.match(last.text, /rematch/i, 'the press landed in the history');
     assert.ok(api.state.events.length <= 5, 'and the history stays short');

@@ -129,6 +129,38 @@ function findRematchButton(skipTexts) {
   return index >= 0 ? nodes[index] : null;
 }
 
+// The dialog names the winner rather than the result: "tester won",
+// "tester won by resignation", or just "Draw". The account's own name is the
+// only thing that says which side of that sentence is us, so an unknown name
+// returns null instead of guessing a win.
+function parseGameResult(text, account) {
+  // textContent glues sibling blocks together without a space: "tester won"
+  // followed by a Rematch button reads "tester wonRematch". A space at the case
+  // boundary is what the page actually looks like.
+  const line = String(text || '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  if (!line) return null;
+  if (/\byou resigned\b|\byou lost\b|\byou were checkmated\b/.test(line)) return 'loss';
+  if (/\byou won\b|\byou win\b/.test(line)) return 'win';
+  if (/\bdraw\b|\bstalemate\b|\binsufficient material\b|\bthreefold\b|\bfifty-move\b/.test(line)) return 'draw';
+  if (!/\bwon\b/.test(line)) return null;
+  const me = normalizeAccountName(account);
+  if (!me) return null;
+  const esc = me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-z0-9_-])${esc}([^a-z0-9_-]|$)`).test(line) ? 'win' : 'loss';
+}
+
+// Bounded on purpose: the dialog is small, but a page-level fallback can be the
+// whole document and regular expressions over a megabyte of markup are not.
+function readGameResult() {
+  const root = gameOverRoot();
+  if (!root) return null;
+  return parseGameResult(String(root.textContent || '').slice(0, 2000), currentAccount());
+}
+
 function hasGameOverModal() {
   return isGameOverDom();
 }

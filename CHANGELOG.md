@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.34.0 — 2026-11-25
+
+The panel can tell you how the night went.
+
+- The session now keeps a score. It is read from the game-over dialog, which
+  names the winner ("you won", "<name> won", "Draw"), and it is shown next to
+  the session clock as `w-l-d`.
+- Persisted with the session, so a reload keeps the tally, and a name the script
+  does not recognise is `null` instead of a guess.
+- Fixed while testing it: `resumeSessionState()` is called twice (boot, then a
+  late account name) and the second call overwrote a score already counted with
+  the stored one. It now only takes the stored results when the session resumed.
+- Fixed with it: `textContent` glues the dialog header to the Rematch button
+  ("tester wonRematch"), which made the first parser miss every real dialog.
+- 163 tests.
+
 ## 1.33.0 — 2026-11-25
 
 The retry now covers the ways the engine dies quietly.

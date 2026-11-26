@@ -91,7 +91,8 @@ function saveSession() {
   try {
     localStorage.setItem(sessionKey(), JSON.stringify({
       startedAt: state.sessionStart,
-      games: state.gamesPlayed
+      games: state.gamesPlayed,
+      results: state.results
     }));
   } catch (error) {
     /* storage blocked: the limit still holds for this tab */
@@ -116,6 +117,9 @@ function resumeSessionState() {
   const next = resumeSession(readSession(), Date.now(), cfg.sessionMaxMs);
   state.sessionStart = next.startedAt;
   state.gamesPlayed = Math.max(state.gamesPlayed, next.games);
+  // Adopting a late account name runs this a second time: a stored session that
+  // is not resumed (or a fresh one) must not wipe a score already counted here.
+  if (next.resumed) state.results = next.results;
   if (next.resumed) noteEvent(`resumed: ${next.games} games, ${Math.round((Date.now() - next.startedAt) / 60000)} min`);
   saveSession();
 }
@@ -150,6 +154,8 @@ const state = {
   clockSeconds: null,
   opponentRating: null,
   gameOverSeen: false,
+  results: { win: 0, loss: 0, draw: 0 },
+  resultGame: 0,
   rematchTried: false,
   rematchTimer: null,
   rematchAttempts: 0,
@@ -755,6 +761,7 @@ function onNewGame() {
   state.foreignHits = 0;
   state.foreignFen = null;
   state.gamesPlayed += 1;
+  state.resultGame = 0;
   saveSession();
   state.gameOverSeen = false;
   state.rematchTried = false;
@@ -848,6 +855,7 @@ function statusView() {
     updateError: state.updateError,
     updateChecking: state.updateChecking,
     throttled: state.throttled,
+    results: state.results,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -1210,6 +1218,14 @@ function runScan() {
     state.snapshot = snapshot;
     if (!state.gameOverSeen) {
       state.gameOverSeen = true;
+      // One result per game: a lingering dialog that is scanned twice must not
+      // count twice, so the game number that produced a result is remembered.
+      const result = readGameResult();
+      if (result && state.gamesPlayed > 0 && state.resultGame !== state.gamesPlayed) {
+        state.resultGame = state.gamesPlayed;
+        state.results[result] += 1;
+        saveSession();
+      }
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
       clearAutoTimer();
       clearMoveRetry();
