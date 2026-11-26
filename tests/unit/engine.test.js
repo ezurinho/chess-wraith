@@ -401,3 +401,53 @@ test('a 404 on the NNUE script still remembers the skip', async () => {
   assert.equal(storage.has('chess-wraith-nnue-skip-v1'), true, 'a real 404 is a verdict');
   engine.destroy();
 });
+test('a worker that never says uciok enters the backoff instead of dying there', async () => {
+  const { api, workers, advance, storage } = harness({ nnueSkip: false });
+  // Pin the plain engine: the handshake deadline is the 4 s one, not NNUE's 6.5 s.
+  storage.set('chess-wraith-nnue-skip-v1', JSON.stringify({ mirror: api.ENGINE_MIRROR, at: Date.now() }));
+  const engine = new api.WraithEngine();
+  const errors = [];
+  engine.onError = (message) => errors.push(message);
+  await engine.boot();
+  const dead = workers[0];
+  assert.ok(dead && dead.sent.includes('uci'), 'the handshake was asked for');
+  assert.equal(engine.retryAttempt, 0);
+
+  advance(4000);
+  assert.equal(engine.retryAttempt, 1, 'silence is a failure, not a state');
+  assert.equal(engine.retryDelay, 5000);
+  assert.equal(dead.terminated, true, 'the mute worker is terminated');
+  assert.ok(errors.some((line) => /did not answer uci/.test(line)), 'and the reason is named');
+
+  advance(5000);
+  await flush();
+  await flush();
+  const fresh = workers[workers.length - 1];
+  assert.notEqual(fresh, dead, 'a new worker was spawned');
+  fresh.reply('uciok');
+  fresh.reply('readyok');
+  assert.equal(engine.ready, true);
+  assert.equal(engine.retryAttempt, 0, 'recovery resets the ladder');
+  engine.destroy();
+});
+
+test('a crash cluster that exhausts its retries hands the engine to the backoff', async () => {
+  const { api, workers, advance, storage } = harness({ nnueSkip: false });
+  storage.set('chess-wraith-nnue-skip-v1', JSON.stringify({ mirror: api.ENGINE_MIRROR, at: Date.now() }));
+  const engine = new api.WraithEngine();
+  await engine.boot();
+  const worker = workers[0];
+  worker.reply('uciok');
+  worker.reply('readyok');
+  assert.equal(engine.ready, true);
+
+  engine.recoveries = 2;
+  engine.worker.onerror({ message: 'boom' });
+  assert.equal(engine.retryAttempt, 1, 'the third crash is not another rebuild');
+  assert.equal(engine.ready, false);
+  advance(5000);
+  await flush();
+  await flush();
+  assert.ok(workers.length > 1, 'and it boots again after the backoff');
+  engine.destroy();
+});

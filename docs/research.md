@@ -195,6 +195,31 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## Silence is a failure
+
+The first version of the backoff only covered a fetch that threw. Three other
+ways for the engine to be dead had no owner:
+
+1. **A worker that spawns and never says `uciok`.** The handshake deadline ran,
+   printed `engine did not answer uci` and stopped. The obvious causes — a page
+   that blocks blob workers, a wasm compile that dies — are not network errors,
+   so no retry ever happened.
+2. **A crash cluster past its second rebuild.** `#recover` returned early once
+   `recoveries >= 2`, by design, to stop a boot loop. It stopped everything else
+   too, and the engine stayed dead behind a single line.
+3. **The fire-and-forget spawns** in the NNUE fallback (`.catch(() => {})`)
+   swallowed a failed fetch whole.
+
+All three now end in `#scheduleRetry`, and a `readyok` resets the ladder either
+way. The rule is one sentence: any path that leaves the engine unable to answer
+has to have a timer attached to it.
+
+Worth recording from the tests: the harness seeds an NNUE-skip entry with
+`mirror: 'v0.0.0-test'`, but `nnueSkipActive` requires the mirror to match the
+pinned URL, so the seed was inert and the engine booted NNUE. The first two
+assertions failed because they waited 4 s for a 6.5 s deadline — the test was
+exercising the wrong branch and passing the right vibe. It now pins the skip with
+`ENGINE_MIRROR` before boot.
 ## Offline at boot used to be permanent
 
 `#bootInner` had one failure path nobody had taken: if both the NNUE fetch and
@@ -371,7 +396,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 157 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 159 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

@@ -140,8 +140,13 @@ class WraithEngine {
   // replacement is still booting must not start a boot loop.
   #recover(reason) {
     // Two attempts per crash cluster: a worker that cannot start at all must not
-    // spin, and the counter is cleared by the next readyok.
-    if (this.recovering || this.recoveries >= 2) return;
+    // spin, and the counter is cleared by the next readyok. Past that the
+    // cluster is not a crash, it is a dead engine, and the backoff owns it.
+    if (this.recovering) return;
+    if (this.recoveries >= 2) {
+      this.#scheduleRetry(new Error(reason || 'engine keeps failing'));
+      return;
+    }
     this.recoveries += 1;
     this.recovering = true;
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
@@ -196,7 +201,7 @@ class WraithEngine {
       if (preferNnue) {
         rememberNnueSkip();
         this.onError && this.onError('NNUE worker failed to start; using the JS engine');
-        this.#spawn(false).catch(() => {});
+        this.#spawn(false).catch((err) => this.#scheduleRetry(err));
         return;
       }
       // A worker that dies after booting keeps `ready` true, so every search
@@ -225,14 +230,25 @@ class WraithEngine {
             /* already gone */
           }
           this.worker = null;
-          this.#spawn(true).catch(() => this.#spawn(false).catch(() => {}));
+          // The second NNUE attempt failing is a boot failure like any other.
+          this.#spawn(true).catch((err) => this.#scheduleRetry(err));
           return;
         }
         rememberNnueSkip();
         this.onError && this.onError('NNUE engine did not start; using the JS engine');
-        this.#spawn(false).catch(() => {});
+        this.#spawn(false).catch((err) => this.#scheduleRetry(err));
       } else {
-        this.onError && this.onError('engine did not answer uci');
+        // A worker that spawns and never says uciok is not a network problem
+        // the fetch could see: the script arrived and died compiling, or the
+        // page blocked the worker. It still has to enter the backoff, or the
+        // engine is dead until someone reloads.
+        try {
+          worker.terminate();
+        } catch {
+          /* already gone */
+        }
+        this.worker = null;
+        this.#scheduleRetry(new Error('engine did not answer uci'));
       }
     }, preferNnue ? 6500 : 4000);
   }

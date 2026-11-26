@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.32.0
+// @version      1.33.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.32.0';
+const VERSION = '1.33.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.32.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.33.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2239,8 +2239,13 @@ class WraithEngine {
   // replacement is still booting must not start a boot loop.
   #recover(reason) {
     // Two attempts per crash cluster: a worker that cannot start at all must not
-    // spin, and the counter is cleared by the next readyok.
-    if (this.recovering || this.recoveries >= 2) return;
+    // spin, and the counter is cleared by the next readyok. Past that the
+    // cluster is not a crash, it is a dead engine, and the backoff owns it.
+    if (this.recovering) return;
+    if (this.recoveries >= 2) {
+      this.#scheduleRetry(new Error(reason || 'engine keeps failing'));
+      return;
+    }
     this.recoveries += 1;
     this.recovering = true;
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
@@ -2295,7 +2300,7 @@ class WraithEngine {
       if (preferNnue) {
         rememberNnueSkip();
         this.onError && this.onError('NNUE worker failed to start; using the JS engine');
-        this.#spawn(false).catch(() => {});
+        this.#spawn(false).catch((err) => this.#scheduleRetry(err));
         return;
       }
       // A worker that dies after booting keeps `ready` true, so every search
@@ -2324,14 +2329,25 @@ class WraithEngine {
             /* already gone */
           }
           this.worker = null;
-          this.#spawn(true).catch(() => this.#spawn(false).catch(() => {}));
+          // The second NNUE attempt failing is a boot failure like any other.
+          this.#spawn(true).catch((err) => this.#scheduleRetry(err));
           return;
         }
         rememberNnueSkip();
         this.onError && this.onError('NNUE engine did not start; using the JS engine');
-        this.#spawn(false).catch(() => {});
+        this.#spawn(false).catch((err) => this.#scheduleRetry(err));
       } else {
-        this.onError && this.onError('engine did not answer uci');
+        // A worker that spawns and never says uciok is not a network problem
+        // the fetch could see: the script arrived and died compiling, or the
+        // page blocked the worker. It still has to enter the backoff, or the
+        // engine is dead until someone reloads.
+        try {
+          worker.terminate();
+        } catch {
+          /* already gone */
+        }
+        this.worker = null;
+        this.#scheduleRetry(new Error('engine did not answer uci'));
       }
     }, preferNnue ? 6500 : 4000);
   }

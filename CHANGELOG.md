@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.33.0 — 2026-11-25
+
+The retry now covers the ways the engine dies quietly.
+
+- 1.32.0 only retried a fetch that threw. A worker that spawned and never said
+  `uciok` got one warning and stayed dead; a crash cluster past its second
+  rebuild returned early into the same silence; the NNUE fallback's
+  fire-and-forget spawns swallowed their failures.
+- All three route to the same backoff (5 s, 20 s, 60 s, then 5 min). A `readyok`
+  resets the ladder whichever path brought the engine back.
+- 159 tests, including the mute worker and the exhausted crash cluster.
+
 ## 1.32.0 — 2026-11-25
 
 Offline at boot is no longer permanent.
