@@ -845,7 +845,7 @@ the model was given, the delivery is what the panel measured at the move.
 | Account | Band (cp/move) | Delivered | Moves measured | Note |
 | --- | --- | --- | --- | --- |
 | 133 | 270-320 | 339-343 | 20 | two runs; improvised share 0.71 |
-| 600 | 200 | 159 | 20 | one run; improvised share 0.48 |
+| 600 | 200 | 159, then **236** | 20 each | improvised share 0.48, then 0.60 after 1.81.0 |
 | 1320 | 60 | **2** | 18 | engine-best opponent; zero improvised moves in the game |
 
 The random opponent is only a stand-in at the bottom of the ladder: it takes

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.82.0 — 2026-11-27
+
+Review of 1.81.0: the 600 rung moved from 159 to 236 on a 200 band.
+
+- Same fixture, 20 plies, random opponent: the band-derived improvisation rate
+  took the rung from 20% under to 18% over. The dilution is gone; what is left is
+  one game's spread, and it is written down as such.
+
 ## 1.81.0 — 2026-11-27
 
 The improvisation rate was a curve through its own fitting points.
