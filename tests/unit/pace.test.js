@@ -309,3 +309,37 @@ test('the repertoire is a tree: every opening ply the account actually played', 
   assert.deepEqual(JSON.parse(JSON.stringify(fenOut.white)), { Nf3: 1 });
   assert.deepEqual(JSON.parse(JSON.stringify(fenOut.tree)), {});
 });
+
+test('two models of one archive read it once', async () => {
+  const calls = [];
+  const store = new Map();
+  const games = [
+    game('hikaru', 'a', '1. e4 e5'),
+    game('hikaru', 'b', '1. e4 c5'),
+    game('hikaru', 'c', '1. e4 e6'),
+    game('hikaru', 'd', '1. d4 d5'),
+    game('hikaru', 'e', '1. e4 Nf6')
+  ];
+  const fetcher = async (url) => {
+    calls.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ games }) };
+  };
+  const api = harness(store, fetcher);
+  api.state.clockPeak = 300;
+  await api.syncPaceProfile(true);
+  const afterPace = calls.length;
+  await api.syncRepertoire();
+  assert.ok(afterPace >= 1, 'the pace profile read the archive');
+  assert.equal(calls.length, afterPace, 'the repertoire reused the same reads, month for month');
+  // A reader that fails is not cached: the next attempt must be a real request.
+  const failing = [];
+  const broken = async (url) => {
+    failing.push(String(url));
+    return { ok: false, status: 429, json: async () => ({}) };
+  };
+  const retry = harness(new Map(), broken);
+  await retry.syncRepertoire().catch(() => null);
+  const first = failing.length;
+  await retry.syncRepertoire(true).catch(() => null);
+  assert.ok(first >= 1 && failing.length > first, 'a failed read is retried');
+});

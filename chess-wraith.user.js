@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.50.0
+// @version      1.51.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.50.0';
+const VERSION = '1.51.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.50.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.51.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3006,6 +3006,41 @@ function monthPath(offset) {
 
 // One extra request to a public archive, per account and time class, cached for
 // six hours. It never runs for an anonymous tab: there is no pace to anchor to.
+// The pace profile and the repertoire are two models of one archive. Reading it
+// twice is two requests per month for one answer, and the second of those is what
+// chess.com answers with a 429. The promise is cached per month, so both models
+// await the same read; a failed read is dropped so the next scan can retry.
+const archiveReads = new Map();
+function archiveGames(user, offset) {
+  const key = `${String(user).toLowerCase()}|${monthPath(offset)}`;
+  const hit = archiveReads.get(key);
+  if (hit) return hit;
+  const pending = (async () => {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+    try {
+      const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
+        cache: 'no-store',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        signal: controller ? controller.signal : undefined
+      });
+      if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+      const body = await response.json();
+      return body && Array.isArray(body.games) ? body.games : [];
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  })();
+  archiveReads.set(key, pending);
+  pending.catch(() => archiveReads.delete(key));
+  return pending;
+}
+
+function forgetArchive(user) {
+  const prefix = `${String(user).toLowerCase()}|`;
+  for (const key of Array.from(archiveReads.keys())) if (key.startsWith(prefix)) archiveReads.delete(key);
+}
 async function syncPaceProfile(force) {
   const user = currentAccount();
   if (!user || user === 'anonymous') return null;
@@ -3029,21 +3064,9 @@ async function syncPaceProfile(force) {
   try {
     let profile = null;
     let rawGames = [];
+    if (force) forgetArchive(user);
     for (const offset of [0, 1]) {
-      // One timeout per request: a signal shared by both months leaves the
-      // second request with whatever is left of the first one's budget.
-      const controller = typeof AbortController === 'function' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
-      const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
-        cache: 'no-store',
-        credentials: 'omit',
-        referrerPolicy: 'no-referrer',
-        signal: controller ? controller.signal : undefined
-      });
-      if (timer) clearTimeout(timer);
-      if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
-      const body = await response.json();
-      const games = body && Array.isArray(body.games) ? body.games : [];
+      const games = await archiveGames(user, offset);
       // The current month is the freshest repertoire; a previous one only fills in
       // when this month has no finished class games yet.
       if (rawGames.length === 0) rawGames = games;
@@ -3103,19 +3126,9 @@ async function syncRepertoire(force) {
   state.repertoirePending = true;
   try {
     let opening = null;
+    if (force) forgetArchive(user);
     for (const offset of [0, 1]) {
-      const controller = typeof AbortController === 'function' ? new AbortController() : null;
-      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
-      const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
-        cache: 'no-store',
-        credentials: 'omit',
-        referrerPolicy: 'no-referrer',
-        signal: controller ? controller.signal : undefined
-      });
-      if (timer) clearTimeout(timer);
-      if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
-      const body = await response.json();
-      const parsed = repertoireFromGames(body && body.games, user);
+      const parsed = repertoireFromGames(await archiveGames(user, offset), user);
       if (parsed.games >= 5) { opening = parsed; break; }
     }
     if (!opening) throw new Error('no games');

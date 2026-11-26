@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.51.0 — 2026-11-26
+
+One archive read feeds both the pace and the openings.
+
+- The pace profile and the repertoire both read `pub/player/<user>/games/<month>`;
+  they now share one request per month instead of two, and a failed read is not
+  cached. Measured: the repertoire adds zero requests on top of the pace read.
+- A manual refresh still clears that account's cached reads.
+- 193 tests.
+
 ## 1.50.0 — 2026-11-26
 
 The probe's thinking counts as thinking, and a stale result never gets a move.

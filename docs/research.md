@@ -195,6 +195,18 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## Two models of one archive read it once
+
+The pace profile and the repertoire were reading `pub/player/<user>/games/<month>`
+independently: two requests per month, and the second one is exactly what chess.com
+answers with a 429 (measured threshold: keep >=1.1 s between requests).
+
+`archiveGames(user, offset)` now caches the in-flight promise per month, so both
+models await one read and a failed read is dropped instead of poisoning the next
+scan. Measured in the test harness: the pace profile reads N months, the repertoire
+adds **zero** requests on top. A manual refresh (`force`) clears the cache for that
+account so the click still means fresh.
+
 ## The probe spends think time like a person does
 
 The restricted search is not free: 70 ms on a warm worker, up to ~400 ms cold. The
@@ -810,7 +822,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 192 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 193 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
