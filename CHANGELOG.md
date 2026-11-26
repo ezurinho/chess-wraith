@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.41.0 — 2026-11-26
+
+The rival's rating lands in the anchor in the same scan, and the comparison is
+now read from the competitors' source.
+
+- `resolveElo()` used to wait for the next game or for the opponent's first
+  measured loss; the anchor is now resolved in the scan that learns the rating.
+  The end state was already right (an integration test pins it at 1425 for a
+  1500 default against a 1000 opponent), but the script no longer depends on a
+  second, indirect path to get there.
+- New research section with the five public scripts read from source, dated:
+  one of them computes the move on a remote server and none of them reads the
+  account's rating.
+- 174 tests.
+
 ## 1.40.1 — 2026-11-26
 
 The rating floor is 250, not 400.

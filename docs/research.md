@@ -195,6 +195,27 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## What the five public scripts actually are
+
+Read from the published source on 2026-11-26 (greasyfork `/code`), not from
+their descriptions:
+
+| Script | Version | Where the move is computed | Account rating | Persistence |
+|---|---|---|---|---|
+| Auto Move 548147 | — | local Stockfish | no | none |
+| Bot v2.1 550809 | — | local engine | no | none |
+| Chess Assist 603538 | — | local engine | no | none |
+| OmniChess 586665 | — | local engine | no | none |
+| Dual engine 526240 | 7.0 | **remote** (`GM_xmlhttpRequest`, Stockfish 19 + Patricia 5.1) | no `pub/player`, no `rating`, no `setoption`, so the strength cannot follow anyone | no `localStorage` |
+
+Measured by counting the source: 526240 has 12 mentions of Patricia, 2 of
+`GM_xmlhttpRequest`, 11 `setTimeout`, 17 `delay`, one `Math.random`, and zero of
+`UCI_Elo`, `setoption`, `pub/player`, `rating` or `localStorage`. Its licence
+forbids modification and redistribution. In other words: the position leaves the
+browser, and the engine cannot be told who it is playing.
+
+chess-wraith 1.41.0 keeps the engine in the tab (`@grant none`, no network for
+moves), pins `UCI_Elo` to the account, and stores per account.
 ## The rating had three names and the script knew none of them
 
 Census on two real pages, 2026-11-26 (`/game/live/168072860134` and
@@ -591,7 +612,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 173 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 174 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

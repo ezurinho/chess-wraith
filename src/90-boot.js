@@ -1214,7 +1214,13 @@ function runScan() {
     // The clock also names which published pace to anchor to.
     if (state.accountRatings && (!state.paceProfile || state.paceProfile.cls !== cls)) syncPaceProfile();
   }
-  state.opponentRating = scanned.opponentRating;
+  // The opponent's published rating is part of the anchor, and it is read from
+  // the page, not from the account: learning it after boot used to wait for the
+  // next game, so game one was played as if he were unrated.
+  if (scanned.opponentRating !== state.opponentRating) {
+    state.opponentRating = scanned.opponentRating;
+    if (scanned.opponentRating) resolveElo();
+  }
 
   const prev = state.snapshot;
   const tracked = tracker.updateFromDomSnapshot(scanned.grid, {

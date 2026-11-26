@@ -26,6 +26,11 @@ function boot(html = PAGE, seed = null, options = {}) {
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // A scored game never ends on the starting position, so the fixture after a
 // game over is a position two plies in: 1. e4 d5.
+const RATED = PAGE.replace(
+  '<wc-chess-board',
+  '<div class="board-layout-top"><div class="player-top"><div class="user-tagline-rating">(1000)</div></div></div><wc-chess-board'
+);
+
 const MIDGAME = PAGE
   .replace('<div class="piece wp square-12"></div>', '<div class="piece wp square-14"></div>')
   .replace('<div class="piece bp square-27"></div>', '<div class="piece bp square-25"></div>');
@@ -193,6 +198,21 @@ test('a signed-out tab plays at the documented default, not the engine floor', a
     assert.equal(await until(() => api.state.eloSource !== 'target', 6000), true, 'the source is decided');
     assert.equal(api.state.eloSource, 'default');
     assert.equal(api.state.effectiveElo, 1500, 'the documented default, not the floor');
+  } finally {
+    stop();
+  }
+});
+test('learning the opponent\'s rating re-anchors the strength in the same game', async () => {
+  // No account, so there is no async profile fetch to race: base is the
+  // documented 1500 and form is 0. Opponent 1000 wants 1130, the envelope floor
+  // is 1425, so the answer is exactly 1425 — the boot value was 1500.
+  const { api, stop } = boot(RATED, null, { signedOut: true });
+  try {
+    assert.equal(await until(() => api.state.opponentRating === 1000, 9000), true, 'the rating is read');
+    assert.equal(api.state.effectiveElo, 1425, 'the envelope floor, in the same game');
+    // A second scan of the same page must not move it again.
+    await new Promise((resolve) => setTimeout(resolve, 2400));
+    assert.equal(api.state.effectiveElo, 1425, 'stable across scans');
   } finally {
     stop();
   }
