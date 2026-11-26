@@ -504,6 +504,7 @@ function loadSettings(user) {
     merged.humanSlackCp = clampInt(merged.humanSlackCp, 0, 300, CONFIG.humanSlackCp);
     merged.clockFloorSeconds = clampInt(merged.clockFloorSeconds, 3, 120, CONFIG.clockFloorSeconds);
     merged.autoPlayOnLoad = Boolean(merged.autoPlayOnLoad);
+    merged.alwaysAuto = Boolean(merged.alwaysAuto);
     merged.pauseWhenHidden = Boolean(merged.pauseWhenHidden);
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);

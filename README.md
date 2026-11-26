@@ -19,7 +19,7 @@
   <a href="https://github.com/ezurinho/chess-wraith/releases/latest"><img src="https://img.shields.io/github/v/release/ezurinho/chess-wraith?style=flat-square&label=release&labelColor=0B1711&color=62E2D0" alt="Latest release"></a>
   <a href="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml"><img src="https://github.com/ezurinho/chess-wraith/actions/workflows/check.yml/badge.svg?branch=main" alt="check"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-FFC66D?style=flat-square&labelColor=0B1711" alt="MIT license"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.54.2-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.55.0-5CF2A0?style=flat-square&labelColor=0B1711" alt="version"></a>
 </p>
 
 <p align="center">
@@ -60,7 +60,7 @@ cache serves it and the whole thing works offline.
 
 | Control | What it does |
 | --- | --- |
-| **Auto** / `Alt+Shift+A` | Turns auto-play on or off. The setting survives reloads. |
+| **Auto** / `Alt+Shift+A` | Turns auto-play on or off. It is on by default (`alwaysAuto`), and the setting survives reloads. |
 | **AFK** / `Alt+Shift+F` | Rematch, keep-alive and play-while-hidden in one switch. |
 | Rail (left icons) | Live, Tune and Info views; drag the title to move the panel. |
 | Swatches in Tune | Six themes: Carbon, Aurora, Sunset, Ice, Violet, RGB. |
@@ -97,7 +97,7 @@ until jsDelivr serves the new tag. A failing check never reaches a tag.
 | **Hand on the board** | A click outside the panel defers the pending move for 2 s, twice; after that the script stops and says `paused: your hand is on the board`. |
 | **Variety** | Your first two plies are remembered locally; a first move repeated three times in six games drops to 28% weight, and a governor keeps it off move #1 every single turn. |
 | **AFK** | After a game ends it waits a human pause (1.7–4.2 s, 12% of the time 5–9.5 s), presses Rematch or the shortest new game on screen, and re-arms auto-play when the next board appears. If no button is offered it stops and says so. Optional keep-alive audio keeps the hidden tab awake, and the panel reports `on`, `blocked` or `off`. |
-| **Session cap** | 15 games or 3 hours, whichever comes first (`sessionMaxGames`, `sessionMaxMs` in `src/10-config.js`). When it trips, auto-play and rematch stop and the panel says `session limit: 15 games` or `session limit: 3h`. Reloading the page starts a new session. |
+| **Session cap** | 15 games or 3 hours, whichever comes first (`sessionMaxGames`, `sessionMaxMs` in `src/10-config.js`). With `alwaysAuto` on — the default — the cap closes the run and opens the next one: the history says `session limit: 15 games · rolled over` and play continues. Turn Always auto off in Tune to make the cap stop the session instead. |
 | **Takeover** | A move on your turn that the script did not click pauses auto-play with `paused: manual move detected`. It takes two scans of the same position, because one scan can catch the board mid-paint. Only fires on a board with a real clock and a certain turn, so the analysis board never triggers it. |
 | **One tab** | A lease in `localStorage`, renewed every 3 s. A second tab on the same board goes passive and says `another tab is playing`; closing a tab releases the lease on unload. |
 | **Accuracy guard** | `acplBand(elo)` is the loss a human at that rating averages per move. Past 15 assessed moves, an account under 45% of its band gets 12 cp of extra slack at a time (cap 160) for that session; over twice the band, it gives it back. Your saved setting is never rewritten. |

@@ -320,6 +320,7 @@ const PANEL_HTML = `
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
+          <div class="set"><span class="set-lbl">Always auto<i>never stops at the cap; rolls the session</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="alwaysAuto" aria-checked="true" aria-label="Always auto"></button></span></div>
           <div class="set"><span class="set-lbl">Auto rematch<i>queue the next game when one ends</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="autoRematch" aria-checked="false" aria-label="Auto rematch"></button></span></div>
           <div class="set"><span class="set-lbl">Keep-alive<i>near-silent audio holds the tab</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="afkKeepAlive" aria-checked="false" aria-label="Keep alive"></button></span></div>
           <div class="set"><span class="set-lbl">Play while hidden<i>off by default; Chrome may freeze tabs</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="playHidden" aria-checked="false" aria-label="Play while hidden"></button></span></div>
@@ -457,6 +458,14 @@ class WraithPanel {
         } else {
           this.cfg[key] = !this.cfg[key];
           sw.setAttribute('aria-checked', String(Boolean(this.cfg[key])));
+        }
+        // One switch for the three that make an unattended session. Turning it
+        // on turns them on; turning them off individually still works.
+        if (key === 'alwaysAuto' && this.cfg.alwaysAuto) {
+          this.cfg.autoPlayOnLoad = true;
+          this.cfg.autoRematch = true;
+          this.cfg.afkKeepAlive = true;
+          this.cfg.pauseWhenHidden = false;
         }
         this.handlers.settingsApplied(this.cfg);
         if (key === 'afkKeepAlive' || key === 'autoRematch') this.handlers.toggleAfk(this.cfg);

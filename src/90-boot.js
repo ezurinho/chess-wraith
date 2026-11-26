@@ -116,7 +116,7 @@ function clearSession() {
 // Called once, after a late account name has been adopted: the key is per
 // account and must not be read before the name is known.
 function resumeSessionState() {
-  if (!cfg.autoPlayOnLoad) {
+  if (!cfg.autoPlayOnLoad && !cfg.alwaysAuto) {
     clearSession();
     return;
   }
@@ -135,6 +135,15 @@ function guardKey() {
 }
 
 const cfg = loadSettings(currentAccount());
+// Always auto is one switch for the three that make an unattended session: auto-play,
+// the rematch queue and the keep-alive that keeps the tab awake. It is forced here,
+// before any of them is read, so a stale per-account setting cannot defeat it.
+if (cfg.alwaysAuto) {
+  cfg.autoPlayOnLoad = true;
+  cfg.autoRematch = true;
+  cfg.afkKeepAlive = true;
+  cfg.pauseWhenHidden = false;
+}
 if (settingsNeedsSave) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
@@ -826,9 +835,19 @@ function queueRematch() {
     games: state.gamesPlayed,
     now: Date.now(),
     maxGames: cfg.sessionMaxGames,
-    maxMs: cfg.sessionMaxMs
+    maxMs: cfg.sessionMaxMs,
+    rollover: cfg.alwaysAuto
   });
-  if (limit.stop) {
+  if (limit.rollover) {
+    // The cap closed one run; the next game opens another. The event history is
+    // the audit trail, so the rollover is written down instead of hidden.
+    noteEvent(limit.reason);
+    clearSession();
+    state.sessionStart = Date.now();
+    state.gamesPlayed = 0;
+    state.results = { win: 0, loss: 0, draw: 0 };
+    saveSession();
+  } else if (limit.stop) {
     state.autoPlay = false;
     cfg.autoRematch = false;
     state.warn = limit.reason;

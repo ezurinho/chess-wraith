@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.55.0 — 2026-11-26
+
+The run does not end by itself any more.
+
+- `alwaysAuto` is on by default. It turns auto-play, rematch and the keep-alive on at
+  boot, so opening a game is enough: no click, no `Alt+Shift+A`, no second tab kept
+  open by hand.
+- The session cap is a rollover, not a stop. When 15 games or 3 hours trip, the run
+  closes and the next one opens with the same settings; the history says
+  `session limit: 15 games · rolled over` instead of the panel going quiet.
+- Tune has an Always auto switch. Turning it on restores the three settings; turning
+  them off one by one still works, and the per-account settings survive a reload.
+- `sessionLimit` takes `rollover` and its verdict always carries the flag. Three tests
+  cover the rollover, the plain stop and the default.
+
 ## 1.54.2 — 2026-11-26
 
 The report shows the hour the account usually plays.

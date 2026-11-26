@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.54.2
+// @version      1.55.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.54.2';
+const VERSION = '1.55.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -69,6 +69,11 @@ const CONFIG = {
 
   // Pacing: the whole point of this script is that it does not look like a bot.
   autoPlayOnLoad: false,
+  // Always auto: no click to start and no click to continue. It turns auto-play,
+  // rematch and the keep-alive on at boot, and the session cap becomes a rollover
+  // instead of a stop, the way nitro-wraith keeps queueing races. Turn it off in
+  // Tune to get the old one-session behaviour back.
+  alwaysAuto: true,
   minThinkMs: 700,
   maxThinkMs: 4200,
   humanSlackCp: 40,
@@ -110,7 +115,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.54.2/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.55.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -624,6 +629,7 @@ function loadSettings(user) {
     merged.humanSlackCp = clampInt(merged.humanSlackCp, 0, 300, CONFIG.humanSlackCp);
     merged.clockFloorSeconds = clampInt(merged.clockFloorSeconds, 3, 120, CONFIG.clockFloorSeconds);
     merged.autoPlayOnLoad = Boolean(merged.autoPlayOnLoad);
+    merged.alwaysAuto = Boolean(merged.alwaysAuto);
     merged.pauseWhenHidden = Boolean(merged.pauseWhenHidden);
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
@@ -3504,19 +3510,24 @@ function nextGameDelay(cfg, random = Math.random) {
 
 // Pure: is this session over? Games and wall-clock, whichever comes first. Zero
 // or a missing value disables that half.
-function sessionLimit({ startedAt, games, now, maxGames, maxMs }) {
+function sessionLimit({ startedAt, games, now, maxGames, maxMs, rollover }) {
   const played = Number.isFinite(games) ? games : 0;
   const hasStart = Number.isFinite(startedAt);
   const start = hasStart ? startedAt : 0;
   const t = Number.isFinite(now) ? now : 0;
+  // A rollover is not a stop: always-auto treats the cap as the end of one run
+  // and the start of the next, so the caller resets and keeps playing.
+  const verdict = (reason) => (rollover
+    ? { stop: false, rollover: true, reason: `${reason} · rolled over` }
+    : { stop: true, rollover: false, reason });
   if (Number.isFinite(maxGames) && maxGames > 0 && played >= maxGames) {
-    return { stop: true, reason: `session limit: ${maxGames} games` };
+    return verdict(`session limit: ${maxGames} games`);
   }
   if (hasStart && Number.isFinite(maxMs) && maxMs > 0 && t >= start + maxMs) {
     const hours = Math.round((maxMs / 3600000) * 10) / 10;
-    return { stop: true, reason: `session limit: ${hours}h` };
+    return verdict(`session limit: ${hours}h`);
   }
-  return { stop: false, reason: '' };
+  return { stop: false, rollover: false, reason: '' };
 }
 
 function isElementVisible(el) {
@@ -4220,6 +4231,7 @@ const PANEL_HTML = `
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
+          <div class="set"><span class="set-lbl">Always auto<i>never stops at the cap; rolls the session</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="alwaysAuto" aria-checked="true" aria-label="Always auto"></button></span></div>
           <div class="set"><span class="set-lbl">Auto rematch<i>queue the next game when one ends</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="autoRematch" aria-checked="false" aria-label="Auto rematch"></button></span></div>
           <div class="set"><span class="set-lbl">Keep-alive<i>near-silent audio holds the tab</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="afkKeepAlive" aria-checked="false" aria-label="Keep alive"></button></span></div>
           <div class="set"><span class="set-lbl">Play while hidden<i>off by default; Chrome may freeze tabs</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="playHidden" aria-checked="false" aria-label="Play while hidden"></button></span></div>
@@ -4357,6 +4369,14 @@ class WraithPanel {
         } else {
           this.cfg[key] = !this.cfg[key];
           sw.setAttribute('aria-checked', String(Boolean(this.cfg[key])));
+        }
+        // One switch for the three that make an unattended session. Turning it
+        // on turns them on; turning them off individually still works.
+        if (key === 'alwaysAuto' && this.cfg.alwaysAuto) {
+          this.cfg.autoPlayOnLoad = true;
+          this.cfg.autoRematch = true;
+          this.cfg.afkKeepAlive = true;
+          this.cfg.pauseWhenHidden = false;
         }
         this.handlers.settingsApplied(this.cfg);
         if (key === 'afkKeepAlive' || key === 'autoRematch') this.handlers.toggleAfk(this.cfg);
@@ -4716,7 +4736,7 @@ function clearSession() {
 // Called once, after a late account name has been adopted: the key is per
 // account and must not be read before the name is known.
 function resumeSessionState() {
-  if (!cfg.autoPlayOnLoad) {
+  if (!cfg.autoPlayOnLoad && !cfg.alwaysAuto) {
     clearSession();
     return;
   }
@@ -4735,6 +4755,15 @@ function guardKey() {
 }
 
 const cfg = loadSettings(currentAccount());
+// Always auto is one switch for the three that make an unattended session: auto-play,
+// the rematch queue and the keep-alive that keeps the tab awake. It is forced here,
+// before any of them is read, so a stale per-account setting cannot defeat it.
+if (cfg.alwaysAuto) {
+  cfg.autoPlayOnLoad = true;
+  cfg.autoRematch = true;
+  cfg.afkKeepAlive = true;
+  cfg.pauseWhenHidden = false;
+}
 if (settingsNeedsSave) saveSettings(cfg);
 const engine = new WraithEngine();
 const tracker = new Chess.ChessStateTracker();
@@ -5426,9 +5455,19 @@ function queueRematch() {
     games: state.gamesPlayed,
     now: Date.now(),
     maxGames: cfg.sessionMaxGames,
-    maxMs: cfg.sessionMaxMs
+    maxMs: cfg.sessionMaxMs,
+    rollover: cfg.alwaysAuto
   });
-  if (limit.stop) {
+  if (limit.rollover) {
+    // The cap closed one run; the next game opens another. The event history is
+    // the audit trail, so the rollover is written down instead of hidden.
+    noteEvent(limit.reason);
+    clearSession();
+    state.sessionStart = Date.now();
+    state.gamesPlayed = 0;
+    state.results = { win: 0, loss: 0, draw: 0 };
+    saveSession();
+  } else if (limit.stop) {
     state.autoPlay = false;
     cfg.autoRematch = false;
     state.warn = limit.reason;

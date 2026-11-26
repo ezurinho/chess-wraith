@@ -6,8 +6,27 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '65-afk.js'],
-  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resultCounts, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS, Chess }`
+  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resultCounts, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS, Chess, CONFIG }`
 );
+
+test('a rollover turns the cap into the next run instead of a stop', () => {
+  const byGames = api.sessionLimit({ startedAt: 0, games: 15, now: 1, maxGames: 15, rollover: true });
+  assert.equal(byGames.stop, false);
+  assert.equal(byGames.rollover, true);
+  assert.match(byGames.reason, /rolled over/);
+  const byTime = api.sessionLimit({ startedAt: 0, games: 3, now: 3 * 60 * 60 * 1000, maxMs: 3 * 60 * 60 * 1000, rollover: true });
+  assert.equal(byTime.rollover, true);
+});
+
+test('without rollover the same cap still stops the session', () => {
+  const r = api.sessionLimit({ startedAt: 0, games: 15, now: 1, maxGames: 15 });
+  assert.equal(r.stop, true);
+  assert.equal(r.rollover, false);
+});
+
+test('the config ships with always auto on', () => {
+  assert.equal(api.CONFIG.alwaysAuto, true);
+});
 
 test('rematch wins over a new game when both are offered', () => {
   const index = api.pickRematchButton([

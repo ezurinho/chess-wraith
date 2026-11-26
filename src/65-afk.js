@@ -61,19 +61,24 @@ function nextGameDelay(cfg, random = Math.random) {
 
 // Pure: is this session over? Games and wall-clock, whichever comes first. Zero
 // or a missing value disables that half.
-function sessionLimit({ startedAt, games, now, maxGames, maxMs }) {
+function sessionLimit({ startedAt, games, now, maxGames, maxMs, rollover }) {
   const played = Number.isFinite(games) ? games : 0;
   const hasStart = Number.isFinite(startedAt);
   const start = hasStart ? startedAt : 0;
   const t = Number.isFinite(now) ? now : 0;
+  // A rollover is not a stop: always-auto treats the cap as the end of one run
+  // and the start of the next, so the caller resets and keeps playing.
+  const verdict = (reason) => (rollover
+    ? { stop: false, rollover: true, reason: `${reason} · rolled over` }
+    : { stop: true, rollover: false, reason });
   if (Number.isFinite(maxGames) && maxGames > 0 && played >= maxGames) {
-    return { stop: true, reason: `session limit: ${maxGames} games` };
+    return verdict(`session limit: ${maxGames} games`);
   }
   if (hasStart && Number.isFinite(maxMs) && maxMs > 0 && t >= start + maxMs) {
     const hours = Math.round((maxMs / 3600000) * 10) / 10;
-    return { stop: true, reason: `session limit: ${hours}h` };
+    return verdict(`session limit: ${hours}h`);
   }
-  return { stop: false, reason: '' };
+  return { stop: false, rollover: false, reason: '' };
 }
 
 function isElementVisible(el) {
