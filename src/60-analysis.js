@@ -67,6 +67,19 @@ function styleProfile(cfg, opts = {}) {
   };
 }
 
+// The engine stops on `go depth N` before the clock is spent, which is fine when
+// N is what the account can use and wrong when it is not: measured 2026-11-26 on
+// an Italian middlegame with MultiPV 4, depth 14 finished in 121 ms of a 700 ms
+// budget (and in 218 ms of 3000) and answered g8f6; the same budget with the cap
+// at 22 reached depth 16 and answered f8c5. The default is right for a 1500
+// account and caps a 2200 one seven plies under what its clock pays for, so the
+// cap follows the anchor.
+function depthForAccount(baseDepth, elo) {
+  const base = clampInt(baseDepth, 4, 22, 14);
+  const step = Math.max(0, Math.round((Number(elo) - 1500) / 100));
+  return clampInt(base + step, base, 22, base);
+}
+
 function weightedPick(items) {
   const total = items.reduce((acc, item) => acc + item.weight, 0);
   if (!(total > 0)) return items[0] || null;

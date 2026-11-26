@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.43.0 — 2026-11-26
+
+The depth cap follows the account, so a strong account is not played at a 1500
+account's depth.
+
+- Measured: at depth 14 the engine stops after **121 ms** of a 700 ms budget
+  (218 ms of 3000) and answers `g8f6` on an Italian middlegame; with the cap at
+  22 the same budget reaches depth 16 and answers `f8c5`. The cap, not the clock,
+  was deciding the move.
+- `depthForAccount()` adds one ply per 100 points above 1500, clamped to the
+  engine's 22. A 1425 account keeps the old 14 and costs nothing; a 2200 one gets
+  21. The report prints `depth 14->21` when the cap is raised.
+- 176 tests.
+
 ## 1.42.0 — 2026-11-26
 
 The bug report carries the anchor chain, and the page costs 1.8 ms.

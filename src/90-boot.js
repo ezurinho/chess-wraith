@@ -939,16 +939,17 @@ function analyze(snapshot, force) {
   state.thinking = true;
   refreshPanel();
 
+  const anchor = resolveElo();
   const request = {
     fen: snapshot.fen,
     uciMoves: snapshot.uciMoves,
     turn: snapshot.turn,
     flipped: snapshot.flipped,
-    depth: cfg.maxDepth,
+    depth: depthForAccount(cfg.maxDepth, anchor),
     clockSeconds: state.clockSeconds,
     moveTimeMs: clockBoundMoveTime(phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)), state.clockSeconds),
     multiPv: Math.max(1, cfg.multiPv),
-    elo: resolveElo(),
+    elo: anchor,
     skill: 20
   };
   engine
@@ -1448,7 +1449,7 @@ function reportText() {
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
-    `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''
   ];

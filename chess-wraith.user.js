@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.42.0
+// @version      1.43.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.42.0';
+const VERSION = '1.43.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.42.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.43.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2985,6 +2985,19 @@ function styleProfile(cfg, opts = {}) {
   };
 }
 
+// The engine stops on `go depth N` before the clock is spent, which is fine when
+// N is what the account can use and wrong when it is not: measured 2026-11-26 on
+// an Italian middlegame with MultiPV 4, depth 14 finished in 121 ms of a 700 ms
+// budget (and in 218 ms of 3000) and answered g8f6; the same budget with the cap
+// at 22 reached depth 16 and answered f8c5. The default is right for a 1500
+// account and caps a 2200 one seven plies under what its clock pays for, so the
+// cap follows the anchor.
+function depthForAccount(baseDepth, elo) {
+  const base = clampInt(baseDepth, 4, 22, 14);
+  const step = Math.max(0, Math.round((Number(elo) - 1500) / 100));
+  return clampInt(base + step, base, 22, base);
+}
+
 function weightedPick(items) {
   const total = items.reduce((acc, item) => acc + item.weight, 0);
   if (!(total > 0)) return items[0] || null;
@@ -5226,16 +5239,17 @@ function analyze(snapshot, force) {
   state.thinking = true;
   refreshPanel();
 
+  const anchor = resolveElo();
   const request = {
     fen: snapshot.fen,
     uciMoves: snapshot.uciMoves,
     turn: snapshot.turn,
     flipped: snapshot.flipped,
-    depth: cfg.maxDepth,
+    depth: depthForAccount(cfg.maxDepth, anchor),
     clockSeconds: state.clockSeconds,
     moveTimeMs: clockBoundMoveTime(phaseMoveTime(cfg.moveTimeMs, snapshot.fen, plyOf(snapshot)), state.clockSeconds),
     multiPv: Math.max(1, cfg.multiPv),
-    elo: resolveElo(),
+    elo: anchor,
     skill: 20
   };
   engine
@@ -5735,7 +5749,7 @@ function reportText() {
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
-    `settings depth ${cfg.maxDepth} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''
   ];

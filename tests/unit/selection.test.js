@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, fatigueFactor, sideScore, clamp, clampInt, median, pushBounded, LEGIT }`
+  `{ chooseMove, computeDelay, styleProfile, effectiveElo, eloToSkill, fatigueFactor, sideScore, clamp, clampInt, median, pushBounded, depthForAccount, LEGIT }`
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -204,4 +204,19 @@ test('the clock caps the published baseline instead of letting it flag the accou
   assert.ok(low <= 2222, `forty seconds left keeps a 18-move tank: ${low}`);
   assert.ok(cramped <= 500, `nine seconds left is a scramble: ${cramped}`);
   assert.ok(cramped >= 250, 'but never an impossible zero');
+});
+test('the depth cap follows the anchor instead of capping a strong account', () => {
+  // 1500 is where the default is right, so nothing moves there.
+  assert.equal(api.depthForAccount(14, 1425), 14);
+  assert.equal(api.depthForAccount(14, 1500), 14);
+  assert.equal(api.depthForAccount(14, 900), 14);
+  // One extra ply per 100 points above the anchor, up to the engine's own 22.
+  assert.equal(api.depthForAccount(14, 1800), 17);
+  assert.equal(api.depthForAccount(14, 2200), 21);
+  assert.equal(api.depthForAccount(14, 2600), 22);
+  assert.equal(api.depthForAccount(14, 3200), 22);
+  // A user who already asked for more keeps it, and the clamp still holds.
+  assert.equal(api.depthForAccount(18, 1700), 20);
+  assert.equal(api.depthForAccount(22, 2000), 22);
+  assert.equal(api.depthForAccount(2, 2000), 9);
 });

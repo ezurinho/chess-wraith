@@ -195,6 +195,26 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The depth cap was the strength ceiling, and it did not follow the account
+
+Measured 2026-11-26 in the browser with the bundled engine, MultiPV 4, on a
+normal Italian middlegame (`r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b`):
+
+| budget | cap | search stopped at | depth | move |
+|---|---|---|---|---|
+| 700 ms | 14 | **121 ms** | 14 | g8f6 |
+| 700 ms | 22 | 715 ms | **16** | f8c5 |
+| 3000 ms | 14 | **218 ms** | 14 | g8f6 |
+| 3000 ms | 22 | 3014 ms | **21** | f8c5 |
+
+Two things follow. First, the cap is what stops the search, not the clock: the
+engine finishes depth 14 in a sixth of the time it is given and then plays the
+move depth 14 found. Second, the move is different — g8f6 against f8c5 — so the
+cap is not cosmetic, it changes what the account plays.
+
+`depthForAccount(base, elo)` now adds one ply per 100 points above 1500, clamped
+to the engine's own 22. A 1425 account keeps 14 and pays nothing; a 2200 account
+gets 21 and spends the budget it already had.
 ## The three numbers a report needs, and the ones it had
 
 Measured on 2026-11-26 with 1.41.0 in the browser:
@@ -626,7 +646,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 175 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 176 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
