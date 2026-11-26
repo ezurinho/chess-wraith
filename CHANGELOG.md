@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.63.3 — 2026-11-27
+
+A hanging move is chosen, not weighed.
+
+- Measured on 1.63.2, live, at a 133 account: five improvised moves in ten and
+  6 cp/move. Weighting the hanging move at 2.5 per point was not enough — a free
+  pawn capture weighs more, and most moves leave nothing hanging at all, so the
+  pool fell back to good moves.
+- When the pool has a move that leaves material on a covered square, that move is
+  picked. Otherwise the old weighting stands.
+
 ## 1.63.2 — 2026-11-27
 
 The improvised move hung nothing.

@@ -211,7 +211,12 @@ function chooseMove(lines, cfg, opts = {}) {
     if (rnd() < improvisationChance(target)) {
       const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);
       if (pool.length) {
-        const pick = pickImprovised(pool, rnd);
+        // If the position offers a move that leaves material on a covered
+        // square, that is the move this account plays. Weighting it against the
+        // captures was not enough: taking a free pawn is a good move, and the
+        // measured loss stayed at 6 cp against a 293 band.
+        const loose = pool.filter((c) => Number(c.hanging) > 0);
+        const pick = pickImprovised(loose.length ? loose : pool, rnd);
         return {
           line: { bestUci: pick.uci, bestSan: pick.san || '' },
           cpLoss: target,

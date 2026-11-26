@@ -90,6 +90,12 @@ test('an improvised move grabs material instead of wandering', () => {
   // weighs more than a pawn capture, which is how the 133 blunders arrive.
   assert.ok(api.beginnerWeight({ hanging: 9 }) > api.beginnerWeight({ capture: 1 }));
   assert.ok(api.beginnerWeight({ hanging: 0, capture: 0 }) < api.beginnerWeight({ hanging: 3 }));
+  // Given a move that hangs the queen, the improvisation takes it, every time.
+  const loose = [{ uci: 'a2a3' }, { uci: 'h2h4' }, { uci: 'g2g4' }, { uci: 'b2b3' }, { uci: 'qh', hanging: 9 }, { uci: 'px', capture: 1 }];
+  const three = [line('e2e4', 0), line('d2d4', -15), line('g1f3', -30)];
+  const bad = api.chooseMove(three, cfg, { accountElo: 133, improvise: loose, rng: () => 0.1 });
+  assert.equal(bad.line.bestUci, 'qh');
+  assert.equal(bad.improvised, true);
   const pool = [
     { uci: 'qx', capture: 9 },
     { uci: 'px', capture: 1 },
