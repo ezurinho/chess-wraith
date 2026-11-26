@@ -60,7 +60,7 @@ only version anyone installs.
 - `tests/unit/` — pure logic, jsdom board fixtures, a fake-worker engine test, the
   pace parser, per-account settings, input geometry, the promotion poll, the
   move retry plan, the game-over transition, engine recovery, the clock bounds
-  and timer throttling, and the beginner improvisation rate. **221 tests.** The real wasm download and compile still
+  and timer throttling, and the beginner improvisation rate. **222 tests.** The real wasm download and compile still
   need a browser; the UCI protocol, options, queued searches and fallback are
   covered in a browser-shaped environment.
 - `tests/unit/dom-board.test.js` — jsdom fixtures of chess.com markup; the

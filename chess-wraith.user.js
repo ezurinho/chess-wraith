@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.66.1
+// @version      1.67.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.66.1';
+const VERSION = '1.67.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.66.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.67.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -679,6 +679,16 @@ function saveSettings(cfg, user) {
 
   function cloneGrid(grid) {
     return grid.map((row) => row.slice());
+  }
+
+  // After a click the question is not "did the board change" but "did the board
+  // play the move that was asked for". 'wrong' is the case that used to pass: a
+  // click that selected another piece changes the grid too.
+  function moveLanded(before, after, expected) {
+    if (!before || !after) return 'none';
+    if (gridsEqual(before, after)) return 'none';
+    if (!expected) return 'landed';
+    return gridsEqual(after, expected) ? 'landed' : 'wrong';
   }
 
   function gridsEqual(a, b) {
@@ -1794,6 +1804,7 @@ function saveSettings(cfg, user) {
     createEmptyGrid,
     cloneGrid,
     gridsEqual,
+    moveLanded,
     squareName,
     parseSquare,
     chessComClassToSquare,
@@ -6784,6 +6795,32 @@ function applyAcplGuard() {
   }
 }
 
+// Everything that happens once a move really landed, in one place, so a move the
+// board only took on the fallback input mode is measured like any other. It was
+// not: the retry path returned true without setting pendingMyLoss, so the panel's
+// loss/move silently skipped every move that needed a second try.
+function settleLandedMove(grid, snap, choice, move) {
+  state.autoMovedGrid = grid;
+  state.moveMisses = 0;
+  if (choice && choice.cpLoss === 0) state.top1Streak += 1;
+  else state.top1Streak = 0;
+  if (choice) {
+    if (choice.improvised) {
+      const before = state.analysis && state.analysis.lines && state.analysis.lines[0]
+        ? state.analysis.lines[0].whiteCp
+        : null;
+      state.pendingMyLoss = { ply: plyOf(snap) + 1, side: snap.turn, before };
+      state.improvisedPicks += 1;
+    } else {
+      pushMyLoss(choice.cpLoss);
+    }
+  }
+  recordOpening(move, plyOf(snap));
+  recordPace(state.lastDelayMs);
+  state.lastMyMoveAt = Date.now();
+  scheduleScan(120);
+}
+
 async function playMove(move, targetFen, choice) {
   const snap = state.snapshot;
   if (!snap || !state.boardEl) return false;
@@ -6814,33 +6851,15 @@ async function playMove(move, targetFen, choice) {
   } catch {
     expected = null;
   }
-  const changed = after && after.valid && after.grid && !Chess.gridsEqual(snap.grid, after.grid);
-  const landed = changed && (!expected || Chess.gridsEqual(after.grid, expected));
-  if (changed && !landed) {
+  const verdict = Chess.moveLanded(snap.grid, after && after.valid ? after.grid : null, expected);
+  if (verdict === 'wrong') {
     state.warn = 'the board played a different move';
     state.moveMisses = (state.moveMisses || 0) + 1;
     refreshPanel();
   }
-  if (landed) {
-    state.autoMovedGrid = after.grid;
-    state.moveMisses = 0;
-    if (choice && choice.cpLoss === 0) state.top1Streak += 1;
-    else state.top1Streak = 0;
-    if (choice) {
-      if (choice.improvised) {
-        const before = state.analysis && state.analysis.lines && state.analysis.lines[0]
-          ? state.analysis.lines[0].whiteCp
-          : null;
-        state.pendingMyLoss = { ply: plyOf(snap) + 1, side: snap.turn, before };
-        state.improvisedPicks += 1;
-      } else {
-        pushMyLoss(choice.cpLoss);
-      }
-    }
-    recordOpening(move, plyOf(snap));
-    recordPace(state.lastDelayMs);
-    state.lastMyMoveAt = Date.now();
-    scheduleScan(120);
+  if (verdict === 'landed') {
+    state.warn = '';
+    settleLandedMove(after.grid, snap, choice, move);
     return true;
   }
 
@@ -6852,12 +6871,19 @@ async function playMove(move, targetFen, choice) {
     await executeMoveOnBoard(state.boardEl, move, snap.flipped, snap.turn, { inputMode: fallback, clockSeconds: state.clockSeconds });
     await sleep(cfg.verifyMoveMs);
     const second = scanBoard(mySide(snap.flipped));
-    if (second && second.valid && !Chess.gridsEqual(snap.grid, second.grid)) {
-      state.autoMovedGrid = second.grid;
+    // The same rule as the first attempt: the fallback input mode is allowed to
+    // land the move, not to change the position into something else.
+    const again = Chess.moveLanded(snap.grid, second && second.valid ? second.grid : null, expected);
+    if (again === 'landed') {
       state.warn = '';
-      recordOpening(move, plyOf(snap));
-      scheduleScan(120);
+      settleLandedMove(second.grid, snap, choice, move);
       return true;
+    }
+    if (again === 'wrong') {
+      state.warn = 'the board played a different move';
+      state.moveMisses = (state.moveMisses || 0) + 1;
+      refreshPanel();
+      return false;
     }
   }
   // Not a pause: the caller re-arms from here, and only three misses in a row

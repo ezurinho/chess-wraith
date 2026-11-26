@@ -13,6 +13,16 @@
     return grid.map((row) => row.slice());
   }
 
+  // After a click the question is not "did the board change" but "did the board
+  // play the move that was asked for". 'wrong' is the case that used to pass: a
+  // click that selected another piece changes the grid too.
+  function moveLanded(before, after, expected) {
+    if (!before || !after) return 'none';
+    if (gridsEqual(before, after)) return 'none';
+    if (!expected) return 'landed';
+    return gridsEqual(after, expected) ? 'landed' : 'wrong';
+  }
+
   function gridsEqual(a, b) {
     if (!a || !b) return false;
     for (let r = 0; r < 8; r++) {
@@ -1126,6 +1136,7 @@
     createEmptyGrid,
     cloneGrid,
     gridsEqual,
+    moveLanded,
     squareName,
     parseSquare,
     chessComClassToSquare,

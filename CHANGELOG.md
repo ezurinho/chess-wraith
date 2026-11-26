@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.67.0 — 2026-11-27
+
+The second attempt is not a different rule.
+
+- Found by reading `playMove` during the review, not by a test: the fallback
+  input mode was verified with "the grid changed", the exact check the first
+  attempt had already stopped trusting. A click that grabbed another piece and
+  moved it counted as a success and cleared the warning.
+- The same fallback returned `true` without setting `pendingMyLoss`, so every
+  move the board took on the second try was invisible in the panel's loss/move.
+  The measurement was undercounting in the direction that flattered it.
+- Both attempts now share one verdict, `Chess.moveLanded`, returning `landed`,
+  `wrong` or `none`, and one accounting function, `settleLandedMove`.
+
 ## 1.66.1 — 2026-11-27
 
 Review of 1.66.0: three games, three numbers, and the spread is the finding.

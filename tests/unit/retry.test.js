@@ -1,7 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { loadFragments } = require('./helpers.js');
 
+const Chess = require(path.resolve(__dirname, '..', '..', 'src', '30-chess.js'));
 const api = loadFragments(
   ['10-config.js', '20-utils.js'],
   `{ moveRetryPlan, autoArmDecision, throttleDecision }`
@@ -12,6 +14,17 @@ test('a swallowed click gets three growing attempts, then an honest stop', () =>
   assert.deepEqual([api.moveRetryPlan(2).retry, api.moveRetryPlan(2).delayMs], [true, 1800]);
   assert.deepEqual([api.moveRetryPlan(3).retry, api.moveRetryPlan(3).delayMs], [true, 2700]);
   assert.deepEqual([api.moveRetryPlan(4).retry, api.moveRetryPlan(4).delayMs], [false, 0], 'the fourth miss is the board, not the click');
+});
+
+test('a landed move is the move that was asked for, on the first try or the second', () => {
+  const start = Chess.parseFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1').grid;
+  const e4 = Chess.parseFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1').grid;
+  const d4 = Chess.parseFen('rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1').grid;
+  assert.equal(Chess.moveLanded(start, start, e4), 'none', 'a swallowed click changes nothing');
+  assert.equal(Chess.moveLanded(start, e4, e4), 'landed');
+  assert.equal(Chess.moveLanded(start, null, e4), 'none', 'an unreadable board claims nothing');
+  assert.equal(Chess.moveLanded(start, d4, e4), 'wrong', 'another piece moved is not the move');
+  assert.equal(Chess.moveLanded(start, d4, null), 'landed', 'no rule for the expected grid, no verdict against it');
 });
 
 test('a batched timer is only called batched when the tab is hidden', () => {
