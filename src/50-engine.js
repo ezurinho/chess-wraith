@@ -35,6 +35,17 @@ function isNetworkError(err) {
   return /^HTTP 5\d\d/.test(String(err.message || ''));
 }
 
+// What the engine says it is, not what we hoped it was. The panel prints this
+// string and the debug report repeats it, so a build served from another tag
+// must not be mislabelled by a constant: the vendored worker answers
+// `id name Stockfish 19 Lite WASM` (measured 2026-11-26 in the browser).
+function engineLabel(idName, nnue) {
+  // The JS fallback has its own name whatever number it carries.
+  if (!nnue) return 'Stockfish 2019 JS';
+  const match = /Stockfish\s+(\d+(?:\.\d+)?)/i.exec(String(idName || ''));
+  return match ? `Stockfish ${match[1]} NNUE` : 'Stockfish 19 NNUE';
+}
+
 class WraithEngine {
   constructor() {
     this.worker = null;
@@ -275,6 +286,12 @@ class WraithEngine {
   #onLine(raw) {
     const line = typeof raw === 'string' ? raw.trim() : '';
     if (!line) return;
+
+    if (line.startsWith('id name ')) {
+      this.idName = line.slice(8).trim();
+      this.mode = engineLabel(this.idName, this.nnue);
+      return;
+    }
 
     if (line === 'uciok') {
       if (this.handshakeTimer) clearTimeout(this.handshakeTimer);

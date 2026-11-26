@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.45.0 — 2026-11-26
+
+The engine is named by the engine, not by a constant.
+
+- Asked over UCI, the shipped worker answers `id name Stockfish 19 Lite WASM`;
+  the panel printed a hardcoded `Stockfish 19 NNUE`. The family was right, the
+  build was not, and a different tag would have been mislabelled silently.
+- `engineLabel()` parses the `id name` line at handshake; the panel and the
+  report follow it. The 2019 JS fallback keeps its own name.
+- 178 tests.
+
 ## 1.44.0 — 2026-11-26
 
 The delay is the whole interval, so the search is no longer paid for twice.

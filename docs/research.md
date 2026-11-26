@@ -195,6 +195,26 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The panel was naming the engine from memory
+
+Asked directly over UCI in the browser (2026-11-26, the shipped tag), the
+vendored worker answers:
+
+```
+id name Stockfish 19 Lite WASM
+id author the Stockfish developers (see AUTHORS file)
+uciok
+```
+
+The panel printed `Stockfish 19 NNUE`, a constant in `50-engine.js`. The family
+was right, the build was not: the string it reports is the **Lite WASM** port,
+and the net is the lite-single one. Nothing broke, because this tag ships that
+build — but the label was a promise nothing checked, and the release that serves
+a different binary would have kept claiming 19.
+
+`engineLabel()` now parses the `id name` line, so the panel and the report say
+what the engine says. The JS fallback keeps its own name: it is the 2019 build
+whatever number it carries.
 ## The search was paid for twice
 
 The delay is meant to be the interval between the opponent's move and ours. It
@@ -666,7 +686,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 177 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 178 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

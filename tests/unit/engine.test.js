@@ -71,7 +71,7 @@ function harness({ nnueSkip = true, fetchImpl = null } = {}) {
     },
     setTimeout: fakeSetTimeout, clearTimeout: fakeClearTimeout, setInterval, clearInterval, console, Math, Number, Date, JSON, Promise, Array, Object, String, Map, Set, RegExp, Error
   });
-  const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { WraithEngine, positionMoves, CONFIG, ENGINE_MIRROR };';
+  const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { WraithEngine, positionMoves, CONFIG, ENGINE_MIRROR, engineLabel };';
   vm.runInContext(source, context, { filename: 'engine-harness.js' });
   const api = vm.runInContext('globalThis.__t', context);
   return { api, dom, workers, storage, advance };
@@ -450,4 +450,23 @@ test('a crash cluster that exhausts its retries hands the engine to the backoff'
   await flush();
   assert.ok(workers.length > 1, 'and it boots again after the backoff');
   engine.destroy();
+});
+test('the label comes from the engine, not from a constant', async () => {
+  const { api, workers } = harness({ nnueSkip: false });
+  const engine = new api.WraithEngine();
+  const booting = engine.boot();
+  await new Promise((r) => setImmediate(r));
+  const worker = workers[workers.length - 1];
+  worker.reply('id name Stockfish 21 Lite WASM');
+  assert.equal(engine.mode, 'Stockfish 21 NNUE');
+  assert.equal(engine.idName, 'Stockfish 21 Lite WASM');
+  worker.reply('uciok');
+  worker.reply('readyok');
+  await booting;
+  assert.equal(engine.mode, 'Stockfish 21 NNUE');
+  engine.destroy();
+
+  assert.equal(api.engineLabel('Stockfish 19 Lite WASM', true), 'Stockfish 19 NNUE');
+  assert.equal(api.engineLabel('', true), 'Stockfish 19 NNUE', 'no id line, the shipped build');
+  assert.equal(api.engineLabel('Stockfish 11 64', false), 'Stockfish 2019 JS', 'the fallback keeps its name');
 });
