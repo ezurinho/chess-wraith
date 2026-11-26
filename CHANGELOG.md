@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.63.1 — 2026-11-27
+
+The loss of an improvised move was the target, not a measurement.
+
+- `chooseMove` returned `cpLoss: target` for an improvised move, so the panel's
+  loss/move mixed real search drops with a constant. The live game on 1.63.0:
+  eleven of twenty samples were exactly 293 cp, the number the script wanted,
+  not the number it played.
+- An improvised move's loss is measured after the fact now: the eval of the
+  position after the move (`whiteCp`) against the one the script chose from, with
+  a ply guard so a stale pairing is dropped instead of counted. The arithmetic is
+  `myLossFromWhiteCp`, tested from both sides.
+- A move that improves is not a loss, and one move is capped at 600 cp.
+
 ## 1.63.0 — 2026-11-27
 
 The beginner model could never run.

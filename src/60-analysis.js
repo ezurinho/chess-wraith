@@ -164,6 +164,17 @@ function openingProbeTarget(shares, lines) {
   return { san: sanKey(rows[0][0]), share: Number(rows[0][1]) };
 }
 
+// The real loss of a move, measured after the fact: the eval of the position
+// before it, minus the eval after it, both in white's centipawns. Improvised
+// moves have no search line of their own, so claiming a number for them (the
+// old `cpLoss: target`) reported the target as if it had been measured.
+function myLossFromWhiteCp(side, before, after) {
+  if (typeof before !== 'number' || typeof after !== 'number') return null;
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return null;
+  const raw = side === 'w' ? before - after : after - before;
+  return clamp(Math.round(raw), 0, 600);
+}
+
 function chooseMove(lines, cfg, opts = {}) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
   const best = lines[0];

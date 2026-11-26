@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '60-analysis.js'],
-  '{ acplBand, levelPlayTarget, improvisationChance, beginnerWeight, pickImprovised, styleProfile, chooseMove, LEGIT }'
+  '{ acplBand, levelPlayTarget, improvisationChance, beginnerWeight, pickImprovised, styleProfile, chooseMove, myLossFromWhiteCp, LEGIT }'
 );
 
 const line = (uci, cp, mate = null) => ({ bestUci: uci, scoreCp: cp, mateIn: mate, evalText: '' });
@@ -18,6 +18,14 @@ test('the beginner band is steep, bounded and joins the old curve at the floor',
   assert.equal(api.acplBand(600), 200);
   assert.ok(api.acplBand(1320) <= 60, 'and the floor is back on the published curve');
   assert.ok(api.acplBand(1000) > api.acplBand(1320));
+  // The loss of a move with no line of its own is measured from the evals, not
+  // claimed from the target: +20 for white that becomes -150 is 170 cp, and the
+  // same board seen from black flips.
+  assert.equal(api.myLossFromWhiteCp('w', 20, -150), 170);
+  assert.equal(api.myLossFromWhiteCp('b', -150, 20), 170);
+  assert.equal(api.myLossFromWhiteCp('w', 20, NaN), null);
+  assert.equal(api.myLossFromWhiteCp('w', 10, 40), 0, 'a move that improves is not a loss');
+  assert.equal(api.myLossFromWhiteCp('w', 900, -900), 600, 'and one number is not a whole game');
 });
 
 test('level play exists only below the engine floor, and only when asked', () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.63.0
+// @version      1.63.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.63.0';
+const VERSION = '1.63.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.63.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.63.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3563,6 +3563,17 @@ function openingProbeTarget(shares, lines) {
   return { san: sanKey(rows[0][0]), share: Number(rows[0][1]) };
 }
 
+// The real loss of a move, measured after the fact: the eval of the position
+// before it, minus the eval after it, both in white's centipawns. Improvised
+// moves have no search line of their own, so claiming a number for them (the
+// old `cpLoss: target`) reported the target as if it had been measured.
+function myLossFromWhiteCp(side, before, after) {
+  if (typeof before !== 'number' || typeof after !== 'number') return null;
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return null;
+  const raw = side === 'w' ? before - after : after - before;
+  return clamp(Math.round(raw), 0, 600);
+}
+
 function chooseMove(lines, cfg, opts = {}) {
   if (!Array.isArray(lines) || lines.length === 0) return null;
   const best = lines[0];
@@ -5393,6 +5404,10 @@ const state = {
   lossRecordedFen: null,
   myCpLosses: [],
   myAcpl: 0,
+  // An improvised move has no line to measure against; its loss is read from the
+  // eval of the position after it, when that analysis arrives.
+  pendingMyLoss: null,
+  improvisedPicks: 0,
   // The card after the last finished game; read back per account on boot.
   lastReport: null,
   // The last twenty games, oldest first. The Stats tab reads this, not the card.
@@ -6152,6 +6167,8 @@ function onNewGame() {
   state.rematchMisses = 0;
   state.myCpLosses = [];
   state.myAcpl = 0;
+  state.pendingMyLoss = null;
+  state.improvisedPicks = 0;
   state.lossRecordedFen = null;
   state.top1Streak = 0;
   // A new game is a new clock and a new opponent. Carrying the previous peak
@@ -6291,6 +6308,30 @@ function recordOpponentLoss(result) {
   state.effectiveElo = resolveElo();
 }
 
+function pushMyLoss(cp) {
+  if (typeof cp !== 'number' || !Number.isFinite(cp)) return;
+  state.myCpLosses.push(clamp(Math.round(cp), 0, 600));
+  if (state.myCpLosses.length > 20) state.myCpLosses.shift();
+  state.myAcpl = state.myCpLosses.reduce((a, b) => a + b, 0) / state.myCpLosses.length;
+  applyAcplGuard();
+}
+
+// Same shape as the opponent's measurement, for the moves that have no line of
+// their own. The eval before the move is the one the script chose from.
+function recordMyMeasuredLoss(result) {
+  const pending = state.pendingMyLoss;
+  if (!pending) return;
+  const snap = state.snapshot;
+  const prev = state.prevSnapshot;
+  if (!snap || !prev || !result || !result.lines || result.lines.length === 0) return;
+  state.pendingMyLoss = null;
+  if (plyOf(prev) + 1 !== pending.ply) return;
+  if (prev.turn !== mySide(snap.flipped)) return;
+  const after = result.lines[0].whiteCp;
+  const loss = myLossFromWhiteCp(pending.side, pending.before, after);
+  if (loss !== null) pushMyLoss(loss);
+}
+
 function analyze(snapshot, force) {
   if (!snapshot || !snapshot.fen) return;
   const legal = Chess.generateLegalMoves(snapshot);
@@ -6353,6 +6394,7 @@ function onFinal(result) {
   state.analysis = result;
   state.thinking = false;
   recordOpponentLoss(result);
+  recordMyMeasuredLoss(result);
   refreshPanel();
   if (state.autoPlay) scheduleAutoMove(result);
 }
@@ -6635,10 +6677,15 @@ async function playMove(move, targetFen, choice) {
     if (choice && choice.cpLoss === 0) state.top1Streak += 1;
     else state.top1Streak = 0;
     if (choice) {
-      state.myCpLosses.push(clamp(Math.round(choice.cpLoss || 0), 0, 600));
-      if (state.myCpLosses.length > 20) state.myCpLosses.shift();
-      state.myAcpl = state.myCpLosses.reduce((a, b) => a + b, 0) / state.myCpLosses.length;
-      applyAcplGuard();
+      if (choice.improvised) {
+        const before = state.analysis && state.analysis.lines && state.analysis.lines[0]
+          ? state.analysis.lines[0].whiteCp
+          : null;
+        state.pendingMyLoss = { ply: plyOf(snap) + 1, side: snap.turn, before };
+        state.improvisedPicks += 1;
+      } else {
+        pushMyLoss(choice.cpLoss);
+      }
     }
     recordOpening(move, plyOf(snap));
     recordPace(state.lastDelayMs);
