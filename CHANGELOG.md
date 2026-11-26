@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.40.1 — 2026-11-26
+
+The rating floor is 250, not 400.
+
+- Chess.com's cheapest bot is 250 and a club player can be 300; the old floor
+  threw those away. The 3–4 digit regex plus the player-container scope already
+  reject clocks and usernames, so the floor only has to reject fragments.
+- 173 tests: the measured vs-computer markup reads `(300)` as 300.
+
 ## 1.40.0 — 2026-11-26
 
 The opponent's rating is read where chess.com actually keeps it.

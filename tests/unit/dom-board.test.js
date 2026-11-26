@@ -172,6 +172,9 @@ test('the opponent rating is found under the names the live layout uses', () => 
   const { api } = mount(html);
   assert.equal(api.readOpponentRating('w', false), 1234, 'playing White, the opponent is on top');
   assert.equal(api.readOpponentRating('b', false), 1500, 'playing Black, the opponent is at the bottom');
+  // The lowest bot is 250, and a club player can be 300.
+  const low = mount(boardHtml() + '<div class="board-layout-top"><div class="player-row-top"><div class="cc-user-rating-white" data-user-block-part="rating">(300)</div></div></div>');
+  assert.equal(low.api.readOpponentRating('w', false), 300);
 });
 
 test('a page that hides the ratings reports unknown instead of a guess', () => {

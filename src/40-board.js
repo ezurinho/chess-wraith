@@ -260,7 +260,9 @@ function ratingNumber(text) {
   const m = /(\d{3,4})/.exec(String(text).replace(/\s+/g, ' '));
   if (!m) return null;
   const rating = Number.parseInt(m[1], 10);
-  return rating >= 400 && rating <= 3500 ? rating : null;
+  // 250 is the lowest bot chess.com sells; anything lower is a fragment of some
+  // other number, not a player.
+  return rating >= 250 && rating <= 3500 ? rating : null;
 }
 
 function readOpponentRating(mySide, flipped) {
