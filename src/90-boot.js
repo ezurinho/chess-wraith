@@ -1091,7 +1091,9 @@ function probeOpeningMove(probe, result) {
     multiPv: 1,
     searchmoves: probe.uci,
     depth: Math.min(cfg.maxDepth, 12),
-    moveTimeMs: 400
+    // A fixed 400 ms is a rapid budget: on 1+0 the probe would spend most of the
+    // move's search on a move the account plays without thinking.
+    moveTimeMs: Math.min(400, Math.max(180, Math.round(searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds }) * 0.6)))
   };
   engine
     .analyze(request)

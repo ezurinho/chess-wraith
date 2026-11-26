@@ -226,6 +226,10 @@ Now the delay is reduced by exactly what the probe spent (`spentMs`, clamped to
 without a probe. Measured in the bundle: `computeDelay(...spentMs: 0)` minus
 `computeDelay(...spentMs: 400)` is 400 ms.
 
+The probe's budget follows the clock: `min(400, max(180, 0.6 x searchBudget))` ms.
+In a 3+0 game the main search gets 300–700 ms per move, and a fixed 400 ms probe
+would have spent most of it on a move the account plays on instinct.
+
 `report()` carries `probe N` next to the repertoire line once a restricted search
 has fired, so the panel says out loud whether the account's own move was judged
 or only reordered.

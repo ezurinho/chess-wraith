@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.51.3 — 2026-11-26
+
+The probe's budget follows the clock.
+
+- The restricted search used a fixed 400 ms, which is a rapid budget: on 1+0 it
+  spent most of the move's search on a move the account plays without thinking.
+  It is now `min(400, max(180, 0.6 x searchBudget))` ms.
+
 ## 1.51.2 — 2026-11-26
 
 The report says whether the repertoire was really consulted.
