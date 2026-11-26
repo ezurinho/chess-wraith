@@ -49,7 +49,7 @@ function mount(html) {
     AbortSignal,
     getComputedStyle: window.getComputedStyle.bind(window)
   });
-  const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { readGridFromBoard, readSanMoveList, readMoveNodes, scanBoard, readOpponentRating, Chess };';
+  const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { readGridFromBoard, readSanMoveList, readMoveNodes, scanBoard, readOpponentRating, readMyRating, Chess };';
   vm.runInContext(source, context, { filename: 'dom-harness.js' });
   return { window, api: vm.runInContext('globalThis.__t', context), dom };
 }
@@ -172,9 +172,34 @@ test('the opponent rating is found under the names the live layout uses', () => 
   const { api } = mount(html);
   assert.equal(api.readOpponentRating('w', false), 1234, 'playing White, the opponent is on top');
   assert.equal(api.readOpponentRating('b', false), 1500, 'playing Black, the opponent is at the bottom');
-  // The lowest bot is 250, and a club player can be 300.
+  // The pool starts around 100: a 300 club player and a 113 beginner are valid.
   const low = mount(boardHtml() + '<div class="board-layout-top"><div class="player-row-top"><div class="cc-user-rating-white" data-user-block-part="rating">(300)</div></div></div>');
   assert.equal(low.api.readOpponentRating('w', false), 300);
+  const beginner = mount(boardHtml() + '<div class="player-component player-top"><span class="user-tagline-rating">(113)</span></div>' + '<div class="player-component player-bottom"><span class="user-tagline-rating">(133)</span></div>');
+  assert.equal(beginner.api.readOpponentRating('w', false), 113, 'a 113 beginner is a rating');
+});
+
+test('ratings are read from the player components the live game paints', () => {
+  // Measured shape: no board-layout-* wrapper, the row class is on the player
+  // component and the number lives in user-tagline-rating. This is the page
+  // where the panel used to say "anonymous" and fall back to the ACPL estimate.
+  const html = boardHtml() +
+    '<div class="player-component player-top"><div class="user-tagline-component">' +
+    '<span class="user-tagline-rating">(113)</span></div></div>' +
+    '<div class="player-component player-bottom"><div class="user-tagline-component">' +
+    '<span class="user-tagline-rating">(133)</span></div></div>';
+  const { api } = mount(html);
+  assert.equal(api.readOpponentRating('w', false), 113);
+  assert.equal(api.readMyRating('w', false), 133);
+  assert.equal(api.readOpponentRating('b', false), 133);
+});
+
+test('a paragraph that merely contains a number is not a rating', () => {
+  const html = boardHtml() +
+    '<div class="player-component player-top"><span class="user-tagline-rating">2086 games</span></div>' +
+    '<div class="player-component player-bottom"><span class="user-tagline-rating">(133)</span></div>';
+  const { api } = mount(html);
+  assert.equal(api.readOpponentRating('w', false), null, 'a game count is not a rating');
 });
 
 test('a page that hides the ratings reports unknown instead of a guess', () => {

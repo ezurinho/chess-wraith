@@ -168,6 +168,7 @@ const state = {
   warn: '',
   clockSeconds: null,
   opponentRating: null,
+  boardRating: null,
   gameOverSeen: false,
   results: { win: 0, loss: 0, draw: 0 },
   resultGame: 0,
@@ -259,7 +260,10 @@ function accountRatingNow() {
 // prior, because twenty games is not the player and two games is not a rating.
 function anchoredRating() {
   const raw = accountRatingNow();
-  if (!raw) return raw;
+  // No public profile rating for this time class (or the endpoint is cold):
+  // your own player row states it on the page, and that number is exact for
+  // the game being played, so it is a better anchor than a 1500 default.
+  if (!raw) return state.boardRating || raw;
   const games = state.accountGames ? state.accountGames[state.ratingClass] : null;
   if (!games) return raw;
   return settledRating(raw, games, Number(cfg.targetElo) > 0 ? cfg.targetElo : RATING_PRIOR_ELO);
@@ -277,12 +281,16 @@ function resolveElo() {
   const form = account ? formOffset(`${currentAccount()}:${state.gamesPlayed}`, 30) : 0;
   const elo = effectiveElo(cfg, {
     accountElo: account,
-    oppElo: state.oppEloEstimate || state.opponentRating,
+    oppElo: state.opponentRating || state.oppEloEstimate,
     form
   });
   state.effectiveElo = elo;
   state.formOffset = form;
-  state.eloSource = account ? 'account' : Number(cfg.targetElo) > 0 ? 'target' : 'default';
+  state.eloSource = account
+    ? (accountRatingNow() ? 'account' : 'board')
+    : Number(cfg.targetElo) > 0
+      ? 'target'
+      : 'default';
   return elo;
 }
 
@@ -963,13 +971,14 @@ function statusView() {
     events: state.events,
     clock: state.clockSeconds,
     opponent: state.opponentRating,
+    boardRating: state.boardRating,
     estimate: state.oppEloEstimate,
     acpl: state.myAcpl,
     elo: state.effectiveElo,
     eloSource: state.eloSource,
     accountRating: accountRatingNow(),
     provisional: provisionalRating(),
-    eloGap: strengthFloor(accountRatingNow() || 0).gap,
+    eloGap: strengthFloor(accountRatingNow() || state.boardRating || 0).gap,
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,
@@ -1191,7 +1200,7 @@ function scheduleAutoMove(result) {
   }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
-    oppElo: state.oppEloEstimate || state.opponentRating,
+    oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: shares
   });
@@ -1389,7 +1398,7 @@ async function playNow() {
   }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
-    oppElo: state.oppEloEstimate || state.opponentRating,
+    oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: ply < OPENING_PLIES ? openingShares() : null
   });
@@ -1448,6 +1457,12 @@ function runScan() {
   if (scanned.opponentRating !== state.opponentRating) {
     state.opponentRating = scanned.opponentRating;
     if (scanned.opponentRating) resolveElo();
+  }
+  // Same for the signed-in player: the panel used to say "anonymous" while the
+  // row under the board said (133), and the engine anchored to 1500.
+  if (scanned.myRating !== state.boardRating) {
+    state.boardRating = scanned.myRating;
+    if (scanned.myRating) resolveElo();
   }
 
   const prev = state.snapshot;

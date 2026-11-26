@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.55.0
+// @version      1.55.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.55.0';
+const VERSION = '1.55.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -115,7 +115,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.55.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.55.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2099,37 +2099,122 @@ function ratingNumber(text) {
   const m = /(\d{3,4})/.exec(String(text).replace(/\s+/g, ' '));
   if (!m) return null;
   const rating = Number.parseInt(m[1], 10);
-  // 250 is the lowest bot chess.com sells; anything lower is a fragment of some
-  // other number, not a player.
-  return rating >= 250 && rating <= 3500 ? rating : null;
+  // 100 is the floor of the rating pool, not of the bot market: the account in
+  // front of the script was 133 and the opponent 113, and the old 250 minimum
+  // threw both away — leaving the estimate to invent a 2000 for a 113 player.
+  return rating >= 100 && rating <= 3500 ? rating : null;
+}
+
+// Both player rows carry a rating; which row is the opponent depends on the
+// side we play. The lookup used to require one of four container classes, so a
+// layout the list did not know (or the computer page) returned null — and the
+// panel filled that gap with the ACPL estimate, showing a 113 opponent as ~2000.
+// Read the two numbers wherever they live, then assign them to top and bottom.
+const RATING_NODE_SELECTOR = [
+  '.user-tagline-rating',
+  '[data-cy="user-tagline-rating"]',
+  '[data-user-block-part="rating"]',
+  '[class*="user-rating"]',
+  '[class*="tagline-rating"]',
+  '[data-test-element="rating"]'
+].join(',');
+
+const PLAYER_BLOCK_SELECTOR = [
+  '.player-component',
+  '.player-row-component',
+  '.board-layout-top',
+  '.board-layout-bottom',
+  '.player-top',
+  '.player-bottom',
+  '[class*="player-component"]'
+].join(',');
+
+// The row a rating belongs to, from the nearest ancestor whose class names it.
+// No layout is required, so this also answers on a detached or hidden row.
+function ratingBand(el) {
+  let node = el;
+  for (let depth = 0; node && depth < 14; depth += 1, node = node.parentElement) {
+    const cls = String(node.className || '');
+    if (/(^|[-_ ])top($|[-_ ])/.test(cls)) return 'top';
+    if (/(^|[-_ ])bottom($|[-_ ])/.test(cls)) return 'bottom';
+  }
+  return '';
+}
+
+// Every short `(1234)` leaf on the page, deduped. The tagline selector is
+// enough on the layouts measured so far; the leaf sweep under a player block is
+// the fallback for a renamed class, because the shape of the number is stable.
+function ratingNodes() {
+  const out = [];
+  const seen = new Set();
+  const add = (el) => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    const text = (el.textContent || '').trim();
+    if (text.length > 7 || !/^\(?\d{3,4}\)?$/.test(text)) return;
+    const rating = ratingNumber(text);
+    if (rating) out.push({ el, rating, band: ratingBand(el) });
+  };
+  for (const el of document.querySelectorAll(RATING_NODE_SELECTOR)) add(el);
+  for (const root of document.querySelectorAll(PLAYER_BLOCK_SELECTOR)) {
+    for (const leaf of root.querySelectorAll('*')) {
+      if (leaf.children.length) continue;
+      add(leaf);
+    }
+  }
+  return out;
+}
+
+function readBoardRatings() {
+  const found = ratingNodes();
+  if (!found.length) return { top: null, bottom: null };
+  const ordered = found.slice().sort((a, b) => (a.el.compareDocumentPosition(b.el) & 4 ? -1 : 1));
+  let top = ordered.find((n) => n.band === 'top') || null;
+  let bottom = ordered.find((n) => n.band === 'bottom') || null;
+  if (!top && !bottom && ordered.length >= 2) {
+    // No row class at all: document order is the only signal, and it is right
+    // on chess.com, where the opponent row is painted first.
+    top = ordered[0];
+    bottom = ordered[ordered.length - 1];
+  } else if (!top) {
+    top = ordered.find((n) => n !== bottom) || null;
+  } else if (!bottom) {
+    bottom = ordered.find((n) => n !== top) || null;
+  }
+  // A single rating: the board's own geometry says which row it is on. jsdom and
+  // a hidden page report zeros, so the answer stays unknown there instead of
+  // guessing a side.
+  if (ordered.length === 1) {
+    const only = top || bottom;
+    const board = findBoardElement();
+    const rect = board && board.getBoundingClientRect();
+    const r = only && only.el.getBoundingClientRect();
+    if (only && r && r.height > 0 && rect && rect.height > 0) {
+      const isTop = r.top + r.height / 2 < rect.top + rect.height / 2;
+      return isTop ? { top: only.rating, bottom: null } : { top: null, bottom: only.rating };
+    }
+  }
+  return { top: top ? top.rating : null, bottom: bottom ? bottom.rating : null };
+}
+
+function opponentRatingFrom(ratings, mySide, flipped) {
+  const bottomColor = flipped ? 'b' : 'w';
+  const oppIsTop = !mySide || mySide === bottomColor;
+  return (oppIsTop ? ratings.top : ratings.bottom) || null;
+}
+
+function myRatingFrom(ratings, mySide, flipped) {
+  const bottomColor = flipped ? 'b' : 'w';
+  const oppIsTop = !mySide || mySide === bottomColor;
+  return (oppIsTop ? ratings.bottom : ratings.top) || null;
 }
 
 function readOpponentRating(mySide, flipped) {
-  const bottomColor = flipped ? 'b' : 'w';
-  const oppIsTop = !mySide || mySide === bottomColor;
-  const containers = oppIsTop
-    ? ['.board-layout-top', '.player-top', '#board-layout-player-top', '.player-row-top']
-    : ['.board-layout-bottom', '.player-bottom', '#board-layout-player-bottom', '.player-row-bottom'];
-  for (const container of containers) {
-    const root = document.querySelector(container);
-    if (!root) continue;
-    const named = root.querySelector(
-      '.user-tagline-rating, [data-cy="user-tagline-rating"], [data-cy*="rating"], ' +
-      '[data-user-block-part="rating"], [class*="user-rating"], [class*="tagline-rating"]'
-    );
-    const rating = ratingNumber(named && named.textContent);
-    if (rating) return rating;
-    // Last resort: a short, purely numeric tag inside the player block. The
-    // clock cannot match (colons), the username cannot (letters), and a piece
-    // count is never three or four digits.
-    for (const el of root.querySelectorAll('*')) {
-      const text = (el.textContent || '').trim();
-      if (text.length > 7 || !/^\(?\d{3,4}\)?$/.test(text)) continue;
-      const found = ratingNumber(text);
-      if (found) return found;
-    }
-  }
-  return null;
+  return opponentRatingFrom(readBoardRatings(), mySide, flipped);
+}
+
+function readMyRating(mySide, flipped) {
+  return myRatingFrom(readBoardRatings(), mySide, flipped);
 }
 
 // Measured on a real finished game page (chess.com, August 2026): the dialog is
@@ -2207,6 +2292,7 @@ function scanBoard(mySide) {
     activeClockTurn: readActiveClockTurn(flipped),
     clockSeconds: readClockSeconds(mySide, flipped),
     opponentRating: readOpponentRating(mySide, flipped),
+    myRating: readMyRating(mySide, flipped),
     gameOver: isGameOverDom()
   };
 }
@@ -4529,21 +4615,41 @@ class WraithPanel {
     this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
     this.el.rating.textContent = v.accountRating
       ? `${v.accountRating} ${v.ratingClass || ''}`.trim()
-      : v.ratingError
-        ? 'offline'
-        : 'anonymous';
-    this.el.rating.title = v.ratingAt
-      ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
-      : 'the public rating of the signed-in account';
-    this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : v.eloGap ? ' · floor' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+      : v.boardRating
+        ? `${v.boardRating} · page`
+        : v.ratingError
+          ? 'offline'
+          : 'anonymous';
+    this.el.rating.title = v.accountRating
+      ? v.ratingAt
+        ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
+        : 'the public rating of the signed-in account'
+      : v.boardRating
+        ? 'read from your player row on this page; the public profile has no rating for this time class yet'
+        : 'the public rating of the signed-in account';
+    // The real rating wins. The estimate is a fallback derived from the
+    // opponent's moves, and showing it in place of a known 113 was the bug.
+    this.el.opp.textContent = v.opponent ? String(v.opponent) : v.estimate ? `~${v.estimate}` : '–';
+    this.el.opp.title = v.opponent
+      ? 'read from the opponent row on this page'
+      : v.estimate
+        ? 'not published: estimated from the opponent\'s average centipawn loss'
+        : 'no opponent rating on this page';
+    const source = v.eloSource === 'account' || v.eloSource === 'board'
+      ? `${v.provisional ? ' · prov' : v.eloGap ? ' · floor' : v.eloSource === 'board' ? ' · page' : ' · acct'}`
+      : v.eloSource === 'target' ? ' · set' : ' · default';
+    this.el.target.textContent = v.elo ? `${v.elo}${source}` : 'full';
     this.el.target.title = v.eloGap
-      ? `your ${v.accountRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
+      ? `your ${v.accountRating || v.boardRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
       : v.eloSource === 'account'
         ? v.provisional
           ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
           : 'anchored to your own published rating'
-        : 'anchored to the manual Target Elo';
+        : v.eloSource === 'board'
+          ? `anchored to the ${v.boardRating} in your player row on this page`
+          : v.eloSource === 'target'
+            ? 'anchored to the manual Target Elo'
+            : 'no rating known: anchored to the 1500 default';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);
@@ -4788,6 +4894,7 @@ const state = {
   warn: '',
   clockSeconds: null,
   opponentRating: null,
+  boardRating: null,
   gameOverSeen: false,
   results: { win: 0, loss: 0, draw: 0 },
   resultGame: 0,
@@ -4879,7 +4986,10 @@ function accountRatingNow() {
 // prior, because twenty games is not the player and two games is not a rating.
 function anchoredRating() {
   const raw = accountRatingNow();
-  if (!raw) return raw;
+  // No public profile rating for this time class (or the endpoint is cold):
+  // your own player row states it on the page, and that number is exact for
+  // the game being played, so it is a better anchor than a 1500 default.
+  if (!raw) return state.boardRating || raw;
   const games = state.accountGames ? state.accountGames[state.ratingClass] : null;
   if (!games) return raw;
   return settledRating(raw, games, Number(cfg.targetElo) > 0 ? cfg.targetElo : RATING_PRIOR_ELO);
@@ -4897,12 +5007,16 @@ function resolveElo() {
   const form = account ? formOffset(`${currentAccount()}:${state.gamesPlayed}`, 30) : 0;
   const elo = effectiveElo(cfg, {
     accountElo: account,
-    oppElo: state.oppEloEstimate || state.opponentRating,
+    oppElo: state.opponentRating || state.oppEloEstimate,
     form
   });
   state.effectiveElo = elo;
   state.formOffset = form;
-  state.eloSource = account ? 'account' : Number(cfg.targetElo) > 0 ? 'target' : 'default';
+  state.eloSource = account
+    ? (accountRatingNow() ? 'account' : 'board')
+    : Number(cfg.targetElo) > 0
+      ? 'target'
+      : 'default';
   return elo;
 }
 
@@ -5583,13 +5697,14 @@ function statusView() {
     events: state.events,
     clock: state.clockSeconds,
     opponent: state.opponentRating,
+    boardRating: state.boardRating,
     estimate: state.oppEloEstimate,
     acpl: state.myAcpl,
     elo: state.effectiveElo,
     eloSource: state.eloSource,
     accountRating: accountRatingNow(),
     provisional: provisionalRating(),
-    eloGap: strengthFloor(accountRatingNow() || 0).gap,
+    eloGap: strengthFloor(accountRatingNow() || state.boardRating || 0).gap,
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,
@@ -5811,7 +5926,7 @@ function scheduleAutoMove(result) {
   }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
-    oppElo: state.oppEloEstimate || state.opponentRating,
+    oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: shares
   });
@@ -6009,7 +6124,7 @@ async function playNow() {
   }
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
-    oppElo: state.oppEloEstimate || state.opponentRating,
+    oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
     openingShares: ply < OPENING_PLIES ? openingShares() : null
   });
@@ -6068,6 +6183,12 @@ function runScan() {
   if (scanned.opponentRating !== state.opponentRating) {
     state.opponentRating = scanned.opponentRating;
     if (scanned.opponentRating) resolveElo();
+  }
+  // Same for the signed-in player: the panel used to say "anonymous" while the
+  // row under the board said (133), and the engine anchored to 1500.
+  if (scanned.myRating !== state.boardRating) {
+    state.boardRating = scanned.myRating;
+    if (scanned.myRating) resolveElo();
   }
 
   const prev = state.snapshot;

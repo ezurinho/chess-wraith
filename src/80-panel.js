@@ -618,21 +618,41 @@ class WraithPanel {
     this.el.guard.textContent = boost > 0 ? `+${boost} cp` : 'off';
     this.el.rating.textContent = v.accountRating
       ? `${v.accountRating} ${v.ratingClass || ''}`.trim()
-      : v.ratingError
-        ? 'offline'
-        : 'anonymous';
-    this.el.rating.title = v.ratingAt
-      ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
-      : 'the public rating of the signed-in account';
-    this.el.opp.textContent = v.estimate ? `~${v.estimate}` : v.opponent ? String(v.opponent) : '–';
-    this.el.target.textContent = v.elo ? `${v.elo}${v.eloSource === 'account' ? (v.provisional ? ' · prov' : v.eloGap ? ' · floor' : ' · acct') : v.eloSource === 'target' ? ' · set' : ''}` : 'full';
+      : v.boardRating
+        ? `${v.boardRating} · page`
+        : v.ratingError
+          ? 'offline'
+          : 'anonymous';
+    this.el.rating.title = v.accountRating
+      ? v.ratingAt
+        ? `measured from the public profile · checked ${Math.max(0, Math.round((Date.now() - v.ratingAt) / 60000))}m ago`
+        : 'the public rating of the signed-in account'
+      : v.boardRating
+        ? 'read from your player row on this page; the public profile has no rating for this time class yet'
+        : 'the public rating of the signed-in account';
+    // The real rating wins. The estimate is a fallback derived from the
+    // opponent's moves, and showing it in place of a known 113 was the bug.
+    this.el.opp.textContent = v.opponent ? String(v.opponent) : v.estimate ? `~${v.estimate}` : '–';
+    this.el.opp.title = v.opponent
+      ? 'read from the opponent row on this page'
+      : v.estimate
+        ? 'not published: estimated from the opponent\'s average centipawn loss'
+        : 'no opponent rating on this page';
+    const source = v.eloSource === 'account' || v.eloSource === 'board'
+      ? `${v.provisional ? ' · prov' : v.eloGap ? ' · floor' : v.eloSource === 'board' ? ' · page' : ' · acct'}`
+      : v.eloSource === 'target' ? ' · set' : ' · default';
+    this.el.target.textContent = v.elo ? `${v.elo}${source}` : 'full';
     this.el.target.title = v.eloGap
-      ? `your ${v.accountRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
+      ? `your ${v.accountRating || v.boardRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
       : v.eloSource === 'account'
         ? v.provisional
           ? `anchored to your published ${v.accountRating} with few games behind it, shrunk towards the prior`
           : 'anchored to your own published rating'
-        : 'anchored to the manual Target Elo';
+        : v.eloSource === 'board'
+          ? `anchored to the ${v.boardRating} in your player row on this page`
+          : v.eloSource === 'target'
+            ? 'anchored to the manual Target Elo'
+            : 'no rating known: anchored to the 1500 default';
     this.el.target2.textContent = v.elo ? String(v.elo) : '–';
 
     const autoOn = Boolean(v.autoPlay);

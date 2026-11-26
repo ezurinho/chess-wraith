@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.55.1 — 2026-11-26
+
+The ratings on the panel are the ones on the board.
+
+- `ratingNumber` accepts ratings from 100, not 250. A 133 account and a 113
+  opponent were both discarded as fragments, which is why the panel said
+  `anonymous` while the rows under the board had the numbers.
+- `readBoardRatings` no longer needs one of four container classes: it finds the
+  two ratings wherever they live and assigns top/bottom from the row class, the
+  board geometry, or document order. `readMyRating` is the signed-in player's.
+- The anchor now falls back to your own row (`133 · page`) before the 1500
+  default, so `Playing at` shows `1245 · floor` instead of `1525`.
+- A real opponent rating wins over the ACPL estimate in the target, the move
+  choice and the panel. `~2086` was an estimate shown in place of a known 113.
+
 ## 1.55.0 — 2026-11-26
 
 The run does not end by itself any more.

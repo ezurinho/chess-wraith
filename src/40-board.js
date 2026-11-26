@@ -260,37 +260,122 @@ function ratingNumber(text) {
   const m = /(\d{3,4})/.exec(String(text).replace(/\s+/g, ' '));
   if (!m) return null;
   const rating = Number.parseInt(m[1], 10);
-  // 250 is the lowest bot chess.com sells; anything lower is a fragment of some
-  // other number, not a player.
-  return rating >= 250 && rating <= 3500 ? rating : null;
+  // 100 is the floor of the rating pool, not of the bot market: the account in
+  // front of the script was 133 and the opponent 113, and the old 250 minimum
+  // threw both away — leaving the estimate to invent a 2000 for a 113 player.
+  return rating >= 100 && rating <= 3500 ? rating : null;
+}
+
+// Both player rows carry a rating; which row is the opponent depends on the
+// side we play. The lookup used to require one of four container classes, so a
+// layout the list did not know (or the computer page) returned null — and the
+// panel filled that gap with the ACPL estimate, showing a 113 opponent as ~2000.
+// Read the two numbers wherever they live, then assign them to top and bottom.
+const RATING_NODE_SELECTOR = [
+  '.user-tagline-rating',
+  '[data-cy="user-tagline-rating"]',
+  '[data-user-block-part="rating"]',
+  '[class*="user-rating"]',
+  '[class*="tagline-rating"]',
+  '[data-test-element="rating"]'
+].join(',');
+
+const PLAYER_BLOCK_SELECTOR = [
+  '.player-component',
+  '.player-row-component',
+  '.board-layout-top',
+  '.board-layout-bottom',
+  '.player-top',
+  '.player-bottom',
+  '[class*="player-component"]'
+].join(',');
+
+// The row a rating belongs to, from the nearest ancestor whose class names it.
+// No layout is required, so this also answers on a detached or hidden row.
+function ratingBand(el) {
+  let node = el;
+  for (let depth = 0; node && depth < 14; depth += 1, node = node.parentElement) {
+    const cls = String(node.className || '');
+    if (/(^|[-_ ])top($|[-_ ])/.test(cls)) return 'top';
+    if (/(^|[-_ ])bottom($|[-_ ])/.test(cls)) return 'bottom';
+  }
+  return '';
+}
+
+// Every short `(1234)` leaf on the page, deduped. The tagline selector is
+// enough on the layouts measured so far; the leaf sweep under a player block is
+// the fallback for a renamed class, because the shape of the number is stable.
+function ratingNodes() {
+  const out = [];
+  const seen = new Set();
+  const add = (el) => {
+    if (seen.has(el)) return;
+    seen.add(el);
+    const text = (el.textContent || '').trim();
+    if (text.length > 7 || !/^\(?\d{3,4}\)?$/.test(text)) return;
+    const rating = ratingNumber(text);
+    if (rating) out.push({ el, rating, band: ratingBand(el) });
+  };
+  for (const el of document.querySelectorAll(RATING_NODE_SELECTOR)) add(el);
+  for (const root of document.querySelectorAll(PLAYER_BLOCK_SELECTOR)) {
+    for (const leaf of root.querySelectorAll('*')) {
+      if (leaf.children.length) continue;
+      add(leaf);
+    }
+  }
+  return out;
+}
+
+function readBoardRatings() {
+  const found = ratingNodes();
+  if (!found.length) return { top: null, bottom: null };
+  const ordered = found.slice().sort((a, b) => (a.el.compareDocumentPosition(b.el) & 4 ? -1 : 1));
+  let top = ordered.find((n) => n.band === 'top') || null;
+  let bottom = ordered.find((n) => n.band === 'bottom') || null;
+  if (!top && !bottom && ordered.length >= 2) {
+    // No row class at all: document order is the only signal, and it is right
+    // on chess.com, where the opponent row is painted first.
+    top = ordered[0];
+    bottom = ordered[ordered.length - 1];
+  } else if (!top) {
+    top = ordered.find((n) => n !== bottom) || null;
+  } else if (!bottom) {
+    bottom = ordered.find((n) => n !== top) || null;
+  }
+  // A single rating: the board's own geometry says which row it is on. jsdom and
+  // a hidden page report zeros, so the answer stays unknown there instead of
+  // guessing a side.
+  if (ordered.length === 1) {
+    const only = top || bottom;
+    const board = findBoardElement();
+    const rect = board && board.getBoundingClientRect();
+    const r = only && only.el.getBoundingClientRect();
+    if (only && r && r.height > 0 && rect && rect.height > 0) {
+      const isTop = r.top + r.height / 2 < rect.top + rect.height / 2;
+      return isTop ? { top: only.rating, bottom: null } : { top: null, bottom: only.rating };
+    }
+  }
+  return { top: top ? top.rating : null, bottom: bottom ? bottom.rating : null };
+}
+
+function opponentRatingFrom(ratings, mySide, flipped) {
+  const bottomColor = flipped ? 'b' : 'w';
+  const oppIsTop = !mySide || mySide === bottomColor;
+  return (oppIsTop ? ratings.top : ratings.bottom) || null;
+}
+
+function myRatingFrom(ratings, mySide, flipped) {
+  const bottomColor = flipped ? 'b' : 'w';
+  const oppIsTop = !mySide || mySide === bottomColor;
+  return (oppIsTop ? ratings.bottom : ratings.top) || null;
 }
 
 function readOpponentRating(mySide, flipped) {
-  const bottomColor = flipped ? 'b' : 'w';
-  const oppIsTop = !mySide || mySide === bottomColor;
-  const containers = oppIsTop
-    ? ['.board-layout-top', '.player-top', '#board-layout-player-top', '.player-row-top']
-    : ['.board-layout-bottom', '.player-bottom', '#board-layout-player-bottom', '.player-row-bottom'];
-  for (const container of containers) {
-    const root = document.querySelector(container);
-    if (!root) continue;
-    const named = root.querySelector(
-      '.user-tagline-rating, [data-cy="user-tagline-rating"], [data-cy*="rating"], ' +
-      '[data-user-block-part="rating"], [class*="user-rating"], [class*="tagline-rating"]'
-    );
-    const rating = ratingNumber(named && named.textContent);
-    if (rating) return rating;
-    // Last resort: a short, purely numeric tag inside the player block. The
-    // clock cannot match (colons), the username cannot (letters), and a piece
-    // count is never three or four digits.
-    for (const el of root.querySelectorAll('*')) {
-      const text = (el.textContent || '').trim();
-      if (text.length > 7 || !/^\(?\d{3,4}\)?$/.test(text)) continue;
-      const found = ratingNumber(text);
-      if (found) return found;
-    }
-  }
-  return null;
+  return opponentRatingFrom(readBoardRatings(), mySide, flipped);
+}
+
+function readMyRating(mySide, flipped) {
+  return myRatingFrom(readBoardRatings(), mySide, flipped);
 }
 
 // Measured on a real finished game page (chess.com, August 2026): the dialog is
@@ -368,6 +453,7 @@ function scanBoard(mySide) {
     activeClockTurn: readActiveClockTurn(flipped),
     clockSeconds: readClockSeconds(mySide, flipped),
     opponentRating: readOpponentRating(mySide, flipped),
+    myRating: readMyRating(mySide, flipped),
     gameOver: isGameOverDom()
   };
 }

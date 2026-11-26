@@ -101,6 +101,9 @@ test('the rating sits just above the opponent, with no preset to move it', () =>
   assert.equal(api.effectiveElo({ targetElo: 0 }, { accountElo: 2400 }), 2400);
   // Above the engine's ceiling the anchor saturates instead of wrapping around.
   assert.equal(api.effectiveElo({ targetElo: 0 }, { accountElo: 3450 }), 3190);
+  // A 133 account is under the engine's 1320 floor: the target is the floor,
+  // never the old 1500 default dressed up as the account's rating.
+  assert.equal(api.effectiveElo({ targetElo: 0 }, { accountElo: 133, oppElo: 113 }), 1245);
 });
 
 test('nothing misses on purpose: there is no sloppy preset to fall into', () => {
