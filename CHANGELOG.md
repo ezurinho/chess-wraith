@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.61.1 — 2026-11-27
+
+Debug hooks for the one path tests cannot reach.
+
+- `?cw=1` exposes `__cw.snapshot()`, `__cw.playMove(uci)` and `__cw.analyze()`,
+  so the click geometry and the move verification can be exercised on a real
+  chess.com board instead of only in jsdom. No user-visible change.
+
 ## 1.61.0 — 2026-11-27
 
 Bad moves that look like a beginner, not like a dice roll.

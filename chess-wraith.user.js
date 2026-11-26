@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.61.0
+// @version      1.61.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.61.0';
+const VERSION = '1.61.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.61.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.61.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -5896,6 +5896,12 @@ function registerButler() {
       return el ? (el.textContent || '').trim() : null;
     },
     scan: () => runScan(),
+    // The play path is the one thing unit tests cannot reach: these two let the
+    // debug build be driven on a real board, which is how the click geometry is
+    // checked against chess.com instead of against a fixture.
+    snapshot: () => state.snapshot,
+    playMove: (uci, fen) => playMove(uci, fen || (state.snapshot && state.snapshot.fen), null),
+    analyze: (force) => state.snapshot && analyze(state.snapshot, force !== false),
     report: () => reportText(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));

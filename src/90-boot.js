@@ -671,6 +671,12 @@ function registerButler() {
       return el ? (el.textContent || '').trim() : null;
     },
     scan: () => runScan(),
+    // The play path is the one thing unit tests cannot reach: these two let the
+    // debug build be driven on a real board, which is how the click geometry is
+    // checked against chess.com instead of against a fixture.
+    snapshot: () => state.snapshot,
+    playMove: (uci, fen) => playMove(uci, fen || (state.snapshot && state.snapshot.fen), null),
+    analyze: (force) => state.snapshot && analyze(state.snapshot, force !== false),
     report: () => reportText(),
     board: () => {
       const scan = scanBoard(mySide(state.snapshot ? state.snapshot.flipped : false));
