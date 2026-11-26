@@ -146,3 +146,23 @@ test('the panic key stops the session instead of only hiding the panel', () => {
     stop();
   }
 });
+test('a game played as black scores from the colour on screen, not a default', async () => {
+  // The board is flipped because we are Black. The dialog says White won, so
+  // this is a loss. Before the snapshot carried `flipped`, everything downstream
+  // answered "white" and this counted as a win.
+  const html = PAGE.replace('class="board"', 'class="board flipped"') +
+    '<div class="board-modal-container-container" style="position:fixed">' +
+    '<div class="board-modal-component"><div class="game-over-modal-shell-container">' +
+    '<div class="game-over-modal-header-component"><div class="game-over-modal-title-component">White Won</div>' +
+    '<div class="game-over-modal-subtitle-component">by checkmate</div></div></div></div></div>';
+  const { api, stop } = boot(html);
+  try {
+    api.cfg.autoRematch = false;
+    assert.equal(await until(() => api.state.gameOverSeen && api.state.snapshot), true, 'the dialog is seen');
+    assert.equal(api.state.snapshot.flipped, true, 'the snapshot knows the board is flipped');
+    assert.equal(api.state.results.loss, 1, 'White won and we are Black');
+    assert.equal(api.state.results.win, 0);
+  } finally {
+    stop();
+  }
+});

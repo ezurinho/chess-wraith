@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.37.0 — 2026-11-25
+
+Playing as Black is no longer treated as playing as White.
+
+- The tracker parses `flipped` and `plyCount` from the DOM but its snapshot
+  returns the position only, so `mySide(state.snapshot.flipped)` answered
+  "white" for every game. The snapshot the scan loop keeps now carries both,
+  which fixes the side-aware clock, the `onlyMyTurn` gate for Black, and the
+  session score: a "Black Won" dialog in a game you played as Black counts as
+  a win instead of a loss.
+- 167 tests, including one that flips the board and reads the dialog; it fails
+  by name if the view facts are dropped again.
+
 ## 1.36.0 — 2026-11-25
 
 Game-over detection now matches the page it runs on.

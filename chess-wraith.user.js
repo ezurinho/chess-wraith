@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.36.0
+// @version      1.37.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.36.0';
+const VERSION = '1.37.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.36.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.37.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -5423,14 +5423,20 @@ function runScan() {
   state.opponentRating = scanned.opponentRating;
 
   const prev = state.snapshot;
-  const snapshot = tracker.updateFromDomSnapshot(scanned.grid, {
+  const tracked = tracker.updateFromDomSnapshot(scanned.grid, {
     flipped: scanned.flipped,
     plyCount: scanned.plyCount,
     sanMoves: scanned.sanMoves,
     lastHighlightSquares: scanned.lastHighlightSquares,
     activeClockTurn: scanned.activeClockTurn
   });
-  if (!snapshot) return;
+  if (!tracked) return;
+  // The tracker returns the position, not the view: it parses `flipped` and
+  // `plyCount` but does not hand them back. Everything downstream asks the
+  // snapshot which side we are on (`mySide(snapshot.flipped)`), so without this
+  // the answer was always "white" — wrong clock, wrong turn gate and, since
+  // 1.36.0, a wrong result for every game played as black.
+  const snapshot = { ...tracked, flipped: scanned.flipped, plyCount: scanned.plyCount };
 
   // A resignation or a flag fall leaves the position untouched, so this cannot
   // live inside `changed` like it used to: a game that ended on time sat on the

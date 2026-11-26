@@ -1202,14 +1202,20 @@ function runScan() {
   state.opponentRating = scanned.opponentRating;
 
   const prev = state.snapshot;
-  const snapshot = tracker.updateFromDomSnapshot(scanned.grid, {
+  const tracked = tracker.updateFromDomSnapshot(scanned.grid, {
     flipped: scanned.flipped,
     plyCount: scanned.plyCount,
     sanMoves: scanned.sanMoves,
     lastHighlightSquares: scanned.lastHighlightSquares,
     activeClockTurn: scanned.activeClockTurn
   });
-  if (!snapshot) return;
+  if (!tracked) return;
+  // The tracker returns the position, not the view: it parses `flipped` and
+  // `plyCount` but does not hand them back. Everything downstream asks the
+  // snapshot which side we are on (`mySide(snapshot.flipped)`), so without this
+  // the answer was always "white" — wrong clock, wrong turn gate and, since
+  // 1.36.0, a wrong result for every game played as black.
+  const snapshot = { ...tracked, flipped: scanned.flipped, plyCount: scanned.plyCount };
 
   // A resignation or a flag fall leaves the position untouched, so this cannot
   // live inside `changed` like it used to: a game that ended on time sat on the

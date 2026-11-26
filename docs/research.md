@@ -195,6 +195,27 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The snapshot never knew which side we were on
+
+`tracker.updateFromDomSnapshot(grid, hints)` reads `hints.flipped` and
+`hints.plyCount` to parse the board, and `getSnapshot()` returns the *position*
+— a live snapshot's keys are exactly:
+
+```
+grid placement turn castling ep halfmove fullmove turnSource fen
+uciMoves turnCertain changed lastMoveUci
+```
+
+No `flipped`, no `plyCount`. Every caller downstream asked the snapshot
+nevertheless: `mySide(state.snapshot.flipped)` answered `'w'` for every game,
+and `resultCounts(... ply: snapshot.plyCount ...)` never saw a move list at all.
+
+For a game played as Black that is a wrong clock, a wrong turn gate and, since
+1.36.0, a wrong score: the dialog says `Black Won`, the script believes it is
+White, and records a loss. The fix is four fields: the snapshot boot keeps is a
+shallow copy of the tracker's with the two view facts re-attached. The
+regression test flips the board and reads the dialog, and fails by name
+(`the snapshot knows the board is flipped`) when the copy is removed.
 ## The selectors were wrong
 
 Everything about the game-over dialog in this repo was invented, and it was
@@ -481,7 +502,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 166 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 167 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
