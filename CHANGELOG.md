@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.76.0 — 2026-11-27
+
+Measured properly, the band was overshot: six candidates, not three.
+
+- With the ACPL definition fixed in 1.75.0, a 133 account delivered 343 cp/move
+  against the 270-320 band — above it, with four of fifteen moves clamped at 600.
+- The shortlist was ordered by the restricted search's price, which is the noisy
+  number, so the candidate that verified best was often thrown away. Six are
+  verified now and the best verified one is played.
+
 ## 1.75.0 — 2026-11-27
 
 The loss was measured after the opponent's reply, which refunded it.

@@ -1470,7 +1470,10 @@ async function improveImprovised(snap, result, legal, choice) {
   // is the same subtraction the panel uses afterwards, so the promise and the
   // measurement share a method.
   let pick = null;
-  for (const cand of ranked.slice(0, 3)) {
+  // Six, not three: the restricted price is the proposal and it is noisy, so a
+  // shortlist ordered by that price throws away the candidate that verifies best.
+  // Live, three candidates left the pick at 600 cp too often (mean 343 at a 133).
+  for (const cand of ranked.slice(0, 6)) {
     const move = legal.find((m) => Chess.moveToUci(m) === cand.line.bestUci);
     if (!move || !move.nextState) continue;
     let after = null;

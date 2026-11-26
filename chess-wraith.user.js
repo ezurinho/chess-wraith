@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.75.0
+// @version      1.76.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.75.0';
+const VERSION = '1.76.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.75.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.76.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6744,7 +6744,10 @@ async function improveImprovised(snap, result, legal, choice) {
   // is the same subtraction the panel uses afterwards, so the promise and the
   // measurement share a method.
   let pick = null;
-  for (const cand of ranked.slice(0, 3)) {
+  // Six, not three: the restricted price is the proposal and it is noisy, so a
+  // shortlist ordered by that price throws away the candidate that verifies best.
+  // Live, three candidates left the pick at 600 cp too often (mean 343 at a 133).
+  for (const cand of ranked.slice(0, 6)) {
     const move = legal.find((m) => Chess.moveToUci(m) === cand.line.bestUci);
     if (!move || !move.nextState) continue;
     let after = null;
