@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.58.0
+// @version      1.59.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.58.0';
+const VERSION = '1.59.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -107,7 +107,9 @@ const CONFIG = {
   panelCollapsed: false,
   showLines: 3,
   // Paint the engine's move on the board, not only in the panel.
-  arrows: true
+  arrows: true,
+  // Below the engine floor, aim the chooser at the account's own loss rate.
+  levelPlay: true
 };
 
 // There is one way to play and it is the honest one: no GM/rage presets, no
@@ -117,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.58.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.59.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3433,8 +3435,24 @@ function effectiveElo(cfg, opts = {}) {
 // fit to the published ACPL-vs-rating curve: generous at the bottom, tight at
 // the top, and clamped so neither end becomes absurd.
 function acplBand(elo) {
-  const e = clamp(Number(elo) || 1500, 600, 3200);
-  return Math.round(clamp(96 - e / 34, 8, 90));
+  const e = clamp(Number(elo) || 1500, 100, 3200);
+  // Two curves, joined at the engine floor: below 1320 the beginner end is
+  // steep (a 133 account gives away a piece every few moves), above it the
+  // published rating/ACPL fit is the one that holds.
+  const low = 320 - e * 0.2;
+  const high = 96 - e / 34;
+  return Math.round(clamp(e < 1320 ? low : high, 8, 320));
+}
+
+// Stockfish cannot be asked to play under 1320, so below that the strength
+// cannot follow the account. What can follow it is the loss rate: aim the
+// chooser at ~acplBand(account) and the moves look like the account's, not like
+// a 1320 wall. Off with `levelPlay: false`.
+function levelPlayTarget(accountElo, cfg) {
+  if (cfg && cfg.levelPlay === false) return 0;
+  const account = Number(accountElo) || 0;
+  if (!account || account >= ELO_FLOOR) return 0;
+  return clampInt(acplBand(account), 60, 320, 60);
 }
 
 // The throttle nothing else has: when the account is playing far above its own
@@ -3454,13 +3472,16 @@ function acplGuard(opts) {
 
 function styleProfile(cfg, opts = {}) {
   const elo = effectiveElo(cfg, opts);
+  const level = levelPlayTarget(opts.accountElo || elo, cfg);
   return {
     elo,
     // Under Stockfish's 1320 floor the engine cannot be asked to play weaker,
-    // so the window of moves it may pick from widens instead.
-    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack) + floorSlack(opts.accountElo || elo),
+    // so the window of moves it may pick from widens instead; level play also
+    // needs the window to contain the moves it is aiming at.
+    slack: Math.min(720, Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack, level * 2) + floorSlack(opts.accountElo || elo)),
     miss: LEGIT.miss,
-    label: LEGIT.label
+    label: level > 0 ? 'level' : LEGIT.label,
+    level
   };
 }
 
@@ -3536,6 +3557,7 @@ function chooseMove(lines, cfg, opts = {}) {
   }
 
   const eligible = [];
+  const target = profile.level || 0;
   for (const cand of legal) {
     // A probed line carries the move this account actually plays, which the
     // search never offered: the slack is the wrong ruler for it, and a bounded
@@ -3545,7 +3567,17 @@ function chooseMove(lines, cfg, opts = {}) {
     // In the opening the account's own move is the evidence, not the eval spread:
     // a pet line that costs 80 cp is still the line this player plays every game.
     const spread = cand.line.opening && opts.openingShares ? Math.max(120, profile.slack * 3) : Math.max(18, profile.slack / 2);
-    let weight = Math.exp(-cand.cpLoss / spread);
+    let weight;
+    if (target > 0) {
+      // Centred on the account's loss rate, not on zero: a 133 account does
+      // not play the fourth-best move every time, it plays moves of that size.
+      const sigma = Math.max(60, target * 0.55);
+      weight = 0.01 + Math.exp(-Math.pow(cand.cpLoss - target, 2) / (2 * sigma * sigma));
+      // Handing over a forced mate is not beginner play, it is broken play.
+      if (cand.cpLoss > target * 2 + 80) weight = 0.005;
+    } else {
+      weight = Math.exp(-cand.cpLoss / spread);
+    }
     // Repeatedly taking #1 is the one pattern that reads as a machine. Once the
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
     if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
@@ -4638,6 +4670,7 @@ const PANEL_HTML = `
         <div class="card">
           <div class="card-h"><span class="card-t">Board</span><span class="card-s">drawn on the page</span></div>
           <div class="set"><span class="set-lbl">Board arrows<i>best move and the reply, on the squares</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="arrows" aria-checked="true" aria-label="Board arrows"></button></span></div>
+          <div class="set"><span class="set-lbl">Level play<i>below 1320, play at your own loss rate</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="levelPlay" aria-checked="true" aria-label="Level play"></button></span></div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
@@ -4983,11 +5016,18 @@ class WraithPanel {
       : v.estimate
         ? 'not published: estimated from the opponent\'s average centipawn loss'
         : 'no opponent rating on this page';
-    const source = v.eloSource === 'account' || v.eloSource === 'board'
-      ? `${v.provisional ? ' · prov' : v.eloGap ? ' · floor' : v.eloSource === 'board' ? ' · page' : ' · acct'}`
-      : v.eloSource === 'target' ? ' · set' : ' · default';
-    this.el.target.textContent = v.elo ? `${v.elo}${source}` : 'full';
-    this.el.target.title = v.eloGap
+    const level = v.levelTarget > 0;
+    const source = level
+      ? ' · your level'
+      : v.eloSource === 'account' || v.eloSource === 'board'
+        ? `${v.provisional ? ' · prov' : v.eloGap ? ' · floor' : v.eloSource === 'board' ? ' · page' : ' · acct'}`
+        : v.eloSource === 'target' ? ' · set' : ' · default';
+    this.el.target.textContent = level
+      ? `${v.accountRating || v.boardRating}${source}`
+      : v.elo ? `${v.elo}${source}` : 'full';
+    this.el.target.title = level
+      ? `under Stockfish's 1320 floor: the engine searches at the floor and the chooser aims at the ~${v.levelTarget} cp/move an account rated ${v.accountRating || v.boardRating} gives away. Turn Level play off in Tune to play at the floor.`
+      : v.eloGap
       ? `your ${v.accountRating || v.boardRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
       : v.eloSource === 'account'
         ? v.provisional
@@ -6109,6 +6149,7 @@ function statusView() {
     accountRating: accountRatingNow(),
     provisional: provisionalRating(),
     eloGap: strengthFloor(accountRatingNow() || state.boardRating || 0).gap,
+    levelTarget: levelPlayTarget(accountRatingNow() || state.boardRating || 0, cfg),
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,

@@ -1,4 +1,4 @@
-const VERSION = '1.58.0';
+const VERSION = '1.59.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -64,7 +64,9 @@ const CONFIG = {
   panelCollapsed: false,
   showLines: 3,
   // Paint the engine's move on the board, not only in the panel.
-  arrows: true
+  arrows: true,
+  // Below the engine floor, aim the chooser at the account's own loss rate.
+  levelPlay: true
 };
 
 // There is one way to play and it is the honest one: no GM/rage presets, no
@@ -74,7 +76,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.58.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.59.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

@@ -331,6 +331,7 @@ const PANEL_HTML = `
         <div class="card">
           <div class="card-h"><span class="card-t">Board</span><span class="card-s">drawn on the page</span></div>
           <div class="set"><span class="set-lbl">Board arrows<i>best move and the reply, on the squares</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="arrows" aria-checked="true" aria-label="Board arrows"></button></span></div>
+          <div class="set"><span class="set-lbl">Level play<i>below 1320, play at your own loss rate</i></span><span class="set-val"><button class="sw" type="button" role="switch" data-toggle="levelPlay" aria-checked="true" aria-label="Level play"></button></span></div>
         </div>
         <div class="card">
           <div class="card-h"><span class="card-t">AFK</span><span class="card-s">unattended session</span></div>
@@ -676,11 +677,18 @@ class WraithPanel {
       : v.estimate
         ? 'not published: estimated from the opponent\'s average centipawn loss'
         : 'no opponent rating on this page';
-    const source = v.eloSource === 'account' || v.eloSource === 'board'
-      ? `${v.provisional ? ' · prov' : v.eloGap ? ' · floor' : v.eloSource === 'board' ? ' · page' : ' · acct'}`
-      : v.eloSource === 'target' ? ' · set' : ' · default';
-    this.el.target.textContent = v.elo ? `${v.elo}${source}` : 'full';
-    this.el.target.title = v.eloGap
+    const level = v.levelTarget > 0;
+    const source = level
+      ? ' · your level'
+      : v.eloSource === 'account' || v.eloSource === 'board'
+        ? `${v.provisional ? ' · prov' : v.eloGap ? ' · floor' : v.eloSource === 'board' ? ' · page' : ' · acct'}`
+        : v.eloSource === 'target' ? ' · set' : ' · default';
+    this.el.target.textContent = level
+      ? `${v.accountRating || v.boardRating}${source}`
+      : v.elo ? `${v.elo}${source}` : 'full';
+    this.el.target.title = level
+      ? `under Stockfish's 1320 floor: the engine searches at the floor and the chooser aims at the ~${v.levelTarget} cp/move an account rated ${v.accountRating || v.boardRating} gives away. Turn Level play off in Tune to play at the floor.`
+      : v.eloGap
       ? `your ${v.accountRating || v.boardRating} is under Stockfish's 1320 floor: the engine plays at the floor and the move window widens by ${v.eloGap} points worth of slack`
       : v.eloSource === 'account'
         ? v.provisional

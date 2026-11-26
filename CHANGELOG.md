@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.59.0 — 2026-11-26
+
+Play at your level, not at the engine's floor.
+
+- `acplBand` is two curves joined at Stockfish's 1320 floor: a 133 account is
+  expected to lose ~293 cp a move, a 1320 account ~57. The panel's `Playing at`
+  row now says `133 · your level` instead of `1320 · floor`.
+- `chooseMove` aims at that loss rate when the account is under the floor: the
+  weight is centred on the target instead of on 0, so the account plays moves of
+  its own size rather than the fourth-best move every time. `Level play` in Tune
+  turns it off; above 1320 it is a no-op. Forced mate is still taken, and a move
+  that walks into a forced mate is still rejected.
+- Slack follows the target (up to 720 cp), so MultiPV 4 can actually contain the
+  moves the account is supposed to play.
+
 ## 1.58.0 — 2026-11-26
 
 The engine's move, on the board.

@@ -142,7 +142,7 @@ test('the expected accuracy band tightens as the rating rises', () => {
 });
 
 test('the band stays in a sane range at both ends', () => {
-  assert.ok(analysis.acplBand(600) <= 90);
+  assert.ok(analysis.acplBand(600) <= 320, 'the beginner end is capped, not unbounded');
   assert.ok(analysis.acplBand(2600) >= 8);
 });
 

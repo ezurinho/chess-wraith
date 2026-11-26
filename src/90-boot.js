@@ -988,6 +988,7 @@ function statusView() {
     accountRating: accountRatingNow(),
     provisional: provisionalRating(),
     eloGap: strengthFloor(accountRatingNow() || state.boardRating || 0).gap,
+    levelTarget: levelPlayTarget(accountRatingNow() || state.boardRating || 0, cfg),
     ratingClass: state.ratingClass,
     ratingAt: state.ratingAt,
     ratingError: state.ratingError,

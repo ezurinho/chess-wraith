@@ -36,8 +36,24 @@ function effectiveElo(cfg, opts = {}) {
 // fit to the published ACPL-vs-rating curve: generous at the bottom, tight at
 // the top, and clamped so neither end becomes absurd.
 function acplBand(elo) {
-  const e = clamp(Number(elo) || 1500, 600, 3200);
-  return Math.round(clamp(96 - e / 34, 8, 90));
+  const e = clamp(Number(elo) || 1500, 100, 3200);
+  // Two curves, joined at the engine floor: below 1320 the beginner end is
+  // steep (a 133 account gives away a piece every few moves), above it the
+  // published rating/ACPL fit is the one that holds.
+  const low = 320 - e * 0.2;
+  const high = 96 - e / 34;
+  return Math.round(clamp(e < 1320 ? low : high, 8, 320));
+}
+
+// Stockfish cannot be asked to play under 1320, so below that the strength
+// cannot follow the account. What can follow it is the loss rate: aim the
+// chooser at ~acplBand(account) and the moves look like the account's, not like
+// a 1320 wall. Off with `levelPlay: false`.
+function levelPlayTarget(accountElo, cfg) {
+  if (cfg && cfg.levelPlay === false) return 0;
+  const account = Number(accountElo) || 0;
+  if (!account || account >= ELO_FLOOR) return 0;
+  return clampInt(acplBand(account), 60, 320, 60);
 }
 
 // The throttle nothing else has: when the account is playing far above its own
@@ -57,13 +73,16 @@ function acplGuard(opts) {
 
 function styleProfile(cfg, opts = {}) {
   const elo = effectiveElo(cfg, opts);
+  const level = levelPlayTarget(opts.accountElo || elo, cfg);
   return {
     elo,
     // Under Stockfish's 1320 floor the engine cannot be asked to play weaker,
-    // so the window of moves it may pick from widens instead.
-    slack: Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack) + floorSlack(opts.accountElo || elo),
+    // so the window of moves it may pick from widens instead; level play also
+    // needs the window to contain the moves it is aiming at.
+    slack: Math.min(720, Math.max(clampInt(cfg.humanSlackCp, 0, 300, LEGIT.slack), LEGIT.slack, level * 2) + floorSlack(opts.accountElo || elo)),
     miss: LEGIT.miss,
-    label: LEGIT.label
+    label: level > 0 ? 'level' : LEGIT.label,
+    level
   };
 }
 
@@ -139,6 +158,7 @@ function chooseMove(lines, cfg, opts = {}) {
   }
 
   const eligible = [];
+  const target = profile.level || 0;
   for (const cand of legal) {
     // A probed line carries the move this account actually plays, which the
     // search never offered: the slack is the wrong ruler for it, and a bounded
@@ -148,7 +168,17 @@ function chooseMove(lines, cfg, opts = {}) {
     // In the opening the account's own move is the evidence, not the eval spread:
     // a pet line that costs 80 cp is still the line this player plays every game.
     const spread = cand.line.opening && opts.openingShares ? Math.max(120, profile.slack * 3) : Math.max(18, profile.slack / 2);
-    let weight = Math.exp(-cand.cpLoss / spread);
+    let weight;
+    if (target > 0) {
+      // Centred on the account's loss rate, not on zero: a 133 account does
+      // not play the fourth-best move every time, it plays moves of that size.
+      const sigma = Math.max(60, target * 0.55);
+      weight = 0.01 + Math.exp(-Math.pow(cand.cpLoss - target, 2) / (2 * sigma * sigma));
+      // Handing over a forced mate is not beginner play, it is broken play.
+      if (cand.cpLoss > target * 2 + 80) weight = 0.005;
+    } else {
+      weight = Math.exp(-cand.cpLoss / spread);
+    }
     // Repeatedly taking #1 is the one pattern that reads as a machine. Once the
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
     if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
