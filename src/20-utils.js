@@ -498,7 +498,7 @@ function loadSettings(user) {
     merged.targetElo = clampInt(merged.targetElo, 0, 3190, CONFIG.targetElo);
     merged.maxDepth = clampInt(merged.maxDepth, 4, 20, CONFIG.maxDepth);
     merged.moveTimeMs = clampInt(merged.moveTimeMs, 150, 5000, CONFIG.moveTimeMs);
-    merged.multiPv = clampInt(merged.multiPv, 1, 5, CONFIG.multiPv);
+    merged.multiPv = clampInt(merged.multiPv, 1, 10, CONFIG.multiPv);
     merged.minThinkMs = clampInt(merged.minThinkMs, 250, 6000, CONFIG.minThinkMs);
     merged.maxThinkMs = clampInt(merged.maxThinkMs, 400, 15000, CONFIG.maxThinkMs);
     merged.humanSlackCp = clampInt(merged.humanSlackCp, 0, 300, CONFIG.humanSlackCp);

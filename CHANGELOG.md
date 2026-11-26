@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.86.0 — 2026-11-27
+
+Four lines were not enough to price a 60 cp band.
+
+- The slack model can only pick among the lines the search offers. At a 1320
+  account the fourth-best move is still within a few centipawns of the best, so a
+  112 cp slack had nothing to spend and the game went at 5 cp/move against a 60 cp
+  band. Eight lines by default now, and the setting can go to ten.
+- Measured cost: one search that reports more lines, same depth and time.
+- The 1320 rung is re-measured next; the previous run (20 plies, 0 improvised,
+  5 cp/move) is what motivated this.
+
 ## 1.85.0 — 2026-11-27
 
 The gate that made the rate irrelevant.

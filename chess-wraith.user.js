@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.85.0
+// @version      1.86.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.85.0';
+const VERSION = '1.86.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -64,7 +64,10 @@ const CONFIG = {
   targetElo: 0, // 0 = follow the signed-in account's own rating
   maxDepth: 14,
   moveTimeMs: 700,
-  multiPv: 4,
+  // Four lines were not enough to price a 60 cp band at a 1320 account: the
+  // engine's fourth-best move was still within a few centipawns of its best, so
+  // the slack model had nothing worth picking and delivered 5 cp/move.
+  multiPv: 8,
   hashMb: 32,
 
   // Pacing: the whole point of this script is that it does not look like a bot.
@@ -119,7 +122,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.85.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.86.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -627,7 +630,7 @@ function loadSettings(user) {
     merged.targetElo = clampInt(merged.targetElo, 0, 3190, CONFIG.targetElo);
     merged.maxDepth = clampInt(merged.maxDepth, 4, 20, CONFIG.maxDepth);
     merged.moveTimeMs = clampInt(merged.moveTimeMs, 150, 5000, CONFIG.moveTimeMs);
-    merged.multiPv = clampInt(merged.multiPv, 1, 5, CONFIG.multiPv);
+    merged.multiPv = clampInt(merged.multiPv, 1, 10, CONFIG.multiPv);
     merged.minThinkMs = clampInt(merged.minThinkMs, 250, 6000, CONFIG.minThinkMs);
     merged.maxThinkMs = clampInt(merged.maxThinkMs, 400, 15000, CONFIG.maxThinkMs);
     merged.humanSlackCp = clampInt(merged.humanSlackCp, 0, 300, CONFIG.humanSlackCp);
