@@ -67,7 +67,7 @@ function bootSource(source, options = {}) {
     if (this.matches && this.matches('button, .cc-button-component, [role="button"]')) {
       return { left: 10, top: 10, width: 180, height: 40, right: 190, bottom: 50, x: 10, y: 10 };
     }
-    if (this.matches && this.matches('.game-over-modal, .board-modal, .modal-content, .game-review-buttons')) {
+    if (this.matches && this.matches('.game-over-modal, .game-over-modal-shell-container, .board-modal-component, .game-over-modal-header-component, .board-modal, .modal-content, .game-review-buttons')) {
       return { left: 200, top: 200, width: 420, height: 260, right: 620, bottom: 460, x: 200, y: 200 };
     }
     return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0, x: 0, y: 0 };

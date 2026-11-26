@@ -263,18 +263,39 @@ function readOpponentRating(mySide, flipped) {
   return rating >= 400 && rating <= 3500 ? rating : null;
 }
 
+// Measured on a real finished game page (chess.com, August 2026): the dialog is
+// `.game-over-modal-shell-container` > `.board-modal-component` >
+// `.game-over-modal-header-component`, whose title names the winner ("Black
+// Won"). The older `.game-over-modal` / `.game-review-buttons` markup is kept as
+// a fallback because it is what this file used to look for.
 function isGameOverDom() {
   for (const sel of [
+    '.game-over-modal-header-component',
+    '.game-over-modal-title-component',
+    '.game-over-modal-shell-container',
+    '.board-modal-component',
     '.game-over-modal-content',
     '.game-over-header-component',
     '.game-over-modal',
     '.modal-game-over-component'
   ]) {
     const el = document.querySelector(sel);
-    if (!el) continue;
-    const style = getComputedStyle(el);
-    const visible = el.offsetParent !== null || style.position === 'fixed';
-    if (visible && style.visibility !== 'hidden' && style.display !== 'none') return true;
+    if (el && domShown(el)) return true;
+  }
+  return false;
+}
+
+// An element is on screen when it, or something above it, is laid out. The real
+// dialog sits inside a fixed board overlay and is itself `position: relative`,
+// so asking only about the element's own offsetParent answers "hidden" for a
+// modal that fills the board.
+function domShown(el) {
+  let node = el;
+  for (let depth = 0; node && depth < 8; depth += 1) {
+    const style = getComputedStyle(node);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    if (node.offsetParent !== null || style.position === 'fixed') return true;
+    node = node.parentElement;
   }
   return false;
 }

@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.36.0 — 2026-11-25
+
+Game-over detection now matches the page it runs on.
+
+- Every game-over selector in this repo was invented: on a real finished game
+  `.game-over-modal`, `.game-over-modal-content`, `.game-over-header-component`
+  and `.game-review-buttons` are all absent. The real dialog is
+  `.game-over-modal-shell-container` > `.board-modal-component` >
+  `.game-over-modal-header-component`. Detection, rematch and the session score
+  had been looking for classes the site does not use; the old names stay as a
+  fallback.
+- The real title names the colour ("Black Won"), not the player, so the parser
+  resolves white/black against the side you are playing — which also makes a
+  signed-out tab able to score a draw.
+- `textContent` glues every sibling block ("tester wonby checkmate"), not just
+  capitalised ones. The dialog text now prefers `innerText`, with a leaf-walk
+  fallback for engines that do not have it.
+- `isGameOverDom()` treats an element inside a fixed overlay as shown; a
+  `position: relative` header inside a fixed modal used to read as hidden.
+- 166 tests, and the session test now uses the real markup class for class.
+
 ## 1.35.0 — 2026-11-25
 
 The session score no longer trusts a name it can see anywhere in the dialog.

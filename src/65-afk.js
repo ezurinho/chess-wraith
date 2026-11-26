@@ -91,6 +91,9 @@ function isElementVisible(el) {
 // matches the site navigation. Scope it to the dialog that ends the game and
 // fall back to the document only when no such dialog is on screen.
 const GAME_OVER_SELECTORS = [
+  '.game-over-modal-shell-container',
+  '.board-modal-component',
+  '.game-over-modal-header-component',
   '.game-over-modal',
   '.game-review-buttons',
   '.board-modal',
@@ -133,7 +136,7 @@ function findRematchButton(skipTexts) {
 // "tester won by resignation", or just "Draw". The account's own name is the
 // only thing that says which side of that sentence is us, so an unknown name
 // returns null instead of guessing a win.
-function parseGameResult(text, account) {
+function parseGameResult(text, account, myColor) {
   // textContent glues sibling blocks together without a space: "tester won"
   // followed by a Rematch button reads "tester wonRematch". A space at the case
   // boundary is what the page actually looks like.
@@ -146,23 +149,51 @@ function parseGameResult(text, account) {
   if (/\byou resigned\b|\byou lost\b|\byou were checkmated\b/.test(line)) return 'loss';
   if (/\byou won\b|\byou win\b/.test(line)) return 'win';
   if (/\bdraw\b|\bstalemate\b|\binsufficient material\b|\bthreefold\b|\bfifty-move\b/.test(line)) return 'draw';
-  const me = normalizeAccountName(account);
-  if (!me) return null;
   // The dialog shows both players, so "the account name is somewhere in the
   // text" is not a test: the winner is the word attached to the verb.
   const near = /([a-z0-9_-]{2,})\s+(won|lost)\b/.exec(line);
   if (!near) return null;
   const loser = near[2] === 'lost';
-  if (near[1] === me) return loser ? 'loss' : 'win';
+  const who = near[1];
+  // A finished game page names the colour, not the player: "Black Won". That
+  // path needs no account, which is the only way a signed-out tab can score.
+  // Only the literal word: a player named "bob" is not Black.
+  if (myColor === 'w' || myColor === 'b') {
+    const colour = who === 'white' ? 'w' : who === 'black' ? 'b' : null;
+    if (colour) return colour === myColor ? (loser ? 'loss' : 'win') : (loser ? 'win' : 'loss');
+  }
+  const me = normalizeAccountName(account);
+  if (!me) return null;
+  if (who === me) return loser ? 'loss' : 'win';
   return loser ? 'win' : 'loss';
 }
 
 // Bounded on purpose: the dialog is small, but a page-level fallback can be the
 // whole document and regular expressions over a megabyte of markup are not.
-function readGameResult() {
+// textContent has no separators: the real dialog reads "tester wonby checkmate".
+// innerText has the line breaks the reader sees, so it is preferred; jsdom and
+// older engines get a traversal that joins every leaf with a space instead.
+function dialogText(root) {
+  if (root && typeof root.innerText === 'string' && root.innerText.trim()) return root.innerText;
+  const parts = [];
+  const walk = (node) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) parts.push(child.nodeValue || '');
+      else if (child.nodeType === 1) {
+        if (child.children.length === 0) parts.push(child.textContent || '');
+        else walk(child);
+        parts.push(' ');
+      }
+    }
+  };
+  if (root) walk(root);
+  return parts.join(' ');
+}
+
+function readGameResult(myColor) {
   const root = gameOverRoot();
   if (!root) return null;
-  return parseGameResult(String(root.textContent || '').slice(0, 2000), currentAccount());
+  return parseGameResult(dialogText(root).slice(0, 2000), currentAccount(), myColor);
 }
 
 // A rematch paints a fresh board under the old dialog for a second, so the same

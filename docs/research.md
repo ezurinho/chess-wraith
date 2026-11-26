@@ -195,6 +195,41 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The selectors were wrong
+
+Everything about the game-over dialog in this repo was invented, and it was
+wrong. A real finished game, read from the DOM on 2026-11-25:
+
+| Selector in this repo | On the real page |
+| --- | --- |
+| `.game-over-modal` | absent |
+| `.game-over-modal-content` | absent |
+| `.game-over-header-component` | absent |
+| `.game-review-buttons` | absent |
+| `.board-modal` | absent |
+| `.game-over-modal-shell-container` | **400×163, visible** |
+| `.board-modal-component` | **400×163, visible** |
+| `.game-over-modal-header-component` | **400×75, flex, visible** |
+
+When the repo's names match nothing on the page, `isGameOverDom()` answers
+`false` for a game that has just ended — no rematch, no result — and 165 tests
+agreed with it, because every fixture was built from the same invented names.
+That is what a fixture is for and that is exactly how it lies.
+
+Two more things the real page settled:
+
+- The title names the **colour**, not the player: `Black Won` / `by checkmate`.
+  A name-only parser returns `null` there (or worse, a loss for the side that
+  actually won), so the parser now maps `white`/`black` against the colour we
+  are playing. That also works signed out, where there is no account name.
+- `textContent` glues *every* sibling block, not just a header and a capitalised
+  button: the real dialog reads `tester wonby checkmate`. The case-boundary
+  trick from 1.34.0 missed this one. `innerText` has the line breaks a reader
+  sees, and a leaf-walking fallback gives jsdom the same shape.
+
+`isGameOverDom()` also stopped asking only about the element's own
+`offsetParent`: the real header is `position: relative` inside a fixed overlay,
+so it reported a 400×75 modal as hidden.
 ## The name next to the verb
 
 1.34.0 decided a result by asking whether the account's name appeared in the
@@ -446,7 +481,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 165 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 166 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

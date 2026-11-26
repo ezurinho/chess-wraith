@@ -157,3 +157,14 @@ test('a dialog that outlives its game is not counted for the next one', () => {
   assert.equal(api.resultCounts({ ...base, ply: 24, result: null }), false, 'no result, nothing to count');
   assert.equal(api.resultCounts({ ...base, ply: 24, gamesPlayed: 0 }), false, 'no game played');
 });
+test('a finished game page names the colour, not the player', () => {
+  // Real text from chess.com, /game/live/168072860134: White LeonLiur, Black
+  // am3058, result 0-1, header "Black Won by checkmate".
+  assert.equal(api.parseGameResult('Black Won by checkmate', '', 'b'), 'win');
+  assert.equal(api.parseGameResult('Black Won by checkmate', '', 'w'), 'loss');
+  assert.equal(api.parseGameResult('White Won by resignation', '', 'w'), 'win');
+  assert.equal(api.parseGameResult('Black Won Game Review Remove Ads', '', 'b'), 'win');
+  // A player whose name starts with b is not the colour Black.
+  assert.equal(api.parseGameResult('bob won', 'alice', 'w'), 'loss');
+  assert.equal(api.parseGameResult('Draw by agreement', '', 'w'), 'draw');
+});

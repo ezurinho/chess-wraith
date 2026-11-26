@@ -51,15 +51,19 @@ test('the whole script boots on a real board without throwing', async () => {
 
 test('a finished game with AFK on presses the button a person would press', async () => {
   const { window, api, stop } = boot(PAGE +
-    '<div class="game-over-modal" style="position:fixed"><div class="game-over-modal-content">tester won</div>' +
-    '<button class="cc-button-component">Rematch</button></div>');
+    // The markup from a real finished game page, class for class.
+    '<div class="board-modal-container-container" style="position:fixed">' +
+    '<div class="board-modal-component"><div class="game-over-modal-shell-container">' +
+    '<div class="game-over-modal-header-component"><div class="game-over-modal-title-component">tester won</div>' +
+    '<div class="game-over-modal-subtitle-component">by checkmate</div></div>' +
+    '<button class="cc-button-component">Rematch</button></div></div></div>');
   try {
     api.cfg.autoRematch = true;
     // The first scan may already have seen the dialog while AFK was off; make
     // the next one a fresh transition, which is what queues the rematch.
     api.state.gameOverSeen = false;
     const pressed = [];
-    const button = window.document.querySelector('.game-over-modal .cc-button-component');
+    const button = window.document.querySelector('.game-over-modal-shell-container .cc-button-component');
     button.addEventListener('click', () => pressed.push(button.textContent));
     assert.equal(api.isGameOverDom(), true, 'the dialog is found');
     assert.equal(api.scanBoard('w').gameOver, true, 'the scan sees a finished game');
@@ -67,7 +71,7 @@ test('a finished game with AFK on presses the button a person would press', asyn
     // to cover the worst case, not the average one.
     const ok = await until(() => pressed.length > 0, 15000);
     assert.ok(ok, `no rematch; afk=${api.cfg.autoRematch} warn=${api.state.warn} seen=${api.state.gameOverSeen} tried=${api.state.rematchTried}` +
-      ` scanning=${Boolean(api.state.analysis)} thinking=${api.state.thinking} lastScanAt=${api.state.lastScanAt} modal=${window.document.querySelectorAll('.game-over-modal-content').length}`);
+      ` scanning=${Boolean(api.state.analysis)} thinking=${api.state.thinking} lastScanAt=${api.state.lastScanAt} modal=${window.document.querySelectorAll('.game-over-modal-title-component').length}`);
     assert.deepEqual(pressed, ['Rematch'], 'the first choice, not a random button');
     assert.equal(api.state.gameOverSeen, true, 'the game over was seen');
     assert.equal(api.state.rematchAttempts, 1, 'pressed once, not in a loop');
