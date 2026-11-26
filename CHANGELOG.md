@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.44.0 — 2026-11-26
+
+The delay is the whole interval, so the search is no longer paid for twice.
+
+- The move was armed with the full delay *after* the engine answered: a 700 ms
+  search against a 700 ms bullet median made the real interval 1.4 s, and 28 s
+  of clock over a 40-move game. `visibleDelayMs()` now waits only what is left of
+  the target, with a 120 ms floor.
+- The report prints `last delay … · search …` so the interval can be checked
+  instead of assumed.
+- 177 tests.
+
 ## 1.43.0 — 2026-11-26
 
 The depth cap follows the account, so a strong account is not played at a 1500

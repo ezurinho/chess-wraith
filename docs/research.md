@@ -195,6 +195,26 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The search was paid for twice
+
+The delay is meant to be the interval between the opponent's move and ours. It
+was armed *after* the engine answered, so the real interval was search + delay:
+
+| class | account median | search (measured) | real interval | error |
+|---|---|---|---|---|
+| bullet | 0.70 s | 0.12-0.72 s | 0.82-1.42 s | **+17 % to +103 %** |
+| blitz | 1.60 s | 0.12-0.72 s | 1.72-2.32 s | +7 % to +45 % |
+| rapid | 5.50 s | 0.12-3.0 s | 5.62-8.50 s | +2 % to +55 % |
+
+The search numbers are the ones measured for the depth cap (121 ms at depth 14,
+715 ms at 22 with a 700 ms budget, 3014 ms at 22 with a 3000 ms budget). The
+error is not cosmetic: in a 40-move bullet game the extra 0.7 s per move is 28 s
+of clock, which is the whole increment.
+
+`visibleDelayMs(target, spent)` now returns what is left of the target after the
+search, with a 120 ms floor so the click is never instant. The report prints both
+numbers — `last delay 1600ms · search 715ms` — so the interval can be read off the
+panel instead of inferred.
 ## The depth cap was the strength ceiling, and it did not follow the account
 
 Measured 2026-11-26 in the browser with the bundled engine, MultiPV 4, on a
@@ -646,7 +666,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 176 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 177 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

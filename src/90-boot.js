@@ -164,6 +164,8 @@ const state = {
   keepAlive: 'off',
   lastMyMoveAt: 0,
   lastDelayMs: 0,
+  lastSearchMs: 0,
+  searchStartAt: 0,
   tempoSamples: [],
   boardTouchAt: 0,
   defers: 0,
@@ -937,6 +939,7 @@ function analyze(snapshot, force) {
   clearAutoTimer();
   state.analyzedFen = snapshot.fen;
   state.thinking = true;
+  state.searchStartAt = Date.now();
   refreshPanel();
 
   const anchor = resolveElo();
@@ -1036,8 +1039,12 @@ function scheduleAutoMove(result) {
   });
 
   const targetFen = result.fen;
+  // What the engine already spent is part of the interval, not extra to it.
+  const spent = state.searchStartAt ? Math.min(15000, Math.max(0, Date.now() - state.searchStartAt)) : 0;
+  state.searchStartAt = 0;
+  state.lastSearchMs = spent;
   state.lastDelayMs = delay;
-  armAutoMove(move, targetFen, choice, delay);
+  armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
 
   refreshPanel();
 }
@@ -1447,7 +1454,7 @@ function reportText() {
     state.events.length
       ? `history ${state.events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join(' | ')}`
       : 'history empty',
-    `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
+    `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',

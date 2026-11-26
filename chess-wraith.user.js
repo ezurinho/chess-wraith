@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.43.0
+// @version      1.44.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.43.0';
+const VERSION = '1.44.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.43.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.44.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -387,6 +387,17 @@ function clockBoundMoveTime(moveTimeMs, clockSeconds) {
   const clock = Number(clockSeconds);
   if (!Number.isFinite(clock) || clock <= 0) return move;
   return Math.max(150, Math.min(move, Math.round(clock * 200)));
+}
+
+// The delay is the gap a person leaves between the opponent's move and their
+// own, and the search already lives inside that gap: waiting the whole delay
+// after the engine answers doubles the interval the account is supposed to keep
+// (700 ms search against a 700 ms bullet median is a 2x tell and 28 s of clock
+// in a 40-move game). The visible part is what is left of the target.
+function visibleDelayMs(targetMs, spentMs) {
+  const target = Math.max(0, Number(targetMs) || 0);
+  const spent = Math.max(0, Number(spentMs) || 0);
+  return Math.max(120, Math.round(target - spent));
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -4464,6 +4475,8 @@ const state = {
   keepAlive: 'off',
   lastMyMoveAt: 0,
   lastDelayMs: 0,
+  lastSearchMs: 0,
+  searchStartAt: 0,
   tempoSamples: [],
   boardTouchAt: 0,
   defers: 0,
@@ -5237,6 +5250,7 @@ function analyze(snapshot, force) {
   clearAutoTimer();
   state.analyzedFen = snapshot.fen;
   state.thinking = true;
+  state.searchStartAt = Date.now();
   refreshPanel();
 
   const anchor = resolveElo();
@@ -5336,8 +5350,12 @@ function scheduleAutoMove(result) {
   });
 
   const targetFen = result.fen;
+  // What the engine already spent is part of the interval, not extra to it.
+  const spent = state.searchStartAt ? Math.min(15000, Math.max(0, Date.now() - state.searchStartAt)) : 0;
+  state.searchStartAt = 0;
+  state.lastSearchMs = spent;
   state.lastDelayMs = delay;
-  armAutoMove(move, targetFen, choice, delay);
+  armAutoMove(move, targetFen, choice, visibleDelayMs(delay, spent));
 
   refreshPanel();
 }
@@ -5747,7 +5765,7 @@ function reportText() {
     state.events.length
       ? `history ${state.events.map((item) => `${eventLabel(item.at, Date.now())} ${item.text}`).join(' | ')}`
       : 'history empty',
-    `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
+    `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',

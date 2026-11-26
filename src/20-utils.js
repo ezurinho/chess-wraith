@@ -269,6 +269,17 @@ function clockBoundMoveTime(moveTimeMs, clockSeconds) {
   return Math.max(150, Math.min(move, Math.round(clock * 200)));
 }
 
+// The delay is the gap a person leaves between the opponent's move and their
+// own, and the search already lives inside that gap: waiting the whole delay
+// after the engine answers doubles the interval the account is supposed to keep
+// (700 ms search against a 700 ms bullet median is a 2x tell and 28 s of clock
+// in a 40-move game). The visible part is what is left of the target.
+function visibleDelayMs(targetMs, spentMs) {
+  const target = Math.max(0, Number(targetMs) || 0);
+  const spent = Math.max(0, Number(spentMs) || 0);
+  return Math.max(120, Math.round(target - spent));
+}
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const clampInt = (v, lo, hi, fallback) => {
   const n = Number.parseInt(v, 10);
