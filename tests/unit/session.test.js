@@ -84,7 +84,8 @@ test('a finished game with AFK on presses the button a person would press', asyn
     assert.ok(ok, `no rematch; afk=${api.cfg.autoRematch} warn=${api.state.warn} seen=${api.state.gameOverSeen} tried=${api.state.rematchTried}` +
       ` scanning=${Boolean(api.state.analysis)} thinking=${api.state.thinking} lastScanAt=${api.state.lastScanAt} modal=${window.document.querySelectorAll('.game-over-modal-title-component').length}`);
     assert.deepEqual(pressed, ['Rematch'], 'the first choice, not a random button');
-    assert.equal(api.state.gameOverSeen, true, 'the game over was seen');
+    assert.equal(api.state.gameOverSeen, true, 'the game over was seen' +
+      ` games=${api.state.gamesPlayed} events=${JSON.stringify(api.state.events)} warn=${api.state.warn}`);
     assert.equal(api.state.rematchAttempts, 1, 'pressed once, not in a loop');
     assert.equal(api.state.results.win, 1, 'the dialog said "tester won" and the account is tester');
     assert.equal(api.state.results.loss, 0);

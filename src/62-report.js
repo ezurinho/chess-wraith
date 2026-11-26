@@ -97,3 +97,90 @@ function saveReport(user, report) {
     /* storage blocked: the card still shows this session */
   }
 }
+
+// A history, not a single card: the shape of a night is in the sequence, and one
+// game is noise. Twenty entries is small enough to keep in localStorage without
+// asking, and long enough that a form bar means something.
+const REPORT_HISTORY_LIMIT = 20;
+
+function pushReport(list, report, limit = REPORT_HISTORY_LIMIT) {
+  const cap = Math.max(1, Math.round(Number(limit) || REPORT_HISTORY_LIMIT));
+  const kept = Array.isArray(list) ? list.filter((item) => item && item.result) : [];
+  if (!report || !report.result) return kept.slice(-cap);
+  // One entry per game: the same result re-scanned must not double the night.
+  const at = Number(report.at) || 0;
+  const moves = Number(report.moves) || 0;
+  const duplicate = kept.some((item) => Number(item.at) === at && at > 0 && Number(item.moves) === moves);
+  if (duplicate) return kept.slice(-cap);
+  return [...kept, report].slice(-cap);
+}
+
+// Averages over the games that have a number, never over a zero standing in for
+// a missing sample. The bars use the same list, so the summary and the chart
+// cannot disagree.
+function reportSummary(list) {
+  const games = (Array.isArray(list) ? list : []).filter((item) => item && item.result);
+  const known = (key) => games.map((item) => item[key]).filter((value) => Number.isFinite(value));
+  const average = (values) => (values.length ? Math.round(meanOf(values)) : null);
+  const wins = games.filter((item) => item.result === 'win').length;
+  const losses = games.filter((item) => item.result === 'loss').length;
+  const draws = games.filter((item) => item.result === 'draw').length;
+  const acpls = known('myAcpl');
+  return {
+    games: games.length,
+    wins,
+    losses,
+    draws,
+    winRate: games.length ? Math.round((wins / games.length) * 100) : null,
+    acpl: average(acpls),
+    oppAcpl: average(known('oppAcpl')),
+    perf: average(known('myPerf')),
+    best: acpls.length ? Math.min(...acpls) : null,
+    form: games.slice(-12).map((item) => ({
+      result: item.result,
+      acpl: Number.isFinite(item.myAcpl) ? item.myAcpl : null,
+      moves: Number.isFinite(item.moves) ? item.moves : null
+    }))
+  };
+}
+
+function reportHistoryKey(user) {
+  const name = normalizeAccountName(user);
+  return `${STORAGE_KEY}:games:${name || 'anonymous'}`;
+}
+
+function readReportHistory(user) {
+  try {
+    const raw = localStorage.getItem(reportHistoryKey(user));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item) => item && typeof item.result === 'string' && item.result)
+      .slice(-REPORT_HISTORY_LIMIT)
+      .map((item) => ({
+        result: item.result.slice(0, 12),
+        moves: Number(item.moves) > 0 ? Math.round(Number(item.moves)) : null,
+        myAcpl: Number.isFinite(Number(item.myAcpl)) && item.myAcpl !== null ? Math.round(Number(item.myAcpl)) : null,
+        oppAcpl: Number.isFinite(Number(item.oppAcpl)) && item.oppAcpl !== null ? Math.round(Number(item.oppAcpl)) : null,
+        myPerf: Number.isFinite(Number(item.myPerf)) && item.myPerf !== null ? Math.round(Number(item.myPerf)) : null,
+        oppPerf: Number.isFinite(Number(item.oppPerf)) && item.oppPerf !== null ? Math.round(Number(item.oppPerf)) : null,
+        rating: Number(item.rating) > 0 ? Math.round(Number(item.rating)) : null,
+        delta: Number.isFinite(Number(item.delta)) && item.delta !== null ? Math.round(Number(item.delta)) : null,
+        samples: Number(item.samples) > 0 ? Math.round(Number(item.samples)) : 0,
+        at: Number(item.at) > 0 ? Math.round(Number(item.at)) : 0
+      }));
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveReportHistory(user, list) {
+  try {
+    const kept = Array.isArray(list) ? list.slice(-REPORT_HISTORY_LIMIT) : [];
+    if (!kept.length) localStorage.removeItem(reportHistoryKey(user));
+    else localStorage.setItem(reportHistoryKey(user), JSON.stringify(kept));
+  } catch (error) {
+    /* storage blocked: the chart still shows this session */
+  }
+}

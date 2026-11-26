@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '62-report.js'],
-  `{ gameReport, performanceFromAcpl, REPORT_MIN_SAMPLES }`
+  `{ gameReport, performanceFromAcpl, pushReport, reportSummary, REPORT_MIN_SAMPLES, REPORT_HISTORY_LIMIT }`
 );
 
 test('a better game is a higher performance, monotonically', () => {
@@ -70,4 +70,43 @@ test('an empty report is still a valid shape', () => {
   assert.equal(report.myAcpl, null);
   assert.equal(report.samples, 0);
   assert.ok(report.at > 0);
+});
+
+test('the history keeps twenty games and does not double a result', () => {
+  let list = [];
+  for (let i = 0; i < 25; i += 1) list = api.pushReport(list, { result: 'win', at: 1000 + i, moves: 30 });
+  assert.equal(api.REPORT_HISTORY_LIMIT, 20);
+  assert.equal(list.length, 20);
+  assert.equal(list[0].at, 1005, 'the oldest five fell off');
+  const again = api.pushReport(list, list[list.length - 1]);
+  assert.equal(again.length, 20, 'the same game scanned twice is still one game');
+  assert.equal(api.pushReport(list, null).length, 20);
+  assert.equal(api.pushReport(list, { result: '' }).length, 20);
+});
+
+test('the summary averages only the games that have a number', () => {
+  const list = [
+    { result: 'win', myAcpl: 10, oppAcpl: 20, myPerf: 2400, at: 1 },
+    { result: 'loss', myAcpl: 30, oppAcpl: null, myPerf: null, at: 2 },
+    { result: 'win', myAcpl: null, oppAcpl: 40, myPerf: null, at: 3 },
+    { result: 'draw', myAcpl: 20, oppAcpl: 30, myPerf: 2000, at: 4 }
+  ];
+  const sum = api.reportSummary(list);
+  assert.equal(sum.games, 4);
+  assert.equal(sum.wins, 2);
+  assert.equal(sum.losses, 1);
+  assert.equal(sum.draws, 1);
+  assert.equal(sum.winRate, 50);
+  assert.equal(sum.acpl, 20, '(10+30+20)/3, the missing sample is not a zero');
+  assert.equal(sum.oppAcpl, 30, '(20+40+30)/3');
+  assert.equal(sum.perf, 2200, '(2400+2000)/2');
+  assert.equal(sum.best, 10);
+  assert.equal(sum.form.length, 4);
+  const empty = api.reportSummary([]);
+  assert.equal(empty.games, 0);
+  assert.equal(empty.winRate, null);
+  assert.equal(empty.acpl, null);
+  assert.equal(empty.perf, null);
+  assert.equal(empty.best, null);
+  assert.equal(empty.form.length, 0);
 });

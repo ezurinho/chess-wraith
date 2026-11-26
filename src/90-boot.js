@@ -36,6 +36,7 @@ function adoptAccountSettings(user) {
   state.events = readHistory();
   // The last game's card is per account as well: the numbers belong to a player.
   state.lastReport = readReport(name);
+  state.reportHistory = readReportHistory(name);
   // The probe count belongs to the account it was counted for; the report would
   // otherwise add one login's probes to another's repertoire line.
   state.probes = 0;
@@ -168,6 +169,8 @@ const state = {
   myAcpl: 0,
   // The card after the last finished game; read back per account on boot.
   lastReport: null,
+  // The last twenty games, oldest first. The Stats tab reads this, not the card.
+  reportHistory: [],
   effectiveElo: null,
   warn: '',
   clockSeconds: null,
@@ -1005,6 +1008,8 @@ function statusView() {
     throttled: state.throttled,
     results: state.results,
     report: state.lastReport,
+    reportHistory: state.reportHistory,
+    reportSummary: reportSummary(state.reportHistory),
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -1510,7 +1515,9 @@ function runScan() {
           rating: anchoredRating(),
           at: Date.now()
         });
+        state.reportHistory = pushReport(state.reportHistory, state.lastReport);
         saveReport(state.settingsAccount || currentAccount(), state.lastReport);
+        saveReportHistory(state.settingsAccount || currentAccount(), state.reportHistory);
         if (state.lastReport.myAcpl != null) noteEvent(`report: ${result} · ${state.lastReport.myAcpl} cp`);
       }
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';

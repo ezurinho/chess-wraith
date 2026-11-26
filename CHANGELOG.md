@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.57.0 — 2026-11-26
+
+A Stats tab: the shape of the night, not one card.
+
+- `pushReport` keeps the last twenty games per account in localStorage, one
+  entry per game even if the same result screen is scanned twice.
+- `reportSummary` gives the record, win rate, both sides' average loss per move,
+  the rating that play looks like and the best game — and skips missing samples
+  instead of averaging zeros.
+- New rail tab **Stats**: one bar per game in the last twelve (height is the
+  inverse of the loss, colour is the result), plus the six numbers above.
+- The tab is rebuilt only when the sequence changes, so the 2 s render cannot
+  make the bars flicker.
+
 ## 1.56.0 — 2026-11-26
 
 The panel now says how the game went, with the same numbers it played by.

@@ -112,19 +112,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,[r
   box-shadow:0 0 16px -6px var(--acc),inset 0 0 12px -6px var(--acc);transition:transform .34s linear(0,.32 14%,.82 28%,1.06 44%,1.02 58%,.995 72%,1);pointer-events:none}
 .rail[data-index="1"] .rail-glide{transform:translateY(32px)}
 .rail[data-index="2"] .rail-glide{transform:translateY(64px)}
+.rail[data-index="3"] .rail-glide{transform:translateY(96px)}
 .rail[data-index="0"] .rail-btn[data-tab-btn="live"],
 .rail[data-index="1"] .rail-btn[data-tab-btn="tune"],
-.rail[data-index="2"] .rail-btn[data-tab-btn="info"]{color:var(--acc)}
+.rail[data-index="2"] .rail-btn[data-tab-btn="info"],
+.rail[data-index="3"] .rail-btn[data-tab-btn="stats"]{color:var(--acc)}
 
 .views{flex:1 1 auto;min-width:0;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 11px 11px;scrollbar-gutter:stable}
 .views::-webkit-scrollbar{width:6px}
 .views::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--acc) 22%,transparent);border-radius:99px}
 .view{display:none}
-.panel[data-tab="live"] .v-live,.panel[data-tab="tune"] .v-tune,.panel[data-tab="info"] .v-info{display:block;animation:nt-view .28s cubic-bezier(.2,.9,.25,1) both}
+.panel[data-tab="live"] .v-live,.panel[data-tab="tune"] .v-tune,.panel[data-tab="info"] .v-info,.panel[data-tab="stats"] .v-stats{display:block;animation:nt-view .28s cubic-bezier(.2,.9,.25,1) both}
 @keyframes nt-view{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
 .view-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 1px 8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 .view-head span{display:inline-flex;align-items:center;gap:6px;font:800 7.5px/1 var(--font-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--acc)}
 .view-head span::before{content:'';width:10px;height:1px;border-radius:99px;background:var(--acc);box-shadow:0 0 7px var(--acc)}
+.chart{display:flex;align-items:flex-end;gap:3px;height:56px;padding:8px 1px 0;margin-bottom:2px}
+.bar{flex:1 1 0;min-width:3px;border-radius:3px 3px 0 0;background:var(--dim-2);opacity:.9}
+.bar.win{background:var(--acc)}
+.bar.loss{background:var(--bad)}
+.bar.draw{background:var(--warn)}
+.bar.empty{height:2px;background:var(--line-strong);opacity:1}
 .view-head b{font:600 8px/1.2 var(--font-ui);letter-spacing:.04em;color:var(--dim-2);text-align:right}
 
 .hero{display:grid;grid-template-columns:1fr 1px 1fr;align-items:center;padding:8px 2px 9px}
@@ -234,6 +242,7 @@ const ICON = {
   mark: '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3c-1.4 0-2.4.9-2.4 2 0 .8.4 1.3 1 1.7-1.3 1-2 2.6-2 4.4 0 1.7.6 2.8 1.5 3.6-1.2.8-2 2-2 3.4 0 1.5.9 2.7 2.2 3.3L9 24h6l-1.3-2.6c1.3-.6 2.2-1.8 2.2-3.3 0-1.4-.8-2.6-2-3.4.9-.8 1.5-1.9 1.5-3.6 0-1.8-.7-3.4-2-4.4.6-.4 1-.9 1-1.7 0-1.1-1-2-2.4-2Z" fill="currentColor"/></svg>',
   live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h3l3-7 3 14 3-9 3 4h3"/></svg>',
   tune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.6M12 18.4V21M3 12h2.6M18.4 12H21M5.6 5.6l1.9 1.9M16.5 16.5l1.9 1.9M18.4 5.6l-1.9 1.9M7.5 16.5l-1.9 1.9"/></svg>',
+  stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.4v.2"/></svg>',
   min: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
   hide: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12h16M12 4v16"/></svg>'
@@ -264,6 +273,7 @@ const PANEL_HTML = `
       <button class="rail-btn" type="button" data-tab-btn="live" data-label="Live" aria-label="Live">${ICON.live}</button>
       <button class="rail-btn" type="button" data-tab-btn="tune" data-label="Tune" aria-label="Tune">${ICON.tune}</button>
       <button class="rail-btn" type="button" data-tab-btn="info" data-label="Info" aria-label="Info">${ICON.info}</button>
+      <button class="rail-btn" type="button" data-tab-btn="stats" data-label="Stats" aria-label="Stats">${ICON.stats}</button>
     </div>
     <div class="views">
       <div class="view v-live">
@@ -376,6 +386,21 @@ const PANEL_HTML = `
           <div class="info-row"><span>Play one move</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">M</span></span></div>
           <div class="info-row"><span>Hide panel</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">H</span></span></div>
           <div class="info-row"><span>Stop everything</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
+        </div>
+      </div>
+      <div class="view v-stats">
+        <div class="view-head"><span>Stats</span><b>last 20 games</b></div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Form</span><span class="card-s" data-el="statsForm">no games yet</span></div>
+          <div class="chart" data-el="chart" aria-hidden="true"></div>
+          <div class="rows">
+            <div class="row"><span>Games</span><b data-el="statsGames">–</b></div>
+            <div class="row"><span>Record</span><b data-el="statsRecord">–</b></div>
+            <div class="row"><span>Loss / move</span><b data-el="statsAcpl">–</b></div>
+            <div class="row"><span>Rival loss</span><b data-el="statsOpp">–</b></div>
+            <div class="row"><span>Looks like</span><b data-el="statsPerf">–</b></div>
+            <div class="row"><span>Best game</span><b data-el="statsBest">–</b></div>
+          </div>
         </div>
       </div>
     </div>
@@ -543,7 +568,7 @@ class WraithPanel {
   }
 
   setTab(tab) {
-    const index = { live: 0, tune: 1, info: 2 }[tab] || 0;
+    const index = { live: 0, tune: 1, info: 2, stats: 3 }[tab] || 0;
     this.panel.dataset.tab = tab || 'live';
     this.el.rail.dataset.index = String(index);
   }
@@ -737,6 +762,39 @@ class WraithPanel {
     this.el.reportAccount.textContent = rep && rep.rating
       ? `${rep.rating}${Number.isFinite(rep.delta) ? ` · ${rep.delta >= 0 ? '+' : ''}${rep.delta}` : ''}`
       : '–';
+    // Stats: the last twenty games, drawn from the same entries the card uses.
+    const sum = v.reportSummary;
+    const has = Boolean(sum && sum.games);
+    this.el.statsGames.textContent = has ? String(sum.games) : '–';
+    this.el.statsRecord.textContent = has ? `${sum.wins}W · ${sum.losses}L · ${sum.draws}D · ${sum.winRate}%` : '–';
+    this.el.statsAcpl.textContent = has && Number.isFinite(sum.acpl) ? `${sum.acpl} cp` : '–';
+    this.el.statsOpp.textContent = has && Number.isFinite(sum.oppAcpl) ? `${sum.oppAcpl} cp` : '–';
+    this.el.statsPerf.textContent = has && Number.isFinite(sum.perf) ? `like ${sum.perf}` : '–';
+    this.el.statsBest.textContent = has && Number.isFinite(sum.best) ? `${sum.best} cp` : '–';
+    this.el.statsForm.textContent = has
+      ? `${sum.games} game${sum.games === 1 ? '' : 's'} · ${sum.winRate}% won`
+      : 'no games yet';
+    // Rebuild the bars only when the sequence changed: this renders every 2 s.
+    const formKey = JSON.stringify(has ? sum.form : []);
+    if (this.chartKey !== formKey) {
+      this.chartKey = formKey;
+      const chart = this.el.chart;
+      chart.textContent = '';
+      for (const game of (has ? sum.form : [])) {
+        const bar = document.createElement('i');
+        const shape = ['win', 'loss', 'draw'].includes(game.result) ? game.result : 'empty';
+        bar.className = `bar ${shape}`;
+        // A lower loss is a taller bar: the eye reads the good games as peaks.
+        bar.style.height = Number.isFinite(game.acpl)
+          ? `${Math.max(8, Math.min(100, 100 - game.acpl / 2))}%`
+          : '6%';
+        const parts = [game.result];
+        if (game.moves) parts.push(`${game.moves} moves`);
+        if (Number.isFinite(game.acpl)) parts.push(`${game.acpl} cp/move`);
+        bar.title = parts.join(' · ');
+        chart.appendChild(bar);
+      }
+    }
 
 
     for (const sw of this.panel.querySelectorAll('[data-toggle]')) {
