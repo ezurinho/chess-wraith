@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.53.0
+// @version      1.54.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.53.0';
+const VERSION = '1.54.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.53.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.54.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2844,6 +2844,7 @@ function pgnPlayerSide(pgn, user) {
 function paceFromGames(games, timeClass, user) {
   const list = Array.isArray(games) ? games : [];
   const times = [];
+  const buckets = { opening: [], middle: [], end: [] };
   let used = 0;
   // The archive is oldest-first, so the newest games are at the end: the pace
   // that matters is the one the account has now, not a year of drift.
@@ -2855,11 +2856,23 @@ function paceFromGames(games, timeClass, user) {
     // No headers, or a PGN from before this account had the name: both sides.
     if (!parsed.length && side) parsed = parseClockTimes(game.pgn, null);
     if (!parsed.length) continue;
-    for (const ms of parsed) times.push(ms);
+    parsed.forEach((ms, idx) => {
+      times.push(ms);
+      // Their own move index, not the ply: the opening is short for both sides.
+      (idx < 8 ? buckets.opening : idx < 30 ? buckets.middle : buckets.end).push(ms);
+    });
     used += 1;
   }
   // Thirty moves is the floor: below that one quick game moves the median.
-  return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
+  // A phase needs fewer samples than the whole profile: it only refines the
+  // baseline, it cannot invent one.
+  const phase = (arr) => (arr.length >= 12 ? median(arr) : null);
+  return {
+    medianMs: times.length >= 30 ? median(times) : null,
+    phases: { opening: phase(buckets.opening), middle: phase(buckets.middle), end: phase(buckets.end) },
+    samples: times.length,
+    games: used
+  };
 }
 
 // The first move a player makes is a habit, not a die roll: the same archive
@@ -4983,7 +4996,14 @@ function readPaceSamples() {
 // The account's published median wins over the learned one: the learned sample
 // starts empty on a new browser, and the first ten moves of a fresh profile are
 // exactly where a bot-looking rhythm would show.
-function paceBaseline() {
+// `ply` lets a phase answer first: the account's own opening is faster than its
+// middlegame, and one median for both is a rhythm nobody has.
+function paceBaseline(ply) {
+  const phases = state.paceProfile && state.paceProfile.phases;
+  if (phases && Number.isFinite(ply)) {
+    const own = Number(ply < 16 ? phases.opening : ply < 60 ? phases.middle : phases.end);
+    if (Number.isFinite(own) && own > 200) return own;
+  }
   const published = state.paceProfile && Number(state.paceProfile.medianMs);
   if (Number.isFinite(published) && published > 200) return published;
   const samples = readPaceSamples();
@@ -4996,7 +5016,7 @@ function paceBaseline() {
 function paceAnchor() {
   return paceAnchorFor({
     publishedMs: Number(state.paceProfile && state.paceProfile.medianMs) || 0,
-    learnedMs: paceBaseline(),
+    learnedMs: paceBaseline(plyOf(state.snapshot)),
     cls: timeClassFromSeconds(state.clockPeak || state.clockSeconds)
   });
 }

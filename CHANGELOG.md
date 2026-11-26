@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.54.0 — 2026-11-26
+
+The account's rhythm has phases.
+
+- `paceFromGames` now keeps the median of the account's own moves in three buckets:
+  their first 8 moves, moves 9-30, and everything after. Thirty moves still buy a
+  whole profile; twelve buy a phase.
+- `paceBaseline(ply)` prefers the phase median, so a slow middlegame and a quick
+  opening are both the account's, not an average of the two.
+
 ## 1.53.0 — 2026-11-26
 
 Move times are right-skewed, like a person's.

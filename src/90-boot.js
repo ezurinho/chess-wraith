@@ -407,7 +407,14 @@ function readPaceSamples() {
 // The account's published median wins over the learned one: the learned sample
 // starts empty on a new browser, and the first ten moves of a fresh profile are
 // exactly where a bot-looking rhythm would show.
-function paceBaseline() {
+// `ply` lets a phase answer first: the account's own opening is faster than its
+// middlegame, and one median for both is a rhythm nobody has.
+function paceBaseline(ply) {
+  const phases = state.paceProfile && state.paceProfile.phases;
+  if (phases && Number.isFinite(ply)) {
+    const own = Number(ply < 16 ? phases.opening : ply < 60 ? phases.middle : phases.end);
+    if (Number.isFinite(own) && own > 200) return own;
+  }
   const published = state.paceProfile && Number(state.paceProfile.medianMs);
   if (Number.isFinite(published) && published > 200) return published;
   const samples = readPaceSamples();
@@ -420,7 +427,7 @@ function paceBaseline() {
 function paceAnchor() {
   return paceAnchorFor({
     publishedMs: Number(state.paceProfile && state.paceProfile.medianMs) || 0,
-    learnedMs: paceBaseline(),
+    learnedMs: paceBaseline(plyOf(state.snapshot)),
     cls: timeClassFromSeconds(state.clockPeak || state.clockSeconds)
   });
 }

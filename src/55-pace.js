@@ -105,6 +105,7 @@ function pgnPlayerSide(pgn, user) {
 function paceFromGames(games, timeClass, user) {
   const list = Array.isArray(games) ? games : [];
   const times = [];
+  const buckets = { opening: [], middle: [], end: [] };
   let used = 0;
   // The archive is oldest-first, so the newest games are at the end: the pace
   // that matters is the one the account has now, not a year of drift.
@@ -116,11 +117,23 @@ function paceFromGames(games, timeClass, user) {
     // No headers, or a PGN from before this account had the name: both sides.
     if (!parsed.length && side) parsed = parseClockTimes(game.pgn, null);
     if (!parsed.length) continue;
-    for (const ms of parsed) times.push(ms);
+    parsed.forEach((ms, idx) => {
+      times.push(ms);
+      // Their own move index, not the ply: the opening is short for both sides.
+      (idx < 8 ? buckets.opening : idx < 30 ? buckets.middle : buckets.end).push(ms);
+    });
     used += 1;
   }
   // Thirty moves is the floor: below that one quick game moves the median.
-  return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
+  // A phase needs fewer samples than the whole profile: it only refines the
+  // baseline, it cannot invent one.
+  const phase = (arr) => (arr.length >= 12 ? median(arr) : null);
+  return {
+    medianMs: times.length >= 30 ? median(times) : null,
+    phases: { opening: phase(buckets.opening), middle: phase(buckets.middle), end: phase(buckets.end) },
+    samples: times.length,
+    games: used
+  };
 }
 
 // The first move a player makes is a habit, not a die roll: the same archive
