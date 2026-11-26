@@ -1410,7 +1410,11 @@ async function improveImprovised(snap, result, legal, choice) {
   const all = legal
     .map((m) => ({ uci: Chess.moveToUci(m), hanging: hangingAfter(m.nextState.grid, snap.turn) }))
     .filter((c) => c.uci !== best.bestUci);
-  const pool = [];
+  // The engine's own move goes into the same restricted search. Comparing a
+  // candidate priced at depth 10 with a best move priced at depth 14 is not a
+  // loss, it is a depth difference: the script aimed 1.6x above the band to
+  // compensate, and live it still delivered 100 cp/move against a 293 band.
+  const pool = [best.bestUci];
   const loose = all.filter((c) => c.hanging > 0).sort((a, b) => b.hanging - a.hanging);
   while (pool.length < 5 && loose.length) pool.push(loose.shift().uci);
   const rest = all.map((c) => c.uci).filter((uci) => !pool.includes(uci));
@@ -1437,15 +1441,19 @@ async function improveImprovised(snap, result, legal, choice) {
   // The board may have moved while the engine was answering. The position the
   // move was priced for is the only one it may be played on.
   if (!state.snapshot || state.snapshot.fen !== snap.fen) return null;
-  // The price and the realised loss are not the same number: a candidate that
-  // costs 293 at depth 10 is often declined by the opponent, and the move ends
-  // up costing nothing. Aim above the band so the realised mean lands on it.
-  const aim = Math.min(600, Math.round(target * 1.6));
+  // Same-depth baseline: the best move judged by the same shallow search, so the
+  // difference is the move and not the depth. The realised mean then depends on
+  // the opponent, not on an invented 1.6 multiplier.
+  const base = lines.find((line) => line && line.bestUci === best.bestUci)
+    || lines.filter((line) => line && Number.isFinite(line.whiteCp)).sort((x, y) => y.whiteCp - x.whiteCp)[0];
+  if (!base || !Number.isFinite(base.whiteCp)) return null;
+  const aim = Math.min(600, Math.round(target));
   let pick = null;
   let bestErr = Infinity;
   for (const line of lines) {
     if (!line || !line.bestUci || line.mateIn != null) continue;
-    const loss = myLossFromWhiteCp(snap.turn, best.whiteCp, line.whiteCp);
+    if (line.bestUci === base.bestUci) continue;
+    const loss = myLossFromWhiteCp(snap.turn, base.whiteCp, line.whiteCp);
     // A near-zero loss is the same lie in the other direction: the move must
     // cost something like the band, not be a good move that happens to be legal.
     if (loss == null || loss < Math.round(target * 0.35)) continue;

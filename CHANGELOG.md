@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.71.0 — 2026-11-27
+
+The price of an improvised move was a depth difference.
+
+- Calibrated against an opponent of the same level for the first time (a 133
+  account on both sides, black playing random legal moves). 1.70.0 delivered
+  100 cp/move against a band of 293, with twelve of sixteen measured moves at 0.
+- The candidates were priced by a depth-10 restricted search and compared with a
+  best move priced by the depth-14 full search. Most of the "loss" was the depth
+  gap, so the chosen move was often a perfectly good one, and the 1.6x target
+  multiplier was paying for the same error twice.
+- The engine's best move now enters the restricted search, and the baseline is its
+  line at the same depth. The multiplier is gone.
+
 ## 1.70.0 — 2026-11-27
 
 The loss was only counted when the opponent was slow.
