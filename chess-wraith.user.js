@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.52.3
+// @version      1.53.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.52.3';
+const VERSION = '1.53.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.52.3/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.53.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3368,7 +3368,13 @@ function computeDelay(cfg, opts = {}) {
   const baseline = Number.isFinite(opts.baselineMs) && opts.baselineMs > 0 ? opts.baselineMs : null;
   // Centred on the account, not clamped into its band: clamping a uniform draw
   // piles mass on both edges and makes the median of every game drift with it.
-  if (baseline) ms = clamp(baseline * (0.78 + 0.44 * skew), baseline * 0.65, baseline * 1.5);
+  // A symmetric draw never produces the long think that a human produces once in a
+  // while: the shape below is right-skewed, mostly near the median with a real tail.
+  if (baseline) {
+    const shape = [0.55, 0.7, 0.85, 0.95, 1, 1.05, 1.15, 1.3, 1.55, 1.95];
+    const amp = shape[Math.min(shape.length - 1, Math.floor(Math.random() * shape.length))] * (0.95 + 0.1 * skew);
+    ms = clamp(baseline * amp, baseline * 0.65, baseline * 1.5);
+  }
 
   // Never answer much faster than the person across the board: a wall of
   // instant replies against someone taking ten seconds a move is a pattern.

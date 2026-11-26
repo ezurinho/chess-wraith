@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.53.0 — 2026-11-26
+
+Move times are right-skewed, like a person's.
+
+- With a pace baseline the delay was drawn symmetrically around the median, which
+  never produces the occasional long think. It now samples an empirical shape
+  (0.55x to 1.95x, mostly near 1x) with a real tail, inside the same 0.65x-1.5x band.
+
 ## 1.52.3 — 2026-11-26
 
 The probe request exists once.
