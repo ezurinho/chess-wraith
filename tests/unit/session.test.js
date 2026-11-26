@@ -123,6 +123,34 @@ test('a reload keeps the session limit instead of resetting it', async () => {
   }
 });
 
+test('a hard session stop survives a reload until AUTO is resumed', async () => {
+  const startedAt = Date.now() - 40 * 60 * 1000;
+  const { window, api, stop } = boot(PAGE, (store) => {
+    store.setItem('chess-wraith-settings-v1:tester', JSON.stringify({
+      sessionStopped: true,
+      sessionStopReason: 'session limit: 15 games'
+    }));
+    store.setItem('chess-wraith-session-v1:tester', JSON.stringify({ startedAt, games: 15 }));
+  });
+  try {
+    await wait(500);
+    assert.equal(api.state.autoPlay, false, 'the cap is not re-armed by the reload');
+    assert.equal(api.cfg.sessionStopped, true);
+    assert.equal(api.cfg.sessionStopReason, 'session limit: 15 games');
+    assert.equal(window.localStorage.getItem('chess-wraith-session-v1:tester'), null, 'the half-run is gone');
+    assert.equal(api.state.gamesPlayed, 1, 'a new run starts at one game');
+
+    api.resumeAuto();
+    assert.equal(api.state.autoPlay, true);
+    assert.equal(api.cfg.sessionStopped, false);
+    assert.equal(api.cfg.sessionStopReason, '');
+    const stored = JSON.parse(window.localStorage.getItem('chess-wraith-session-v1:tester'));
+    assert.equal(stored.games, 1, 'the explicit resume starts a new session');
+  } finally {
+    stop();
+  }
+});
+
 test('the history is per account, so a second login does not inherit the night', async () => {
   const { window, api, stop } = boot();
   try {

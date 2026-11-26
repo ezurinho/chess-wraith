@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.89.0 — 2026-11-26
+
+The session cap is a stop, not a rollover.
+
+- `alwaysAuto` used to make `sessionLimit` return `rollover: true`, so 15 games
+  or 3 hours reset the clock and kept playing. Both caps now return `stop: true`:
+  AUTO pauses, the panel shows `session limit: ...`, and the reason is written to
+  the event history.
+- The stop is persisted per account (`sessionStopped`, `sessionStopReason`).
+  Boot, account adoption and `onNewGame` refuse to rearm a stopped account;
+  `resumeSessionState` clears the stored half-run. Alt+Shift+A (or the AUTO chip)
+  is the only resume and starts a new run at one game.
+- One boot regression seeds a stopped account with a full session, checks AUTO
+  stays off and the session is gone, then resumes and checks the new run starts
+  at one game.
+
 ## 1.88.0 — 2026-11-26
 
 The rail behaves like Nitro's.

@@ -61,16 +61,14 @@ function nextGameDelay(cfg, random = Math.random) {
 
 // Pure: is this session over? Games and wall-clock, whichever comes first. Zero
 // or a missing value disables that half.
-function sessionLimit({ startedAt, games, now, maxGames, maxMs, rollover }) {
+function sessionLimit({ startedAt, games, now, maxGames, maxMs }) {
   const played = Number.isFinite(games) ? games : 0;
   const hasStart = Number.isFinite(startedAt);
   const start = hasStart ? startedAt : 0;
   const t = Number.isFinite(now) ? now : 0;
-  // A rollover is not a stop: always-auto treats the cap as the end of one run
-  // and the start of the next, so the caller resets and keeps playing.
-  const verdict = (reason) => (rollover
-    ? { stop: false, rollover: true, reason: `${reason} · rolled over` }
-    : { stop: true, rollover: false, reason });
+  // A cap is a stop, not a rollover. AUTO is an invariant for starting, not a
+  // licence to keep playing after the safety valve tripped.
+  const verdict = (reason) => ({ stop: true, rollover: false, reason });
   if (Number.isFinite(maxGames) && maxGames > 0 && played >= maxGames) {
     return verdict(`session limit: ${maxGames} games`);
   }

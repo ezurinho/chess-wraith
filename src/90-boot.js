@@ -30,6 +30,12 @@ function adoptAccountSettings(user) {
   Object.assign(cfg, adopted);
   // A second account can carry an old "alwaysAuto: false"; AUTO still wins.
   enforceAuto();
+  // A hard stop belongs to the account that hit it. Switching to a stopped
+  // account must not inherit the running tab's AUTO.
+  if (cfg.sessionStopped) {
+    state.autoPlay = false;
+    state.warn = cfg.sessionStopReason || 'stopped: session limit';
+  }
   state.settingsAccount = name;
   // A name learned late also unlocks the published pace and the repertoire.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
@@ -121,6 +127,12 @@ function clearSession() {
 // Called once, after a late account name has been adopted: the key is per
 // account and must not be read before the name is known.
 function resumeSessionState() {
+  // A hard cap is a stop, not a reloadable run. Clear the half-run on disk so a
+  // later reload cannot turn it back into a session.
+  if (cfg.sessionStopped) {
+    clearSession();
+    return;
+  }
   if (!cfg.autoPlayOnLoad && !cfg.alwaysAuto) {
     clearSession();
     return;
@@ -159,7 +171,7 @@ const state = {
   snapshot: null,
   prevSnapshot: null,
   analysis: null,
-  autoPlay: Boolean(cfg.autoPlayOnLoad),
+  autoPlay: Boolean(cfg.autoPlayOnLoad) && !cfg.sessionStopped,
   thinking: false,
   analyzedFen: null,
   autoMovedFen: null,
@@ -178,7 +190,7 @@ const state = {
   // The last twenty games, oldest first. The Stats tab reads this, not the card.
   reportHistory: [],
   effectiveElo: null,
-  warn: '',
+  warn: cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '',
   clockSeconds: null,
   opponentRating: null,
   boardRating: null,
@@ -737,6 +749,7 @@ function registerButler() {
     },
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
+    resumeAuto,
     unload() {
       clearAutoTimer();
       clearRematchTimer();
@@ -865,25 +878,21 @@ function queueRematch() {
     games: state.gamesPlayed,
     now: Date.now(),
     maxGames: cfg.sessionMaxGames,
-    maxMs: cfg.sessionMaxMs,
-    rollover: cfg.alwaysAuto
+    maxMs: cfg.sessionMaxMs
   });
-  if (limit.rollover) {
-    // The cap closed one run; the next game opens another. The event history is
-    // the audit trail, so the rollover is written down instead of hidden.
-    noteEvent(limit.reason);
-    clearSession();
-    state.sessionStart = Date.now();
-    state.gamesPlayed = 0;
-    state.results = { win: 0, loss: 0, draw: 0 };
-    saveSession();
-  } else if (limit.stop) {
+  if (limit.stop) {
     state.autoPlay = false;
     state.warn = limit.reason;
-    noteEvent(limit.reason);
-    // Tomorrow's run is a new run, not a continuation of a finished one.
-    clearSession();
+    cfg.sessionStopped = true;
+    cfg.sessionStopReason = limit.reason;
     saveSettings(cfg);
+    noteEvent(limit.reason);
+    // A cap is a stop, not a rollover. The next run begins only after an
+    // explicit resume, and its clock starts there, not at the old session.
+    clearSession();
+    state.sessionStart = Date.now();
+    state.gamesPlayed = 1;
+    state.results = { win: 0, loss: 0, draw: 0 };
     refreshPanel();
     return;
   }
@@ -945,7 +954,7 @@ function onNewGame() {
   paintBoardOverlay(state.boardEl, null, false, true);
   // A new game re-arms AUTO unless the tab was explicitly stopped: autoPlayOnLoad
   // is the one flag Stop clears and the next boot restores.
-  if (cfg.autoPlayOnLoad) state.autoPlay = true;
+  if (cfg.autoPlayOnLoad && !cfg.sessionStopped) state.autoPlay = true;
 }
 
 // AFK is only the hidden half now: the rematch is part of AUTO and can no longer
@@ -982,7 +991,9 @@ function statusView() {
     myTurn: Boolean(snap && snap.turn === side),
     turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
-    warn: state.warn || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
+    warn: state.warn
+      || (cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '')
+      || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
     events: state.events,
     clock: state.clockSeconds,
     opponent: state.opponentRating,
@@ -2100,9 +2111,12 @@ async function copyReport() {
 // The AUTO chip and Alt+Shift+A can only resume. There is no path that turns the
 // mode off: Stop is the one pause, and it lives on the header's square button.
 function resumeAuto() {
-  const wasStopped = !cfg.autoPlayOnLoad;
+  const wasStopped = !cfg.autoPlayOnLoad || cfg.sessionStopped;
   enforceAuto();
+  cfg.sessionStopped = false;
+  cfg.sessionStopReason = '';
   state.autoPlay = true;
+  state.warn = '';
   state.rematchTried = false;
   state.rematchAttempts = 0;
   state.rematchTriedTexts = [];

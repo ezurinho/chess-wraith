@@ -505,6 +505,10 @@ function loadSettings(user) {
     merged.clockFloorSeconds = clampInt(merged.clockFloorSeconds, 3, 120, CONFIG.clockFloorSeconds);
     merged.autoPlayOnLoad = Boolean(merged.autoPlayOnLoad);
     merged.alwaysAuto = Boolean(merged.alwaysAuto);
+    // A hard stop is state, not a preference: a corrupt value must not rearm it.
+    merged.sessionStopped = merged.sessionStopped === true;
+    merged.sessionStopReason = typeof merged.sessionStopReason === 'string'
+      ? merged.sessionStopReason.slice(0, 120) : '';
     merged.pauseWhenHidden = Boolean(merged.pauseWhenHidden);
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);

@@ -9,19 +9,21 @@ const api = loadFragments(
   `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resultCounts, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS, Chess, CONFIG }`
 );
 
-test('a rollover turns the cap into the next run instead of a stop', () => {
-  const byGames = api.sessionLimit({ startedAt: 0, games: 15, now: 1, maxGames: 15, rollover: true });
-  assert.equal(byGames.stop, false);
-  assert.equal(byGames.rollover, true);
-  assert.match(byGames.reason, /rolled over/);
-  const byTime = api.sessionLimit({ startedAt: 0, games: 3, now: 3 * 60 * 60 * 1000, maxMs: 3 * 60 * 60 * 1000, rollover: true });
-  assert.equal(byTime.rollover, true);
+test('the session cap is a hard stop, not a rollover', () => {
+  const byGames = api.sessionLimit({ startedAt: 0, games: 15, now: 1, maxGames: 15 });
+  assert.equal(byGames.stop, true);
+  assert.equal(byGames.rollover, false);
+  assert.match(byGames.reason, /15 games/);
+  const byTime = api.sessionLimit({ startedAt: 0, games: 3, now: 3 * 60 * 60 * 1000, maxMs: 3 * 60 * 60 * 1000 });
+  assert.equal(byTime.stop, true);
+  assert.match(byTime.reason, /3h/);
 });
 
-test('without rollover the same cap still stops the session', () => {
-  const r = api.sessionLimit({ startedAt: 0, games: 15, now: 1, maxGames: 15 });
-  assert.equal(r.stop, true);
+test('below the cap the session keeps playing', () => {
+  const r = api.sessionLimit({ startedAt: 0, games: 14, now: 1000, maxGames: 15, maxMs: 3 * 60 * 60 * 1000 });
+  assert.equal(r.stop, false);
   assert.equal(r.rollover, false);
+  assert.equal(r.reason, '');
 });
 
 test('the config ships with always auto on', () => {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.88.0
+// @version      1.89.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -42,7 +42,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.88.0';
+const VERSION = '1.89.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -92,10 +92,14 @@ const CONFIG = {
   onlyMyTurn: true,
 
   // A session that never ends is the difference between "playing with help" and
-  // "a bot farming the account". Both caps end the session; the panel says which
-  // one tripped.
+  // "a bot farming the account". Both caps are hard stops: AUTO does not roll
+  // them over. The stop is persisted per account and only Alt+Shift+A (or the
+  // AUTO chip) starts the next run.
   sessionMaxGames: 15,
   sessionMaxMs: 3 * 60 * 60 * 1000,
+  // Written by the cap and read on the next boot. A reload must not rearm AUTO.
+  sessionStopped: false,
+  sessionStopReason: '',
 
   // Rematch is part of AUTO, not a separate switch: a finished game always asks
   // for the next one. AFK only decides whether the tab keeps playing while hidden.
@@ -130,7 +134,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.88.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -645,6 +649,10 @@ function loadSettings(user) {
     merged.clockFloorSeconds = clampInt(merged.clockFloorSeconds, 3, 120, CONFIG.clockFloorSeconds);
     merged.autoPlayOnLoad = Boolean(merged.autoPlayOnLoad);
     merged.alwaysAuto = Boolean(merged.alwaysAuto);
+    // A hard stop is state, not a preference: a corrupt value must not rearm it.
+    merged.sessionStopped = merged.sessionStopped === true;
+    merged.sessionStopReason = typeof merged.sessionStopReason === 'string'
+      ? merged.sessionStopReason.slice(0, 120) : '';
     merged.pauseWhenHidden = Boolean(merged.pauseWhenHidden);
     merged.pauseOnLowClock = Boolean(merged.pauseOnLowClock);
     merged.onlyMyTurn = Boolean(merged.onlyMyTurn);
@@ -4081,16 +4089,14 @@ function nextGameDelay(cfg, random = Math.random) {
 
 // Pure: is this session over? Games and wall-clock, whichever comes first. Zero
 // or a missing value disables that half.
-function sessionLimit({ startedAt, games, now, maxGames, maxMs, rollover }) {
+function sessionLimit({ startedAt, games, now, maxGames, maxMs }) {
   const played = Number.isFinite(games) ? games : 0;
   const hasStart = Number.isFinite(startedAt);
   const start = hasStart ? startedAt : 0;
   const t = Number.isFinite(now) ? now : 0;
-  // A rollover is not a stop: always-auto treats the cap as the end of one run
-  // and the start of the next, so the caller resets and keeps playing.
-  const verdict = (reason) => (rollover
-    ? { stop: false, rollover: true, reason: `${reason} · rolled over` }
-    : { stop: true, rollover: false, reason });
+  // A cap is a stop, not a rollover. AUTO is an invariant for starting, not a
+  // licence to keep playing after the safety valve tripped.
+  const verdict = (reason) => ({ stop: true, rollover: false, reason });
   if (Number.isFinite(maxGames) && maxGames > 0 && played >= maxGames) {
     return verdict(`session limit: ${maxGames} games`);
   }
@@ -5473,6 +5479,12 @@ function adoptAccountSettings(user) {
   Object.assign(cfg, adopted);
   // A second account can carry an old "alwaysAuto: false"; AUTO still wins.
   enforceAuto();
+  // A hard stop belongs to the account that hit it. Switching to a stopped
+  // account must not inherit the running tab's AUTO.
+  if (cfg.sessionStopped) {
+    state.autoPlay = false;
+    state.warn = cfg.sessionStopReason || 'stopped: session limit';
+  }
   state.settingsAccount = name;
   // A name learned late also unlocks the published pace and the repertoire.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
@@ -5564,6 +5576,12 @@ function clearSession() {
 // Called once, after a late account name has been adopted: the key is per
 // account and must not be read before the name is known.
 function resumeSessionState() {
+  // A hard cap is a stop, not a reloadable run. Clear the half-run on disk so a
+  // later reload cannot turn it back into a session.
+  if (cfg.sessionStopped) {
+    clearSession();
+    return;
+  }
   if (!cfg.autoPlayOnLoad && !cfg.alwaysAuto) {
     clearSession();
     return;
@@ -5602,7 +5620,7 @@ const state = {
   snapshot: null,
   prevSnapshot: null,
   analysis: null,
-  autoPlay: Boolean(cfg.autoPlayOnLoad),
+  autoPlay: Boolean(cfg.autoPlayOnLoad) && !cfg.sessionStopped,
   thinking: false,
   analyzedFen: null,
   autoMovedFen: null,
@@ -5621,7 +5639,7 @@ const state = {
   // The last twenty games, oldest first. The Stats tab reads this, not the card.
   reportHistory: [],
   effectiveElo: null,
-  warn: '',
+  warn: cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '',
   clockSeconds: null,
   opponentRating: null,
   boardRating: null,
@@ -6180,6 +6198,7 @@ function registerButler() {
     },
     analyzeNow: () => analyze(state.snapshot, true),
     playNow,
+    resumeAuto,
     unload() {
       clearAutoTimer();
       clearRematchTimer();
@@ -6308,25 +6327,21 @@ function queueRematch() {
     games: state.gamesPlayed,
     now: Date.now(),
     maxGames: cfg.sessionMaxGames,
-    maxMs: cfg.sessionMaxMs,
-    rollover: cfg.alwaysAuto
+    maxMs: cfg.sessionMaxMs
   });
-  if (limit.rollover) {
-    // The cap closed one run; the next game opens another. The event history is
-    // the audit trail, so the rollover is written down instead of hidden.
-    noteEvent(limit.reason);
-    clearSession();
-    state.sessionStart = Date.now();
-    state.gamesPlayed = 0;
-    state.results = { win: 0, loss: 0, draw: 0 };
-    saveSession();
-  } else if (limit.stop) {
+  if (limit.stop) {
     state.autoPlay = false;
     state.warn = limit.reason;
-    noteEvent(limit.reason);
-    // Tomorrow's run is a new run, not a continuation of a finished one.
-    clearSession();
+    cfg.sessionStopped = true;
+    cfg.sessionStopReason = limit.reason;
     saveSettings(cfg);
+    noteEvent(limit.reason);
+    // A cap is a stop, not a rollover. The next run begins only after an
+    // explicit resume, and its clock starts there, not at the old session.
+    clearSession();
+    state.sessionStart = Date.now();
+    state.gamesPlayed = 1;
+    state.results = { win: 0, loss: 0, draw: 0 };
     refreshPanel();
     return;
   }
@@ -6388,7 +6403,7 @@ function onNewGame() {
   paintBoardOverlay(state.boardEl, null, false, true);
   // A new game re-arms AUTO unless the tab was explicitly stopped: autoPlayOnLoad
   // is the one flag Stop clears and the next boot restores.
-  if (cfg.autoPlayOnLoad) state.autoPlay = true;
+  if (cfg.autoPlayOnLoad && !cfg.sessionStopped) state.autoPlay = true;
 }
 
 // AFK is only the hidden half now: the rematch is part of AUTO and can no longer
@@ -6425,7 +6440,9 @@ function statusView() {
     myTurn: Boolean(snap && snap.turn === side),
     turnCertain: snap ? snap.turnCertain !== false : null,
     status: state.thinking ? 'thinking' : '',
-    warn: state.warn || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
+    warn: state.warn
+      || (cfg.sessionStopped ? (cfg.sessionStopReason || 'stopped: session limit') : '')
+      || (snap && snap.turnCertain === false ? 'turn not readable; not playing' : ''),
     events: state.events,
     clock: state.clockSeconds,
     opponent: state.opponentRating,
@@ -7543,9 +7560,12 @@ async function copyReport() {
 // The AUTO chip and Alt+Shift+A can only resume. There is no path that turns the
 // mode off: Stop is the one pause, and it lives on the header's square button.
 function resumeAuto() {
-  const wasStopped = !cfg.autoPlayOnLoad;
+  const wasStopped = !cfg.autoPlayOnLoad || cfg.sessionStopped;
   enforceAuto();
+  cfg.sessionStopped = false;
+  cfg.sessionStopReason = '';
   state.autoPlay = true;
+  state.warn = '';
   state.rematchTried = false;
   state.rematchAttempts = 0;
   state.rematchTriedTexts = [];

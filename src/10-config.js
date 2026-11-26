@@ -1,4 +1,4 @@
-const VERSION = '1.88.0';
+const VERSION = '1.89.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -48,10 +48,14 @@ const CONFIG = {
   onlyMyTurn: true,
 
   // A session that never ends is the difference between "playing with help" and
-  // "a bot farming the account". Both caps end the session; the panel says which
-  // one tripped.
+  // "a bot farming the account". Both caps are hard stops: AUTO does not roll
+  // them over. The stop is persisted per account and only Alt+Shift+A (or the
+  // AUTO chip) starts the next run.
   sessionMaxGames: 15,
   sessionMaxMs: 3 * 60 * 60 * 1000,
+  // Written by the cap and read on the next boot. A reload must not rearm AUTO.
+  sessionStopped: false,
+  sessionStopReason: '',
 
   // Rematch is part of AUTO, not a separate switch: a finished game always asks
   // for the next one. AFK only decides whether the tab keeps playing while hidden.
@@ -86,7 +90,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.88.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.89.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,

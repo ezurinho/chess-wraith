@@ -1,5 +1,15 @@
 # Review, 1.80.0
 
+> **Addendum, 1.89.0 (2026-11-26).** The session cap is now a hard stop.
+> `alwaysAuto` no longer turns 15 games or 3 hours into a rollover: the stop is
+> written to the account's settings, a reload clears the half-run instead of
+> resuming it, and only Alt+Shift+A (or the AUTO chip) starts a new session. A
+> boot test seeds a stopped account and a full session, then checks that AUTO
+> stays off, the session is gone, and resume starts at one game. `npm run check`
+> passes **231 tests** and lint. The overall grade moves provisionally to
+> **8.8/10** (Product 8.7, UX 8.7, Engineering 8.9, Verification 8.4; Risk 3.0
+> and Honesty 9.5 unchanged). No live board session was run.
+>
 > **Addendum, 1.88.0 (2026-11-26).** The rail is now the same contract as
 > Nitro's panel: `role=tablist`/`tab`/`tabpanel`, `aria-selected`, roving
 > tabindex, arrows/Home/End move the view and the focus, and the active tab is
