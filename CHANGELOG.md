@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.60.1 — 2026-11-27
+
+The card's rating stops lying about beginners.
+
+- `performanceFromAcpl` was a different fit from `acplBand`, floored at 1050:
+  a game the account played at its own 293 cp/move came back as `like 1093`,
+  the exact number the feature exists to avoid. It is the inverse of the band
+  now: 293 cp is 135 again, and `acplBand(133)` round-trips within a few points.
+- The opponent estimate carried the same formula copied inline; both sites call
+  the one function, so the card and the panel cannot disagree.
+
 ## 1.60.0 — 2026-11-27
 
 Beginner moves, not a beginner-shaped re-weighting.

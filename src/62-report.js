@@ -4,16 +4,21 @@
 // readable line. ACPL is the honest metric; chess.com's accuracy percentage is
 // their own formula and is not reproduced.
 
-// Centipawn loss to a rating. Same curve as the opponent estimate, so the two
-// numbers on the panel cannot disagree about what 'like 1800' means. It is a
-// fit, not a measurement: the panel says 'like'.
+// Centipawn loss to a rating: the exact inverse of `acplBand`, which is what
+// the strength model already believes a player of a given rating loses. The old
+// fit was a different curve with a 1050 floor, so a game played at a 133
+// account's own loss rate came back as `like 1093` — the number the account was
+// supposed to be. Inverting the band closes that loop: 293 cp is 133 again.
 function performanceFromAcpl(acpl) {
   // Number(null) is 0, and 0 would be a perfect game: a missing sample must
   // stay missing.
   if (acpl === null || acpl === undefined || acpl === '') return null;
   const value = Number(acpl);
   if (!Number.isFinite(value) || value < 0) return null;
-  return Math.round(clamp(2750 - 380 * Math.log1p(value / 3.8), 1050, 2850));
+  // Below ~57 the band's upper branch is the one in force; above it, the
+  // beginner branch (320 - 0.2e). The two pieces meet at the 1320 floor.
+  const elo = value < 57.2 ? (96 - value) * 34 : (320 - value) / 0.2;
+  return Math.round(clamp(elo, 100, 2850));
 }
 
 function meanOf(list) {

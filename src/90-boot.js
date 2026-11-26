@@ -1052,7 +1052,7 @@ function recordOpponentLoss(result) {
   state.oppCpLosses.push(loss);
   if (state.oppCpLosses.length > 24) state.oppCpLosses.shift();
   const avg = state.oppCpLosses.reduce((a, b) => a + b, 0) / state.oppCpLosses.length;
-  state.oppEloEstimate = Math.round(clamp(2750 - 380 * Math.log1p(avg / 3.8), 1050, 2850));
+  state.oppEloEstimate = performanceFromAcpl(avg);
   state.effectiveElo = resolveElo();
 }
 

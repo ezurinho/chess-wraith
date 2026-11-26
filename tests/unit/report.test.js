@@ -5,18 +5,28 @@ const assert = require('node:assert/strict');
 const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
-  ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '62-report.js'],
-  `{ gameReport, performanceFromAcpl, pushReport, reportSummary, REPORT_MIN_SAMPLES, REPORT_HISTORY_LIMIT }`
+  ['10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '60-analysis.js', '62-report.js'],
+  `{ gameReport, performanceFromAcpl, acplBand, pushReport, reportSummary, REPORT_MIN_SAMPLES, REPORT_HISTORY_LIMIT }`
 );
 
 test('a better game is a higher performance, monotonically', () => {
   const scores = [2, 5, 10, 20, 40, 80, 160].map((acpl) => api.performanceFromAcpl(acpl));
   for (let i = 1; i < scores.length; i += 1) {
-    assert.ok(scores[i] < scores[i - 1], `acpl ${i} must rank below the one before`);
+    assert.ok(scores[i] <= scores[i - 1], `acpl ${i} must not rank above the one before`);
+    if (i > 2) assert.ok(scores[i] < scores[i - 1], `acpl ${i} must rank below the one before`);
   }
-  assert.ok(scores[0] <= 2850 && scores[scores.length - 1] >= 1050);
+  assert.ok(scores[0] <= 2850 && scores[scores.length - 1] >= 100);
   assert.equal(api.performanceFromAcpl(-1), null);
   assert.equal(api.performanceFromAcpl('nonsense'), null);
+});
+
+test('the performance curve is the inverse of the strength model', () => {
+  for (const elo of [133, 800, 1320, 1800, 2400]) {
+    const acpl = api.acplBand(elo);
+    const back = api.performanceFromAcpl(acpl);
+    assert.ok(Math.abs(back - elo) <= 40, `acplBand(${elo}) = ${acpl} came back as ${back}`);
+  }
+  assert.equal(api.performanceFromAcpl(293), 135, '293 cp is the 133 account the band describes');
 });
 
 test('four assessed moves are not an average', () => {
