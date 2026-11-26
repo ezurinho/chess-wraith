@@ -138,10 +138,22 @@ function firstMoveOf(pgn, side) {
   return move ? move.replace(/[+#!?]+$/, '') : null;
 }
 
+// A reply is not a preference, it is an answer: the same player answers 1.e4
+// with e5 93% of the time and 1.d4 with d5 89%, and an average of the two would
+// recommend the move he never plays. So the black table is keyed by the white
+// move it answers, in UCI because that is what the tracker reads off the board.
+function firstMoveUci(san) {
+  if (typeof san !== 'string') return null;
+  const knight = { Nf3: 'g1f3', Nc3: 'b1c3', Na3: 'b1a3', Nh3: 'g1h3' };
+  if (knight[san]) return knight[san];
+  const pawn = /^([a-h])([2-4])$/.exec(san);
+  return pawn ? `${pawn[1]}2${pawn[1]}${pawn[2]}` : null;
+}
+
 // Shares, not counts: the picker compares a candidate's SAN against them.
 function repertoireFromGames(games, user) {
   const list = Array.isArray(games) ? games : [];
-  const counts = { w: new Map(), b: new Map() };
+  const counts = { w: new Map(), b: new Map(), byFirst: new Map() };
   let used = 0;
   for (let i = list.length - 1; i >= 0 && used < 60; i--) {
     const game = list[i];
@@ -150,8 +162,15 @@ function repertoireFromGames(games, user) {
     if (!side) continue;
     const move = firstMoveOf(game.pgn, side);
     if (!move) continue;
-    const bucket = counts[side];
-    bucket.set(move, (bucket.get(move) || 0) + 1);
+    counts[side].set(move, (counts[side].get(move) || 0) + 1);
+    if (side === 'b') {
+      const answer = firstMoveUci(firstMoveOf(game.pgn, 'w'));
+      if (answer) {
+        if (!counts.byFirst.has(answer)) counts.byFirst.set(answer, new Map());
+        const bucket = counts.byFirst.get(answer);
+        bucket.set(move, (bucket.get(move) || 0) + 1);
+      }
+    }
     used += 1;
   }
   const shares = (bucket) => {
@@ -164,8 +183,14 @@ function repertoireFromGames(games, user) {
   };
   const white = shares(counts.w);
   const black = shares(counts.b);
+  const blackByFirst = {};
+  for (const [first, bucket] of counts.byFirst) {
+    // Two games against 1.b3 say nothing about how the account answers 1.b3.
+    const parsed = shares(bucket);
+    if (parsed.games >= 2) blackByFirst[first] = parsed.shares;
+  }
   // Both colours: a repertoire is two habits, and five games is the floor either way.
-  return { white: white.shares, black: black.shares, games: white.games + black.games };
+  return { white: white.shares, black: black.shares, blackByFirst, games: white.games + black.games };
 }
 
 // One entry per account and time class: a player who alternates bullet and
@@ -266,4 +291,76 @@ async function syncPaceProfile(force) {
   }
   refreshPanel();
   return state.paceProfile || null;
+}
+// Bot games and the analysis board have no clock, so there is no time class to
+// key a pace on — but a repertoire needs none. The same archive, read for the
+// first moves only, once per account and six hours, so the openings work where
+// the clocks do not.
+function repertoireKey() {
+  return `chess-wraith-repertoire-v1:${currentAccount()}`;
+}
+
+function readRepertoire() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(repertoireKey()) || 'null');
+    if (!cached) return null;
+    const now = Date.now();
+    if (Number(cached.retryAt) > 0) return cached.retryAt > now ? cached : null;
+    if (!(Number(cached.at) > 0)) return null;
+    if (now - Number(cached.at) > PACEPROFILE_TTL_MS) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+async function syncRepertoire(force) {
+  const user = currentAccount();
+  if (!user || user === 'anonymous') return null;
+  if (state.repertoirePending) return state.repertoire || null;
+  const cached = readRepertoire();
+  if (cached && !force) {
+    if (cached.retryAt) return null;
+    if (cached.opening) {
+      state.repertoire = cached.opening;
+      return cached.opening;
+    }
+    return null;
+  }
+  state.repertoirePending = true;
+  try {
+    let opening = null;
+    for (const offset of [0, 1]) {
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+      const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
+        cache: 'no-store',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        signal: controller ? controller.signal : undefined
+      });
+      if (timer) clearTimeout(timer);
+      if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+      const body = await response.json();
+      const parsed = repertoireFromGames(body && body.games, user);
+      if (parsed.games >= 5) { opening = parsed; break; }
+    }
+    if (!opening) throw new Error('no games');
+    state.repertoire = opening;
+    try {
+      localStorage.setItem(repertoireKey(), JSON.stringify({ opening, at: Date.now() }));
+    } catch {
+      /* private mode: the session keeps the value */
+    }
+  } catch (error) {
+    try {
+      localStorage.setItem(repertoireKey(), JSON.stringify({ retryAt: Date.now() + PACEPROFILE_RETRY_MS, error: String((error && error.message) || error).slice(0, 40) }));
+    } catch {
+      /* private mode */
+    }
+  } finally {
+    state.repertoirePending = false;
+  }
+  refreshPanel();
+  return state.repertoire || null;
 }

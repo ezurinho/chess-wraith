@@ -29,8 +29,9 @@ function adoptAccountSettings(user) {
   const adopted = loadSettings(name);
   Object.assign(cfg, adopted);
   state.settingsAccount = name;
-  // A name learned late also unlocks the published pace.
+  // A name learned late also unlocks the published pace and the repertoire.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
+  syncRepertoire();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
   resumeSessionState();
@@ -178,6 +179,10 @@ const state = {
   paceProfile: null,
   pacePending: false,
   paceError: '',
+  // The same archive, read for openings only: a bot game has no clock to key a
+  // time class on, but it still deserves the account's repertoire.
+  repertoire: null,
+  repertoirePending: false,
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   accountGames: null,
@@ -420,13 +425,25 @@ function recordPace(ms) {
 
 // The repertoire the pace archive already contains: the first-move shares for
 // the side this account is playing. Nothing extra is fetched for it.
+function openingFor() {
+  const fromPace = state.paceProfile && state.paceProfile.opening;
+  if (fromPace && Number(fromPace.games) >= 5) return fromPace;
+  return state.repertoire && Number(state.repertoire.games) >= 5 ? state.repertoire : null;
+}
+
 function openingShares() {
-  const profile = state.paceProfile;
-  const opening = profile && profile.opening;
-  if (!opening || !(Number(opening.games) >= 5)) return null;
-  const side = state.snapshot ? state.snapshot.turn : null;
-  const table = side === 'b' ? opening.black : opening.white;
-  return table && Object.keys(table).length ? table : null;
+  const opening = openingFor();
+  if (!opening) return null;
+  const snap = state.snapshot;
+  if (!snap) return null;
+  if (snap.turn === 'b') {
+    // The answer depends on the question: a table of black's moves averaged over
+    // every white first move recommends replies this account never plays.
+    const first = Array.isArray(snap.uciMoves) ? snap.uciMoves[0] : null;
+    const table = first && opening.blackByFirst ? opening.blackByFirst[first] : null;
+    return table && Object.keys(table).length >= 2 ? table : null;
+  }
+  return opening.white && Object.keys(opening.white).length ? opening.white : null;
 }
 
 // The two moves this account actually plays, for the report: a repertoire that
@@ -437,6 +454,26 @@ function openingTop(table) {
     .slice(0, 2)
     .map(([move, share]) => `${move} ${Math.round(share * 100)}%`);
   return rows.length ? rows.join(' · ') : 'none';
+}
+
+// UCI to the two characters a report can read: the first move is a pawn push or
+// a knight, and the source square is always the home rank.
+function firstMoveSan(uci) {
+  const match = /^([a-h])([1-8])([a-h][1-8])$/.exec(uci || '');
+  if (!match) return String(uci || '?');
+  return match[2] === '1' ? `N${match[3]}` : match[3];
+}
+
+// Two answers, not one average: what the account does against each first move.
+function openingByFirstTop(opening) {
+  const rows = Object.entries((opening && opening.blackByFirst) || {})
+    .map(([first, table]) => {
+      const best = Object.entries(table || {}).sort((a, b) => b[1] - a[1])[0];
+      return best ? `${firstMoveSan(first)} ${best[0]} ${Math.round(best[1] * 100)}%` : null;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+  return rows.length ? rows.join(' · ') : openingTop(opening && opening.black);
 }
 
 function repeatedOpening(uci, ply) {
@@ -1467,6 +1504,7 @@ function reportText() {
       ? String(state.opponentRating)
       : 'unknown';
   const form = state.formOffset > 0 ? `+${state.formOffset}` : String(state.formOffset || 0);
+  const opening = openingFor();
   const lines = [
     `chess-wraith ${VERSION}`,
     `engine ${engine.ready ? 'ready' : 'not ready'} · ${engine.mode}`,
@@ -1479,8 +1517,8 @@ function reportText() {
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
-    state.paceProfile && state.paceProfile.opening && Number(state.paceProfile.opening.games) >= 5
-      ? `repertoire w ${openingTop(state.paceProfile.opening.white)} · b ${openingTop(state.paceProfile.opening.black)} (${state.paceProfile.opening.games} games)`
+    opening
+      ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)`
       : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',
@@ -1643,6 +1681,7 @@ function boot() {
   startUpdateCheck();
   syncAccountRatings();
   syncPaceProfile();
+  syncRepertoire();
   // Clicking the rating asks again instead of waiting out the six-hour cache.
   if (panel.el && panel.el.rating) {
     panel.el.rating.style.cursor = 'pointer';

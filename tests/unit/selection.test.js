@@ -252,3 +252,22 @@ test("the account's own repertoire is played, not averaged away", () => {
   const unknown = sample({ openingShares: { h2h4: 1 } });
   assert.ok(Math.max(...Object.values(unknown)) < 320, JSON.stringify(unknown));
 });
+
+test('a conditioned reply is not diluted by the moves it answers', () => {
+  // aloka_27 (1631 blitz, 2026/10): against 1.e4 e5 93%, against 1.d4 d5 89%.
+  // The averaged table says e5 56%, d5 32% and would answer 1.d4 with e5 — a
+  // move that player never played against it.
+  const lines = [
+    { bestUci: 'e7e5', bestSan: 'e5', scoreCp: 15, mateIn: null, evalText: '' },
+    { bestUci: 'e7e6', bestSan: 'e6', scoreCp: 12, mateIn: null, evalText: '' },
+    { bestUci: 'c7c5', bestSan: 'c5', scoreCp: 8, mateIn: null, evalText: '' }
+  ];
+  const cfg = { ...baseCfg, humanSlackCp: 60 };
+  const counts = { e5: 0, e6: 0, c5: 0 };
+  for (let i = 0; i < 400; i++) {
+    const pick = api.chooseMove(lines, cfg, { oppElo: 1600, openingShares: { e5: 0.93, e6: 0.07 } });
+    counts[pick.line.bestSan] += 1;
+  }
+  assert.ok(counts.e5 > 300, JSON.stringify(counts));
+  assert.ok(counts.c5 < 40, JSON.stringify(counts));
+});

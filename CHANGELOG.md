@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.47.0 — 2026-11-26
+
+Black's repertoire is keyed by the move it answers, and it loads without a clock.
+
+- Measured on a real 1631-blitz account (167 games): vs 1.e4 e5 93 %, vs 1.d4 d5
+  89 %, while the marginal table says e5 56 %, d5 32 % — the average would answer
+  1.d4 with a move that player never played against it.
+- `blackByFirst` keys black's shares by the white first move in UCI; a first move
+  faced fewer than twice is left to the engine, never to the average.
+- `syncRepertoire` reads the same archive for the openings only, so bot games and
+  the analysis board (no clock, no time class) get the repertoire too: one request
+  per account per six hours, cached, with a 20-minute backoff on an empty month.
+- The report shows the conditioned table: `repertoire w e4 100% · b vs e4 e5 93% ·
+  d4 d5 89% (60 games)`.
+- 186 tests.
+
 ## 1.46.0 — 2026-11-26
 
 The opening comes from the account's own games, not from a dice roll.

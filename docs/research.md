@@ -195,6 +195,35 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## A reply is an answer, not an average
+
+The repertoire shipped in 1.46.0 had a modelling bug: black's moves were
+averaged over every white first move. Measured on a real 1631-blitz account
+(`aloka_27`, `games/2026/10`, 167 games):
+
+| white plays | the account answered | share |
+|---|---|---|
+| 1.e4 | e5 | 93 % (n=42) |
+| 1.d4 | d5 | 89 % (n=27) |
+| 1.Nf3 | b6 | 60 % (n=5) |
+
+Marginal over the same games: e5 56 %, d5 32 %, b6 11 %. The average would
+answer 1.d4 with e5 — a move this player never chose against 1.d4. The same
+account as white played 1.e4 in **60 of 60** games (100 %).
+
+The black table is now keyed by the move it answers, in UCI because that is what
+the tracker reads off the board: `blackByFirst['e2e4'] = { e5: 0.93 }`. A first
+move faced fewer than twice is left to the engine, never to the average.
+
+## The repertoire only loaded where there was a clock
+
+`syncPaceProfile` returns early without a clock, because a pace needs a time
+class. A bot game has none, so on `/play/computer` — the page auto-play exists
+for — the repertoire never loaded and the picker stayed uniform. `syncRepertoire`
+reads the same archive for the first moves only: one request per account per six
+hours, cached under `chess-wraith-repertoire-v1:<user>`, with the same
+20-minute backoff when the month is empty.
+
 ## A repertoire from the account's own games
 
 The opening picker was a dice roll with a good excuse: four near-equal engine
@@ -714,7 +743,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 182 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 186 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

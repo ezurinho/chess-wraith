@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.46.0
+// @version      1.47.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.46.0';
+const VERSION = '1.47.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.46.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.47.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2866,10 +2866,22 @@ function firstMoveOf(pgn, side) {
   return move ? move.replace(/[+#!?]+$/, '') : null;
 }
 
+// A reply is not a preference, it is an answer: the same player answers 1.e4
+// with e5 93% of the time and 1.d4 with d5 89%, and an average of the two would
+// recommend the move he never plays. So the black table is keyed by the white
+// move it answers, in UCI because that is what the tracker reads off the board.
+function firstMoveUci(san) {
+  if (typeof san !== 'string') return null;
+  const knight = { Nf3: 'g1f3', Nc3: 'b1c3', Na3: 'b1a3', Nh3: 'g1h3' };
+  if (knight[san]) return knight[san];
+  const pawn = /^([a-h])([2-4])$/.exec(san);
+  return pawn ? `${pawn[1]}2${pawn[1]}${pawn[2]}` : null;
+}
+
 // Shares, not counts: the picker compares a candidate's SAN against them.
 function repertoireFromGames(games, user) {
   const list = Array.isArray(games) ? games : [];
-  const counts = { w: new Map(), b: new Map() };
+  const counts = { w: new Map(), b: new Map(), byFirst: new Map() };
   let used = 0;
   for (let i = list.length - 1; i >= 0 && used < 60; i--) {
     const game = list[i];
@@ -2878,8 +2890,15 @@ function repertoireFromGames(games, user) {
     if (!side) continue;
     const move = firstMoveOf(game.pgn, side);
     if (!move) continue;
-    const bucket = counts[side];
-    bucket.set(move, (bucket.get(move) || 0) + 1);
+    counts[side].set(move, (counts[side].get(move) || 0) + 1);
+    if (side === 'b') {
+      const answer = firstMoveUci(firstMoveOf(game.pgn, 'w'));
+      if (answer) {
+        if (!counts.byFirst.has(answer)) counts.byFirst.set(answer, new Map());
+        const bucket = counts.byFirst.get(answer);
+        bucket.set(move, (bucket.get(move) || 0) + 1);
+      }
+    }
     used += 1;
   }
   const shares = (bucket) => {
@@ -2892,8 +2911,14 @@ function repertoireFromGames(games, user) {
   };
   const white = shares(counts.w);
   const black = shares(counts.b);
+  const blackByFirst = {};
+  for (const [first, bucket] of counts.byFirst) {
+    // Two games against 1.b3 say nothing about how the account answers 1.b3.
+    const parsed = shares(bucket);
+    if (parsed.games >= 2) blackByFirst[first] = parsed.shares;
+  }
   // Both colours: a repertoire is two habits, and five games is the floor either way.
-  return { white: white.shares, black: black.shares, games: white.games + black.games };
+  return { white: white.shares, black: black.shares, blackByFirst, games: white.games + black.games };
 }
 
 // One entry per account and time class: a player who alternates bullet and
@@ -2994,6 +3019,78 @@ async function syncPaceProfile(force) {
   }
   refreshPanel();
   return state.paceProfile || null;
+}
+// Bot games and the analysis board have no clock, so there is no time class to
+// key a pace on — but a repertoire needs none. The same archive, read for the
+// first moves only, once per account and six hours, so the openings work where
+// the clocks do not.
+function repertoireKey() {
+  return `chess-wraith-repertoire-v1:${currentAccount()}`;
+}
+
+function readRepertoire() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(repertoireKey()) || 'null');
+    if (!cached) return null;
+    const now = Date.now();
+    if (Number(cached.retryAt) > 0) return cached.retryAt > now ? cached : null;
+    if (!(Number(cached.at) > 0)) return null;
+    if (now - Number(cached.at) > PACEPROFILE_TTL_MS) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+async function syncRepertoire(force) {
+  const user = currentAccount();
+  if (!user || user === 'anonymous') return null;
+  if (state.repertoirePending) return state.repertoire || null;
+  const cached = readRepertoire();
+  if (cached && !force) {
+    if (cached.retryAt) return null;
+    if (cached.opening) {
+      state.repertoire = cached.opening;
+      return cached.opening;
+    }
+    return null;
+  }
+  state.repertoirePending = true;
+  try {
+    let opening = null;
+    for (const offset of [0, 1]) {
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
+      const response = await fetch(`https://api.chess.com/pub/player/${encodeURIComponent(user)}/games/${monthPath(offset)}`, {
+        cache: 'no-store',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        signal: controller ? controller.signal : undefined
+      });
+      if (timer) clearTimeout(timer);
+      if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
+      const body = await response.json();
+      const parsed = repertoireFromGames(body && body.games, user);
+      if (parsed.games >= 5) { opening = parsed; break; }
+    }
+    if (!opening) throw new Error('no games');
+    state.repertoire = opening;
+    try {
+      localStorage.setItem(repertoireKey(), JSON.stringify({ opening, at: Date.now() }));
+    } catch {
+      /* private mode: the session keeps the value */
+    }
+  } catch (error) {
+    try {
+      localStorage.setItem(repertoireKey(), JSON.stringify({ retryAt: Date.now() + PACEPROFILE_RETRY_MS, error: String((error && error.message) || error).slice(0, 40) }));
+    } catch {
+      /* private mode */
+    }
+  } finally {
+    state.repertoirePending = false;
+  }
+  refreshPanel();
+  return state.repertoire || null;
 }
 // Move selection and pacing. The engine is not asked to play its raw #1 every
 // time: on a fixed style it may take a near-equal alternative, in adaptive mode
@@ -4414,8 +4511,9 @@ function adoptAccountSettings(user) {
   const adopted = loadSettings(name);
   Object.assign(cfg, adopted);
   state.settingsAccount = name;
-  // A name learned late also unlocks the published pace.
+  // A name learned late also unlocks the published pace and the repertoire.
   if (state.clockPeak || state.clockSeconds) syncPaceProfile();
+  syncRepertoire();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
   resumeSessionState();
@@ -4563,6 +4661,10 @@ const state = {
   paceProfile: null,
   pacePending: false,
   paceError: '',
+  // The same archive, read for openings only: a bot game has no clock to key a
+  // time class on, but it still deserves the account's repertoire.
+  repertoire: null,
+  repertoirePending: false,
   // Learned from this account's games, then carried across reloads.
   accountRatings: null,
   accountGames: null,
@@ -4805,13 +4907,25 @@ function recordPace(ms) {
 
 // The repertoire the pace archive already contains: the first-move shares for
 // the side this account is playing. Nothing extra is fetched for it.
+function openingFor() {
+  const fromPace = state.paceProfile && state.paceProfile.opening;
+  if (fromPace && Number(fromPace.games) >= 5) return fromPace;
+  return state.repertoire && Number(state.repertoire.games) >= 5 ? state.repertoire : null;
+}
+
 function openingShares() {
-  const profile = state.paceProfile;
-  const opening = profile && profile.opening;
-  if (!opening || !(Number(opening.games) >= 5)) return null;
-  const side = state.snapshot ? state.snapshot.turn : null;
-  const table = side === 'b' ? opening.black : opening.white;
-  return table && Object.keys(table).length ? table : null;
+  const opening = openingFor();
+  if (!opening) return null;
+  const snap = state.snapshot;
+  if (!snap) return null;
+  if (snap.turn === 'b') {
+    // The answer depends on the question: a table of black's moves averaged over
+    // every white first move recommends replies this account never plays.
+    const first = Array.isArray(snap.uciMoves) ? snap.uciMoves[0] : null;
+    const table = first && opening.blackByFirst ? opening.blackByFirst[first] : null;
+    return table && Object.keys(table).length >= 2 ? table : null;
+  }
+  return opening.white && Object.keys(opening.white).length ? opening.white : null;
 }
 
 // The two moves this account actually plays, for the report: a repertoire that
@@ -4822,6 +4936,26 @@ function openingTop(table) {
     .slice(0, 2)
     .map(([move, share]) => `${move} ${Math.round(share * 100)}%`);
   return rows.length ? rows.join(' · ') : 'none';
+}
+
+// UCI to the two characters a report can read: the first move is a pawn push or
+// a knight, and the source square is always the home rank.
+function firstMoveSan(uci) {
+  const match = /^([a-h])([1-8])([a-h][1-8])$/.exec(uci || '');
+  if (!match) return String(uci || '?');
+  return match[2] === '1' ? `N${match[3]}` : match[3];
+}
+
+// Two answers, not one average: what the account does against each first move.
+function openingByFirstTop(opening) {
+  const rows = Object.entries((opening && opening.blackByFirst) || {})
+    .map(([first, table]) => {
+      const best = Object.entries(table || {}).sort((a, b) => b[1] - a[1])[0];
+      return best ? `${firstMoveSan(first)} ${best[0]} ${Math.round(best[1] * 100)}%` : null;
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+  return rows.length ? rows.join(' · ') : openingTop(opening && opening.black);
 }
 
 function repeatedOpening(uci, ply) {
@@ -5852,6 +5986,7 @@ function reportText() {
       ? String(state.opponentRating)
       : 'unknown';
   const form = state.formOffset > 0 ? `+${state.formOffset}` : String(state.formOffset || 0);
+  const opening = openingFor();
   const lines = [
     `chess-wraith ${VERSION}`,
     `engine ${engine.ready ? 'ready' : 'not ready'} · ${engine.mode}`,
@@ -5864,8 +5999,8 @@ function reportText() {
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
-    state.paceProfile && state.paceProfile.opening && Number(state.paceProfile.opening.games) >= 5
-      ? `repertoire w ${openingTop(state.paceProfile.opening.white)} · b ${openingTop(state.paceProfile.opening.black)} (${state.paceProfile.opening.games} games)`
+    opening
+      ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)`
       : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',
@@ -6028,6 +6163,7 @@ function boot() {
   startUpdateCheck();
   syncAccountRatings();
   syncPaceProfile();
+  syncRepertoire();
   // Clicking the rating asks again instead of waiting out the six-hour cache.
   if (panel.el && panel.el.rating) {
     panel.el.rating.style.cursor = 'pointer';

@@ -9,7 +9,7 @@ const vm = require('node:vm');
 const ROOT = path.resolve(__dirname, '../..');
 const FRAGMENTS = ['10-config.js', '20-utils.js', '55-pace.js'];
 
-function harness(store) {
+function harness(store, fetcher) {
   const source = FRAGMENTS.map((name) => fs.readFileSync(path.join(ROOT, 'src', name), 'utf8')).join('\n');
   const context = vm.createContext({
     console,
@@ -21,7 +21,7 @@ function harness(store) {
     Array,
     Object,
     RegExp,
-    fetch: () => { throw new Error('unexpected fetch'); },
+    fetch: fetcher || (() => { throw new Error('unexpected fetch'); }),
     localStorage: {
       getItem: (key) => (store && store.has(key) ? store.get(key) : null),
       setItem: (key, value) => { if (store) store.set(key, String(value)); }
@@ -193,18 +193,87 @@ test('the repertoire is shares of the games, not a vote for one move', () => {
   const games = [
     game('hikaru', 'a', '1. e4 e5'),
     game('hikaru', 'b', '1. e4 c5'),
-    game('a', 'hikaru', '1. d4 d5'),
     game('hikaru', 'c', '1. e4 e6'),
-    game('b', 'hikaru', '1. e4 e5'),
     game('hikaru', 'd', '1. d4 Nf6'),
-    game('hikaru', 'e', '1. e4 e5', 'chess960'),
+    game('e', 'hikaru', '1. e4 e5'),
+    game('f', 'hikaru', '1. e4 e5'),
+    game('g', 'hikaru', '1. d4 d5'),
+    game('h', 'hikaru', '1. d4 d5'),
+    game('hikaru', 'i', '1. e4 e5', 'chess960'),
     game('someone', 'else', '1. c4 e5')
   ];
   const out = api.repertoireFromGames(games, 'hikaru');
-  assert.equal(out.games, 6, 'six chess games with this player in them');
+  assert.equal(out.games, 8, 'eight chess games with this player in them');
   assert.ok(Math.abs(out.white.e4 - 0.75) < 0.001, JSON.stringify(out.white));
   assert.ok(Math.abs(out.white.d4 - 0.25) < 0.001, JSON.stringify(out.white));
+  // The marginal table, kept for the report.
   assert.deepEqual(JSON.parse(JSON.stringify(out.black)), { e5: 0.5, d5: 0.5 });
   // Nothing to copy from an empty archive or a player who is not in it.
-  assert.deepEqual(JSON.parse(JSON.stringify(api.repertoireFromGames([], 'hikaru'))), { white: {}, black: {}, games: 0 });
+  assert.deepEqual(JSON.parse(JSON.stringify(api.repertoireFromGames([], 'hikaru'))), { white: {}, black: {}, blackByFirst: {}, games: 0 });
+});
+
+test('a reply is counted against the move it answers, not averaged', () => {
+  const api = harness();
+  const games = [
+    game('a', 'hikaru', '1. e4 e5'),
+    game('b', 'hikaru', '1. e4 e5'),
+    game('c', 'hikaru', '1. d4 d5'),
+    game('d', 'hikaru', '1. d4 d5'),
+    game('e', 'hikaru', '1. c4 c5')
+  ];
+  const out = api.repertoireFromGames(games, 'hikaru');
+  // Averaged, black 'prefers' e5 and d5 equally and would answer 1.d4 with e5.
+  assert.deepEqual(JSON.parse(JSON.stringify(out.black)), { e5: 0.4, d5: 0.4, c5: 0.2 });
+  assert.deepEqual(JSON.parse(JSON.stringify(out.blackByFirst)), {
+    e2e4: { e5: 1 },
+    d2d4: { d5: 1 }
+    // One game against 1.c4 is not a habit: the table is not built from it.
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(api.firstMoveUci('e4'))), 'e2e4');
+  assert.equal(api.firstMoveUci('d4'), 'd2d4');
+  assert.equal(api.firstMoveUci('Nf3'), 'g1f3');
+  assert.equal(api.firstMoveUci('b3'), 'b2b3');
+  assert.equal(api.firstMoveUci('Ke2'), null);
+  assert.equal(api.firstMoveUci(null), null);
+});
+
+test('the repertoire is read even when there is no clock to key it on', async () => {
+  const calls = [];
+  const store = new Map();
+  const games = [
+    game('hikaru', 'a', '1. e4 e5'),
+    game('hikaru', 'b', '1. e4 c5'),
+    game('hikaru', 'c', '1. e4 e6'),
+    game('hikaru', 'd', '1. e4 d5'),
+    game('hikaru', 'e', '1. d4 Nf6')
+  ];
+  const fetcher = async (url) => {
+    calls.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ games }) };
+  };
+  const api = harness(store, fetcher);
+  const out = await api.syncRepertoire();
+  assert.equal(calls.length, 1, 'one request, and only the current month');
+  assert.ok(Math.abs(out.white.e4 - 0.8) < 0.001, JSON.stringify(out.white));
+  assert.ok(store.get('chess-wraith-repertoire-v1:hikaru'), 'cached for the next page');
+  // A reload inside the six hours must not hit the archive again.
+  const again = harness(store, fetcher);
+  const cached = await again.syncRepertoire();
+  assert.equal(calls.length, 1, 'the cache served the second boot');
+  assert.ok(Math.abs(cached.white.e4 - 0.8) < 0.001, 'same repertoire from the cache');
+});
+
+test('an archive with no games backs off instead of asking every scan', async () => {
+  const calls = [];
+  const store = new Map();
+  const fetcher = async (url) => {
+    calls.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ games: [] }) };
+  };
+  const api = harness(store, fetcher);
+  assert.equal(await api.syncRepertoire(), null);
+  // Current and previous month, then the backoff is written and respected.
+  assert.equal(calls.length, 2);
+  assert.equal(await harness(store, fetcher).syncRepertoire(), null);
+  assert.equal(calls.length, 2, 'no request inside the retry window');
 });

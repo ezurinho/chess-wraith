@@ -241,11 +241,29 @@ test('the repertoire is read for the side that is on move, and only when it exis
     assert.equal(api.openingShares(), null, 'no pace profile, no repertoire');
     api.state.paceProfile = { cls: 'blitz', medianMs: 1600, opening: { white: { e4: 1 }, black: { c5: 1 }, games: 3 } };
     assert.equal(api.openingShares(), null, 'three games is not a repertoire');
-    api.state.paceProfile = { cls: 'blitz', medianMs: 1600, opening: { white: { e4: 0.75, d4: 0.25 }, black: { c5: 1 }, games: 9 } };
+    const opening = {
+      white: { e4: 0.75, d4: 0.25 },
+      black: { c5: 0.5, e5: 0.5 },
+      blackByFirst: { e2e4: { c5: 0.85, e5: 0.15 }, d2d4: { d5: 0.9, Nf6: 0.1 } },
+      games: 9
+    };
+    api.state.paceProfile = { cls: 'blitz', medianMs: 1600, opening };
     api.state.snapshot = { ...api.state.snapshot, turn: 'w' };
     assert.deepEqual({ ...api.openingShares() }, { e4: 0.75, d4: 0.25 });
-    api.state.snapshot = { ...api.state.snapshot, turn: 'b' };
-    assert.deepEqual({ ...api.openingShares() }, { c5: 1 });
+    // As black the table is the one for the move that was actually played.
+    api.state.snapshot = { ...api.state.snapshot, turn: 'b', uciMoves: ['e2e4'] };
+    assert.deepEqual({ ...api.openingShares() }, { c5: 0.85, e5: 0.15 });
+    api.state.snapshot = { ...api.state.snapshot, uciMoves: ['d2d4'] };
+    assert.deepEqual({ ...api.openingShares() }, { d5: 0.9, Nf6: 0.1 });
+    // A first move the account never faced falls back to the engine, not to an
+    // average that would recommend a reply it never plays.
+    api.state.snapshot = { ...api.state.snapshot, uciMoves: ['c2c4'] };
+    assert.equal(api.openingShares(), null);
+    // A bot game has no pace profile: the clockless repertoire answers instead.
+    api.state.paceProfile = null;
+    api.state.repertoire = { white: { e4: 1 }, black: { c5: 1 }, blackByFirst: { e2e4: { c5: 1 } }, games: 6 };
+    api.state.snapshot = { ...api.state.snapshot, turn: 'w' };
+    assert.deepEqual({ ...api.openingShares() }, { e4: 1 });
   } finally {
     stop();
   }
