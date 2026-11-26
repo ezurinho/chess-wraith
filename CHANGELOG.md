@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.81.0 — 2026-11-27
+
+The improvisation rate was a curve through its own fitting points.
+
+- `(target - 8) / 400` happened to pass through the 133 account it was fitted on
+  and collapsed above it: at a 1320 account it asked for 13% improvisation, a
+  whole game went by without one, and the 60 cp band was never attempted.
+- The rate now comes from what it has to carry: an improvised move costs about
+  300 cp, so `p * 300` must reach the band. At a 133 account it moves from 0.71 to
+  0.85, at 600 from 0.48 to 0.67; past a 255 cp band the 0.85 cap is the ceiling
+  and the test says so instead of pretending otherwise.
+- Not re-measured live yet: the 600 rung was 159 against 200 with the old rate.
+
 ## 1.80.0 — 2026-11-27
 
 Review of 1.79.0: the top of the ladder delivers nothing, and it is published.

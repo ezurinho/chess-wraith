@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.80.0
+// @version      1.81.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.80.0';
+const VERSION = '1.81.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.80.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.81.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3493,7 +3493,13 @@ function levelPlayTarget(accountElo, cfg) {
 function improvisationChance(target) {
   const t = Number(target) || 0;
   if (!(t > 0)) return 0;
-  return clamp((t - 8) / 400, 0, 0.85);
+  // The rate is what makes the band reachable at all, so it is derived from the
+  // band: an improvised move costs roughly 300 cp and p * 300 has to reach the
+  // band. Below the old curve nothing changes (a 133 account still draws 0.71);
+  // above it, the rate stops promising what the game never pays - at a 1320
+  // account the old curve asked for 13% and a whole game went by without one,
+  // measuring 2 cp/move against a 60 cp band.
+  return clamp(Math.max((t - 8) / 400, t / 300), 0, 0.85);
 }
 
 // A uniform draw over the legal moves is not a beginner, it is a random number

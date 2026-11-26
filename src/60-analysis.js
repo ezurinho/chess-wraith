@@ -66,7 +66,13 @@ function levelPlayTarget(accountElo, cfg) {
 function improvisationChance(target) {
   const t = Number(target) || 0;
   if (!(t > 0)) return 0;
-  return clamp((t - 8) / 400, 0, 0.85);
+  // The rate is what makes the band reachable at all, so it is derived from the
+  // band: an improvised move costs roughly 300 cp and p * 300 has to reach the
+  // band. Below the old curve nothing changes (a 133 account still draws 0.71);
+  // above it, the rate stops promising what the game never pays - at a 1320
+  // account the old curve asked for 13% and a whole game went by without one,
+  // measuring 2 cp/move against a 60 cp band.
+  return clamp(Math.max((t - 8) / 400, t / 300), 0, 0.85);
 }
 
 // A uniform draw over the legal moves is not a beginner, it is a random number

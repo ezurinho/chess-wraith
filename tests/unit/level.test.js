@@ -61,12 +61,20 @@ test('a low account plays moves of its own size, not the best one', () => {
   assert.ok(far >= 100, `only ${far}/200 were 100 cp or worse`);
 });
 
-test('the improvisation rate only exists below the floor and never reaches half', () => {
+test('the improvisation rate is whatever makes the band reachable', () => {
   assert.equal(api.improvisationChance(0), 0);
-  assert.equal(api.improvisationChance(8), 0);
-  assert.ok(Math.abs(api.improvisationChance(100) - 0.23) < 0.01);
-  assert.ok(Math.abs(api.improvisationChance(293) - 0.7125) < 0.001);
+  assert.ok(api.improvisationChance(8) < 0.03, 'at the floor the rate is noise, not a policy');
+  assert.ok(Math.abs(api.improvisationChance(100) - 0.3333) < 0.01);
+  assert.ok(Math.abs(api.improvisationChance(293) - 0.9767) < 0.001 || api.improvisationChance(293) === 0.85);
   assert.equal(api.improvisationChance(600), 0.85);
+  // Reachability, which is the point of the curve: a band of t is only reachable
+  // when p * 300 >= t, and 60 was the case that proved the old curve wrong.
+  assert.ok(api.improvisationChance(60) * 300 >= 60);
+  assert.ok(api.improvisationChance(200) * 300 >= 200);
+  // The 0.85 cap is the ceiling of that promise: past about 255 cp of band the
+  // rate cannot carry it, and the improvising has to come from somewhere else.
+  assert.equal(api.improvisationChance(255), 0.85);
+  assert.equal(api.improvisationChance(320), 0.85);
 });
 
 test('an improvised move comes from the legal list, not from the engine', () => {
