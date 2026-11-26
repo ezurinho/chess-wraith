@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.70.0 — 2026-11-27
+
+The loss was only counted when the opponent was slow.
+
+- Found while calibrating against a same-level opponent, not against the engine:
+  17 improvised moves produced one measurement. `recordMyMeasuredLoss` kept its
+  sample only if `prevSnapshot` landed between my move and the reply, and a fast
+  opponent delivers both plies inside one scan.
+- The guard reads the board now: the FEN moved, the ply did not go backwards, and
+  it is my turn again. The measurement no longer depends on how fast the opponent
+  is — which is the one thing a same-level calibration changes.
+
 ## 1.69.0 — 2026-11-27
 
 A debug helper for the calibration nobody could run.

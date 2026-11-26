@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.69.0
+// @version      1.70.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.69.0';
+const VERSION = '1.70.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.69.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.70.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6363,11 +6363,15 @@ function recordMyMeasuredLoss(result) {
   const pending = state.pendingMyLoss;
   if (!pending) return;
   const snap = state.snapshot;
-  const prev = state.prevSnapshot;
-  if (!snap || !prev || !result || !result.lines || result.lines.length === 0) return;
+  if (!snap || !result || !result.lines || result.lines.length === 0) return;
+  // The old guard read `prevSnapshot`, so the sample was kept only when the scan
+  // happened to land between my move and the reply. Against a fast opponent the
+  // two plies arrive inside one scan and the sample was dropped: 17 improvised
+  // moves produced one measurement. The board itself is the evidence now.
+  if (snap.fen === pending.fen) return;
+  if (plyOf(snap) < pending.ply) return;
+  if (snap.turn !== mySide(snap.flipped)) return;
   state.pendingMyLoss = null;
-  if (plyOf(prev) + 1 !== pending.ply) return;
-  if (prev.turn !== mySide(snap.flipped)) return;
   const after = result.lines[0].whiteCp;
   const loss = myLossFromWhiteCp(pending.side, pending.before, after);
   if (loss !== null) pushMyLoss(loss);
@@ -6813,7 +6817,7 @@ function settleLandedMove(grid, snap, choice, move) {
       const before = state.analysis && state.analysis.lines && state.analysis.lines[0]
         ? state.analysis.lines[0].whiteCp
         : null;
-      state.pendingMyLoss = { ply: plyOf(snap) + 1, side: snap.turn, before };
+      state.pendingMyLoss = { ply: plyOf(snap) + 1, side: snap.turn, before, fen: snap.fen };
       state.improvisedPicks += 1;
     } else {
       pushMyLoss(choice.cpLoss);
