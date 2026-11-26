@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.45.0
+// @version      1.46.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.45.0';
+const VERSION = '1.46.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.45.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.46.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2851,6 +2851,51 @@ function paceFromGames(games, timeClass, user) {
   return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
 }
 
+// The first move a player makes is a habit, not a die roll: the same archive
+// that carries the clocks carries the PGNs, so the account's repertoire can be
+// counted for free. Four first moves at 25% each is not a player; a 1400
+// account plays its main first move in most of its games.
+function firstMoveOf(pgn, side) {
+  if (typeof pgn !== 'string') return null;
+  const body = pgn.replace(/\[[^\]]*\]/g, ' ').replace(/\{[^}]*\}/g, ' ').replace(/\([^)]*\)/g, ' ');
+  const blackStarts = /^\s*1\.\.\./.test(body.trim());
+  const tokens = body.replace(/\d+\.(\.\.)?/g, ' ').split(/\s+/).filter((t) => /^[a-hRNBQKO]/.test(t));
+  if (tokens.length === 0) return null;
+  const index = side === 'b' ? (blackStarts ? 0 : 1) : blackStarts ? 1 : 0;
+  const move = tokens[index];
+  return move ? move.replace(/[+#!?]+$/, '') : null;
+}
+
+// Shares, not counts: the picker compares a candidate's SAN against them.
+function repertoireFromGames(games, user) {
+  const list = Array.isArray(games) ? games : [];
+  const counts = { w: new Map(), b: new Map() };
+  let used = 0;
+  for (let i = list.length - 1; i >= 0 && used < 60; i--) {
+    const game = list[i];
+    if (!game || game.rules !== 'chess' || !game.pgn) continue;
+    const side = pgnPlayerSide(game.pgn, user);
+    if (!side) continue;
+    const move = firstMoveOf(game.pgn, side);
+    if (!move) continue;
+    const bucket = counts[side];
+    bucket.set(move, (bucket.get(move) || 0) + 1);
+    used += 1;
+  }
+  const shares = (bucket) => {
+    let total = 0;
+    for (const n of bucket.values()) total += n;
+    const out = {};
+    if (!total) return { shares: {}, games: 0 };
+    for (const [move, n] of bucket) out[move] = n / total;
+    return { shares: out, games: total };
+  };
+  const white = shares(counts.w);
+  const black = shares(counts.b);
+  // Both colours: a repertoire is two habits, and five games is the floor either way.
+  return { white: white.shares, black: black.shares, games: white.games + black.games };
+}
+
 // One entry per account and time class: a player who alternates bullet and
 // blitz would otherwise re-download half a megabyte of PGN on every switch.
 function paceProfileKey(timeClass) {
@@ -2913,6 +2958,7 @@ async function syncPaceProfile(force) {
   state.paceError = '';
   try {
     let profile = null;
+    let rawGames = [];
     for (const offset of [0, 1]) {
       // One timeout per request: a signal shared by both months leaves the
       // second request with whatever is left of the first one's budget.
@@ -2927,11 +2973,16 @@ async function syncPaceProfile(force) {
       if (timer) clearTimeout(timer);
       if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
       const body = await response.json();
-      const parsed = paceFromGames(body && body.games, timeClass, user);
+      const games = body && Array.isArray(body.games) ? body.games : [];
+      // The current month is the freshest repertoire; a previous one only fills in
+      // when this month has no finished class games yet.
+      if (rawGames.length === 0) rawGames = games;
+      const parsed = paceFromGames(games, timeClass, user);
       if (parsed.medianMs) { profile = parsed; break; }
     }
     if (!profile) throw new Error('no games');
     profile.cls = timeClass;
+    profile.opening = repertoireFromGames(rawGames, user);
     profile.at = Date.now();
     state.paceProfile = profile;
     persistPaceProfile(profile);
@@ -3080,8 +3131,14 @@ function chooseMove(lines, cfg, opts = {}) {
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
     if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
     if (cand.index > 0 && cand.cpLoss >= 8) weight *= 1.35;
-    // The same first move every game is its own tell, separate from move choice.
-    if (opts.repeatUci && cand.line.bestUci === opts.repeatUci) weight *= 0.28;
+    // The account's own opening habits, counted from its published games. A
+    // repertoire is the most stable thing about a player's games, and four first
+    // moves at 25% each is the opposite of a repertoire.
+    const share = opts.openingShares ? Number(opts.openingShares[cand.line.bestSan]) || 0 : 0;
+    if (opts.openingShares) weight *= 0.2 + 4.5 * share;
+    // The same first move every game is its own tell, separate from move choice
+    // — unless it is the move this account actually plays that often.
+    if (opts.repeatUci && cand.line.bestUci === opts.repeatUci && share < 0.3) weight *= 0.28;
     eligible.push({ line: cand.line, cpLoss: cand.cpLoss, weight });
   }
 
@@ -4746,6 +4803,27 @@ function recordPace(ms) {
   }
 }
 
+// The repertoire the pace archive already contains: the first-move shares for
+// the side this account is playing. Nothing extra is fetched for it.
+function openingShares() {
+  const profile = state.paceProfile;
+  const opening = profile && profile.opening;
+  if (!opening || !(Number(opening.games) >= 5)) return null;
+  const side = state.snapshot ? state.snapshot.turn : null;
+  const table = side === 'b' ? opening.black : opening.white;
+  return table && Object.keys(table).length ? table : null;
+}
+
+// The two moves this account actually plays, for the report: a repertoire that
+// cannot be read is a claim that cannot be checked.
+function openingTop(table) {
+  const rows = Object.entries(table || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([move, share]) => `${move} ${Math.round(share * 100)}%`);
+  return rows.length ? rows.join(' · ') : 'none';
+}
+
 function repeatedOpening(uci, ply) {
   if (!uci || ply > 2) return null;
   const recent = readOpenings().slice(-6);
@@ -4867,7 +4945,7 @@ function registerButler() {
     config: cfg,
     engine,
     panel,
-    chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate }),
+    chooseMove: (lines, opts) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate, ...(opts || {}) }),
     computeDelay: (opts) => computeDelay(cfg, opts),
     phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
     // "Why did it not rematch?" answered without reading the source: what the
@@ -5328,7 +5406,8 @@ function scheduleAutoMove(result) {
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
-    repeatUci: repeatedOpening(result.bestmove, ply)
+    repeatUci: repeatedOpening(result.bestmove, ply),
+    openingShares: ply <= 1 ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
@@ -5500,7 +5579,8 @@ async function playNow() {
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
-    repeatUci: repeatedOpening(result.bestmove, ply)
+    repeatUci: repeatedOpening(result.bestmove, ply),
+    openingShares: ply <= 1 ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
@@ -5784,6 +5864,9 @@ function reportText() {
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
+    state.paceProfile && state.paceProfile.opening && Number(state.paceProfile.opening.games) >= 5
+      ? `repertoire w ${openingTop(state.paceProfile.opening.white)} · b ${openingTop(state.paceProfile.opening.black)} (${state.paceProfile.opening.games} games)`
+      : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''

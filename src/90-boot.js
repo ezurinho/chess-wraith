@@ -418,6 +418,27 @@ function recordPace(ms) {
   }
 }
 
+// The repertoire the pace archive already contains: the first-move shares for
+// the side this account is playing. Nothing extra is fetched for it.
+function openingShares() {
+  const profile = state.paceProfile;
+  const opening = profile && profile.opening;
+  if (!opening || !(Number(opening.games) >= 5)) return null;
+  const side = state.snapshot ? state.snapshot.turn : null;
+  const table = side === 'b' ? opening.black : opening.white;
+  return table && Object.keys(table).length ? table : null;
+}
+
+// The two moves this account actually plays, for the report: a repertoire that
+// cannot be read is a claim that cannot be checked.
+function openingTop(table) {
+  const rows = Object.entries(table || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([move, share]) => `${move} ${Math.round(share * 100)}%`);
+  return rows.length ? rows.join(' · ') : 'none';
+}
+
 function repeatedOpening(uci, ply) {
   if (!uci || ply > 2) return null;
   const recent = readOpenings().slice(-6);
@@ -539,7 +560,7 @@ function registerButler() {
     config: cfg,
     engine,
     panel,
-    chooseMove: (lines) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate }),
+    chooseMove: (lines, opts) => chooseMove(lines, cfg, { top1Streak: state.top1Streak, oppElo: state.oppEloEstimate, ...(opts || {}) }),
     computeDelay: (opts) => computeDelay(cfg, opts),
     phaseTime: (fen, ply) => phaseMoveTime(cfg.moveTimeMs, fen, ply),
     // "Why did it not rematch?" answered without reading the source: what the
@@ -1000,7 +1021,8 @@ function scheduleAutoMove(result) {
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
-    repeatUci: repeatedOpening(result.bestmove, ply)
+    repeatUci: repeatedOpening(result.bestmove, ply),
+    openingShares: ply <= 1 ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return;
@@ -1172,7 +1194,8 @@ async function playNow() {
   const choice = chooseMove(result.lines, slackCfg(), {
     top1Streak: state.top1Streak,
     oppElo: state.oppEloEstimate || state.opponentRating,
-    repeatUci: repeatedOpening(result.bestmove, ply)
+    repeatUci: repeatedOpening(result.bestmove, ply),
+    openingShares: ply <= 1 ? openingShares() : null
   });
   const move = (choice && choice.line && choice.line.bestUci) || result.bestmove;
   if (!move) return false;
@@ -1456,6 +1479,9 @@ function reportText() {
       : 'history empty',
     `clock ${Number.isFinite(state.clockSeconds) ? Math.round(state.clockSeconds) + 's' : 'none'} · last delay ${Math.round(state.lastDelayMs || 0)}ms · search ${Math.round(state.lastSearchMs || 0)}ms · search budget ${searchBudgetMs({ moveTimeMs: cfg.moveTimeMs, clockSeconds: state.clockSeconds })}ms`,
     `pace ${paceBaseline() ? (paceBaseline() / 1000).toFixed(1) + 's · ' + (state.paceProfile && state.paceProfile.medianMs ? 'acct' : 'learned') : 'default'}${state.paceError ? ' · ' + state.paceError : ''}`,
+    state.paceProfile && state.paceProfile.opening && Number(state.paceProfile.opening.games) >= 5
+      ? `repertoire w ${openingTop(state.paceProfile.opening.white)} · b ${openingTop(state.paceProfile.opening.black)} (${state.paceProfile.opening.games} games)`
+      : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
     state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''

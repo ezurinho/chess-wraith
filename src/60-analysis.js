@@ -134,8 +134,14 @@ function chooseMove(lines, cfg, opts = {}) {
     // streak reaches three, a near-equal alternative gets a nudge, not a mandate.
     if ((opts.top1Streak || 0) >= 3 && cand.index === 0 && cand.cpLoss === 0) weight *= 0.35;
     if (cand.index > 0 && cand.cpLoss >= 8) weight *= 1.35;
-    // The same first move every game is its own tell, separate from move choice.
-    if (opts.repeatUci && cand.line.bestUci === opts.repeatUci) weight *= 0.28;
+    // The account's own opening habits, counted from its published games. A
+    // repertoire is the most stable thing about a player's games, and four first
+    // moves at 25% each is the opposite of a repertoire.
+    const share = opts.openingShares ? Number(opts.openingShares[cand.line.bestSan]) || 0 : 0;
+    if (opts.openingShares) weight *= 0.2 + 4.5 * share;
+    // The same first move every game is its own tell, separate from move choice
+    // — unless it is the move this account actually plays that often.
+    if (opts.repeatUci && cand.line.bestUci === opts.repeatUci && share < 0.3) weight *= 0.28;
     eligible.push({ line: cand.line, cpLoss: cand.cpLoss, weight });
   }
 

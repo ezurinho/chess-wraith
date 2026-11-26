@@ -234,3 +234,19 @@ test('the report carries the whole anchor chain, not only its result', async () 
     stop();
   }
 });
+test('the repertoire is read for the side that is on move, and only when it exists', async () => {
+  const { api, stop } = boot(PAGE, null, { signedOut: true });
+  try {
+    assert.equal(await until(() => api.state.snapshot && api.state.snapshot.turn, 9000), true, 'the board is read');
+    assert.equal(api.openingShares(), null, 'no pace profile, no repertoire');
+    api.state.paceProfile = { cls: 'blitz', medianMs: 1600, opening: { white: { e4: 1 }, black: { c5: 1 }, games: 3 } };
+    assert.equal(api.openingShares(), null, 'three games is not a repertoire');
+    api.state.paceProfile = { cls: 'blitz', medianMs: 1600, opening: { white: { e4: 0.75, d4: 0.25 }, black: { c5: 1 }, games: 9 } };
+    api.state.snapshot = { ...api.state.snapshot, turn: 'w' };
+    assert.deepEqual({ ...api.openingShares() }, { e4: 0.75, d4: 0.25 });
+    api.state.snapshot = { ...api.state.snapshot, turn: 'b' };
+    assert.deepEqual({ ...api.openingShares() }, { c5: 1 });
+  } finally {
+    stop();
+  }
+});

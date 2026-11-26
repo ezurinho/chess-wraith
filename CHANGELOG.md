@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.46.0 — 2026-11-26
+
+The opening comes from the account's own games, not from a dice roll.
+
+- Measured: four near-equal lines gave 26 %/26 %/26 %/23 % over 400 draws, and
+  the anti-repeat rule pushed the repeated first move down to **12 %** — less
+  human than repeating it.
+- `repertoireFromGames()` counts the first move of the last 60 games per colour
+  from the archive the pace reader already downloads; no extra request. Real
+  archive check (hikaru, 2026/11, 486 games): white e4 39 %, c4 39 %, d4 18 %.
+- `chooseMove` weights candidates by those shares, so the script plays the
+  account's repertoire with the engine's eval as a tie-breaker. The anti-repeat
+  rule stands down for a move with share ≥ 0.3.
+- The report prints the repertoire it read: `repertoire w e4 75% · d4 25% · b c5
+  100% (9 games)`.
+- 182 tests.
+
 ## 1.45.0 — 2026-11-26
 
 The engine is named by the engine, not by a constant.

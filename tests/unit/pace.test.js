@@ -170,3 +170,41 @@ test('a click while a request is in flight does not download the archive twice',
   assert.equal(calls, 1, 'only one request went out');
   assert.ok(first);
 });
+// The archive that carries the clocks carries the PGNs, so the account's first
+// move is a free fact: it is what a repertoire is made of.
+const game = (white, black, moves, rules = 'chess') => ({
+  rules,
+  pgn: `[White "${white}"] [Black "${black}"]\n\n${moves} 1-0`
+});
+
+test('the first move is read from the movetext, not from the headers', () => {
+  const api = harness();
+  assert.equal(api.firstMoveOf(PGN, 'w'), 'e4');
+  assert.equal(api.firstMoveOf(PGN, 'b'), 'c5');
+  // A game that starts from a FEN has no white move to read: black moves first.
+  assert.equal(api.firstMoveOf('1... c5 2. Nf3 d6', 'b'), 'c5');
+  assert.equal(api.firstMoveOf('1... c5 2. Nf3 d6', 'w'), 'Nf3');
+  assert.equal(api.firstMoveOf('', 'w'), null);
+  assert.equal(api.firstMoveOf(undefined, 'b'), null);
+});
+
+test('the repertoire is shares of the games, not a vote for one move', () => {
+  const api = harness();
+  const games = [
+    game('hikaru', 'a', '1. e4 e5'),
+    game('hikaru', 'b', '1. e4 c5'),
+    game('a', 'hikaru', '1. d4 d5'),
+    game('hikaru', 'c', '1. e4 e6'),
+    game('b', 'hikaru', '1. e4 e5'),
+    game('hikaru', 'd', '1. d4 Nf6'),
+    game('hikaru', 'e', '1. e4 e5', 'chess960'),
+    game('someone', 'else', '1. c4 e5')
+  ];
+  const out = api.repertoireFromGames(games, 'hikaru');
+  assert.equal(out.games, 6, 'six chess games with this player in them');
+  assert.ok(Math.abs(out.white.e4 - 0.75) < 0.001, JSON.stringify(out.white));
+  assert.ok(Math.abs(out.white.d4 - 0.25) < 0.001, JSON.stringify(out.white));
+  assert.deepEqual(JSON.parse(JSON.stringify(out.black)), { e5: 0.5, d5: 0.5 });
+  // Nothing to copy from an empty archive or a player who is not in it.
+  assert.deepEqual(JSON.parse(JSON.stringify(api.repertoireFromGames([], 'hikaru'))), { white: {}, black: {}, games: 0 });
+});

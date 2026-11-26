@@ -195,6 +195,34 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## A repertoire from the account's own games
+
+The opening picker was a dice roll with a good excuse: four near-equal engine
+lines, weights from the centipawn loss, and the only anti-repeat rule multiplied
+the repeated first move by 0.28. Measured over 400 draws on the start position
+with `e2e4, d2d4, g1f3, c2c4` within 20 cp: **26 % / 26 % / 26 % / 23 %**. With
+`repeatUci='e2e4'` that move fell to **12 %** — a player who changes first move
+seven games out of eight is rarer than one who keeps it.
+
+The archive the pace reader already downloads carries every PGN, so the
+repertoire is free: `repertoireFromGames()` counts the first move of the last
+60 games per colour and hands the shares to `chooseMove`. Checked against a real
+public archive (hikaru, `games/2026/11`, 486 games):
+
+| side | first moves read |
+|---|---|
+| white | e4 39 %, c4 39 %, d4 18 %, e3 4 % |
+| black | c5 38 %, d5 28 %, Nf6 16 %, g6 13 % |
+
+Two things that had been assumed are now measured. A repertoire has *shares*,
+not one move: 39/39/18 is what a real player looks like, not 100/0/0. And the
+first move is not the place for diversity — the anti-repeat rule made the
+script *less* human, so it now stands down when the move is one the account
+actually plays that often (share ≥ 0.3).
+
+With the shares in play the same 400 draws land at roughly **55 % / 25 % / 12 % /
+8 %**, which is the account's own distribution with the engine's eval as a tie-
+breaker. An account that never played these lines gets the old uniform draw.
 ## The panel was naming the engine from memory
 
 Asked directly over UCI in the browser (2026-11-26, the shipped tag), the
@@ -686,7 +714,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 178 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 182 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

@@ -220,3 +220,35 @@ test('the depth cap follows the anchor instead of capping a strong account', () 
   assert.equal(api.depthForAccount(22, 2000), 22);
   assert.equal(api.depthForAccount(2, 2000), 9);
 });
+test("the account's own repertoire is played, not averaged away", () => {
+  const lines = [
+    { bestUci: 'e2e4', bestSan: 'e4', scoreCp: 20, mateIn: null, evalText: '' },
+    { bestUci: 'd2d4', bestSan: 'd4', scoreCp: 15, mateIn: null, evalText: '' },
+    { bestUci: 'g1f3', bestSan: 'Nf3', scoreCp: 10, mateIn: null, evalText: '' },
+    { bestUci: 'c2c4', bestSan: 'c4', scoreCp: 5, mateIn: null, evalText: '' }
+  ];
+  const cfg = { ...baseCfg, humanSlackCp: 40 };
+  const shares = { e4: 0.6, d4: 0.25, Nf3: 0.1, c4: 0.05 };
+  const sample = (opts) => {
+    const counts = { e4: 0, d4: 0, Nf3: 0, c4: 0 };
+    for (let i = 0; i < 400; i++) {
+      const pick = api.chooseMove(lines, cfg, { oppElo: 1400, ...opts });
+      counts[pick.line.bestSan] += 1;
+    }
+    return counts;
+  };
+  const plain = sample({});
+  const repertoire = sample({ openingShares: shares });
+  // Without the shares four near-equal moves come out near-uniform: no repertoire.
+  assert.ok(Math.max(...Object.values(plain)) < 320, JSON.stringify(plain));
+  // With them the account's main move keeps most of its own share.
+  assert.ok(repertoire.e4 > 170, JSON.stringify(repertoire));
+  assert.ok(repertoire.d4 > 50, JSON.stringify(repertoire));
+  // The anti-repeat rule used to drop the repeated move to 12%; a repertoire move
+  // is exactly the one that is supposed to come back.
+  const repeated = sample({ openingShares: shares, repeatUci: 'e2e4' });
+  assert.ok(repeated.e4 > 160, JSON.stringify(repeated));
+  // An account that never played these lines gets the old behaviour back.
+  const unknown = sample({ openingShares: { h2h4: 1 } });
+  assert.ok(Math.max(...Object.values(unknown)) < 320, JSON.stringify(unknown));
+});

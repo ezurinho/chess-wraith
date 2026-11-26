@@ -123,6 +123,51 @@ function paceFromGames(games, timeClass, user) {
   return { medianMs: times.length >= 30 ? median(times) : null, samples: times.length, games: used };
 }
 
+// The first move a player makes is a habit, not a die roll: the same archive
+// that carries the clocks carries the PGNs, so the account's repertoire can be
+// counted for free. Four first moves at 25% each is not a player; a 1400
+// account plays its main first move in most of its games.
+function firstMoveOf(pgn, side) {
+  if (typeof pgn !== 'string') return null;
+  const body = pgn.replace(/\[[^\]]*\]/g, ' ').replace(/\{[^}]*\}/g, ' ').replace(/\([^)]*\)/g, ' ');
+  const blackStarts = /^\s*1\.\.\./.test(body.trim());
+  const tokens = body.replace(/\d+\.(\.\.)?/g, ' ').split(/\s+/).filter((t) => /^[a-hRNBQKO]/.test(t));
+  if (tokens.length === 0) return null;
+  const index = side === 'b' ? (blackStarts ? 0 : 1) : blackStarts ? 1 : 0;
+  const move = tokens[index];
+  return move ? move.replace(/[+#!?]+$/, '') : null;
+}
+
+// Shares, not counts: the picker compares a candidate's SAN against them.
+function repertoireFromGames(games, user) {
+  const list = Array.isArray(games) ? games : [];
+  const counts = { w: new Map(), b: new Map() };
+  let used = 0;
+  for (let i = list.length - 1; i >= 0 && used < 60; i--) {
+    const game = list[i];
+    if (!game || game.rules !== 'chess' || !game.pgn) continue;
+    const side = pgnPlayerSide(game.pgn, user);
+    if (!side) continue;
+    const move = firstMoveOf(game.pgn, side);
+    if (!move) continue;
+    const bucket = counts[side];
+    bucket.set(move, (bucket.get(move) || 0) + 1);
+    used += 1;
+  }
+  const shares = (bucket) => {
+    let total = 0;
+    for (const n of bucket.values()) total += n;
+    const out = {};
+    if (!total) return { shares: {}, games: 0 };
+    for (const [move, n] of bucket) out[move] = n / total;
+    return { shares: out, games: total };
+  };
+  const white = shares(counts.w);
+  const black = shares(counts.b);
+  // Both colours: a repertoire is two habits, and five games is the floor either way.
+  return { white: white.shares, black: black.shares, games: white.games + black.games };
+}
+
 // One entry per account and time class: a player who alternates bullet and
 // blitz would otherwise re-download half a megabyte of PGN on every switch.
 function paceProfileKey(timeClass) {
@@ -185,6 +230,7 @@ async function syncPaceProfile(force) {
   state.paceError = '';
   try {
     let profile = null;
+    let rawGames = [];
     for (const offset of [0, 1]) {
       // One timeout per request: a signal shared by both months leaves the
       // second request with whatever is left of the first one's budget.
@@ -199,11 +245,16 @@ async function syncPaceProfile(force) {
       if (timer) clearTimeout(timer);
       if (!response || !response.ok) throw new Error(`HTTP ${response ? response.status : 0}`);
       const body = await response.json();
-      const parsed = paceFromGames(body && body.games, timeClass, user);
+      const games = body && Array.isArray(body.games) ? body.games : [];
+      // The current month is the freshest repertoire; a previous one only fills in
+      // when this month has no finished class games yet.
+      if (rawGames.length === 0) rawGames = games;
+      const parsed = paceFromGames(games, timeClass, user);
       if (parsed.medianMs) { profile = parsed; break; }
     }
     if (!profile) throw new Error('no games');
     profile.cls = timeClass;
+    profile.opening = repertoireFromGames(rawGames, user);
     profile.at = Date.now();
     state.paceProfile = profile;
     persistPaceProfile(profile);
