@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.34.0
+// @version      1.35.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.34.0';
+const VERSION = '1.35.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.34.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.35.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3191,11 +3191,15 @@ function parseGameResult(text, account) {
   if (/\byou resigned\b|\byou lost\b|\byou were checkmated\b/.test(line)) return 'loss';
   if (/\byou won\b|\byou win\b/.test(line)) return 'win';
   if (/\bdraw\b|\bstalemate\b|\binsufficient material\b|\bthreefold\b|\bfifty-move\b/.test(line)) return 'draw';
-  if (!/\bwon\b/.test(line)) return null;
   const me = normalizeAccountName(account);
   if (!me) return null;
-  const esc = me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^a-z0-9_-])${esc}([^a-z0-9_-]|$)`).test(line) ? 'win' : 'loss';
+  // The dialog shows both players, so "the account name is somewhere in the
+  // text" is not a test: the winner is the word attached to the verb.
+  const near = /([a-z0-9_-]{2,})\s+(won|lost)\b/.exec(line);
+  if (!near) return null;
+  const loser = near[2] === 'lost';
+  if (near[1] === me) return loser ? 'loss' : 'win';
+  return loser ? 'win' : 'loss';
 }
 
 // Bounded on purpose: the dialog is small, but a page-level fallback can be the
@@ -3204,6 +3208,19 @@ function readGameResult() {
   const root = gameOverRoot();
   if (!root) return null;
   return parseGameResult(String(root.textContent || '').slice(0, 2000), currentAccount());
+}
+
+// A rematch paints a fresh board under the old dialog for a second, so the same
+// modal can be scanned twice: once for the game it belongs to and once for the
+// one that just started. A game with fewer than two plies is not that game —
+// chess.com aborts anything that never reached two moves, so nothing is lost.
+function resultCounts(job) {
+  const { result, ply, gamesPlayed, resultGame } = job || {};
+  if (!result) return false;
+  if (!(Number(gamesPlayed) > 0)) return false;
+  if (Number(resultGame) === Number(gamesPlayed)) return false;
+  if (ply !== null && ply !== undefined && Number(ply) < 2) return false;
+  return true;
 }
 
 function hasGameOverModal() {
@@ -5373,7 +5390,7 @@ function runScan() {
       // One result per game: a lingering dialog that is scanned twice must not
       // count twice, so the game number that produced a result is remembered.
       const result = readGameResult();
-      if (result && state.gamesPlayed > 0 && state.resultGame !== state.gamesPlayed) {
+      if (resultCounts({ result, ply: snapshot.ply, gamesPlayed: state.gamesPlayed, resultGame: state.resultGame })) {
         state.resultGame = state.gamesPlayed;
         state.results[result] += 1;
         saveSession();

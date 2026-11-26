@@ -6,7 +6,7 @@ const { loadFragments } = require('./helpers');
 
 const api = loadFragments(
   ['10-config.js', '20-utils.js', '65-afk.js'],
-  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS }`
+  `{ pickRematchButton, nextGameDelay, sessionLimit, parseGameResult, resultCounts, resumeSession, REMATCH_PRIORITY, REMATCH_RETRY_MS }`
 );
 
 test('rematch wins over a new game when both are offered', () => {
@@ -135,4 +135,25 @@ test('a session keeps its score across a reload and drops nonsense', () => {
   const old = api.resumeSession({ startedAt: now - 40 * 3600e3, games: 4, results: { win: 3 } }, now, 3 * 3600e3);
   assert.equal(old.resumed, false);
   assert.deepEqual({ ...old.results }, { win: 0, loss: 0, draw: 0 });
+});
+test('both players are in the dialog, so the word attached to "won" decides', () => {
+  const win = 'tester 1480 opponentx 1502 tester won Rematch';
+  const loss = 'tester 1480 opponentx 1502 opponentx won Rematch';
+  assert.equal(api.parseGameResult(win, 'tester'), 'win');
+  // The account name is in this text too; only adjacency separates the two.
+  assert.equal(api.parseGameResult(loss, 'tester'), 'loss');
+  assert.equal(api.parseGameResult('tester 1480 opponentx 1502 opponentx won', 'someoneelse'), 'loss', 'a name that is not the winner is the side that lost');
+  assert.equal(api.parseGameResult('tester 1480 opponentx 1502 opponentx won', ''), null, 'no account, no verdict');
+  assert.equal(api.parseGameResult('tester lost by resignation', 'tester'), 'loss');
+});
+
+test('a dialog that outlives its game is not counted for the next one', () => {
+  const base = { result: 'win', gamesPlayed: 7, resultGame: 0 };
+  assert.equal(api.resultCounts({ ...base, ply: 24 }), true, 'a real finished game');
+  assert.equal(api.resultCounts({ ...base, ply: 0 }), false, 'a fresh board under an old dialog');
+  assert.equal(api.resultCounts({ ...base, ply: 1 }), false);
+  assert.equal(api.resultCounts({ ...base, ply: null }), true, 'no move list: the dialog is all we have');
+  assert.equal(api.resultCounts({ ...base, ply: 24, resultGame: 7 }), false, 'the same game twice');
+  assert.equal(api.resultCounts({ ...base, ply: 24, result: null }), false, 'no result, nothing to count');
+  assert.equal(api.resultCounts({ ...base, ply: 24, gamesPlayed: 0 }), false, 'no game played');
 });

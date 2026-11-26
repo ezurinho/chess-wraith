@@ -146,11 +146,15 @@ function parseGameResult(text, account) {
   if (/\byou resigned\b|\byou lost\b|\byou were checkmated\b/.test(line)) return 'loss';
   if (/\byou won\b|\byou win\b/.test(line)) return 'win';
   if (/\bdraw\b|\bstalemate\b|\binsufficient material\b|\bthreefold\b|\bfifty-move\b/.test(line)) return 'draw';
-  if (!/\bwon\b/.test(line)) return null;
   const me = normalizeAccountName(account);
   if (!me) return null;
-  const esc = me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^a-z0-9_-])${esc}([^a-z0-9_-]|$)`).test(line) ? 'win' : 'loss';
+  // The dialog shows both players, so "the account name is somewhere in the
+  // text" is not a test: the winner is the word attached to the verb.
+  const near = /([a-z0-9_-]{2,})\s+(won|lost)\b/.exec(line);
+  if (!near) return null;
+  const loser = near[2] === 'lost';
+  if (near[1] === me) return loser ? 'loss' : 'win';
+  return loser ? 'win' : 'loss';
 }
 
 // Bounded on purpose: the dialog is small, but a page-level fallback can be the
@@ -159,6 +163,19 @@ function readGameResult() {
   const root = gameOverRoot();
   if (!root) return null;
   return parseGameResult(String(root.textContent || '').slice(0, 2000), currentAccount());
+}
+
+// A rematch paints a fresh board under the old dialog for a second, so the same
+// modal can be scanned twice: once for the game it belongs to and once for the
+// one that just started. A game with fewer than two plies is not that game —
+// chess.com aborts anything that never reached two moves, so nothing is lost.
+function resultCounts(job) {
+  const { result, ply, gamesPlayed, resultGame } = job || {};
+  if (!result) return false;
+  if (!(Number(gamesPlayed) > 0)) return false;
+  if (Number(resultGame) === Number(gamesPlayed)) return false;
+  if (ply !== null && ply !== undefined && Number(ply) < 2) return false;
+  return true;
 }
 
 function hasGameOverModal() {

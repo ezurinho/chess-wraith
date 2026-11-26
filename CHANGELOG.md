@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.35.0 — 2026-11-25
+
+The session score no longer trusts a name it can see anywhere in the dialog.
+
+- 1.34.0 asked whether the account's name appeared in the game-over dialog.
+  Both players do — the player rows list both names and both ratings — so the
+  loser's own name made a loss read as a win. The result is now decided by the
+  word attached to `won`/`lost`, which is the only token in that text that
+  means anything.
+- A dialog can outlive its game by a second after a rematch. A game with fewer
+  than two plies on the board is not the game the dialog is about, so it is not
+  counted; chess.com never scores a game that young.
+- 165 tests.
+
 ## 1.34.0 — 2026-11-25
 
 The panel can tell you how the night went.

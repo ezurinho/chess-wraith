@@ -195,6 +195,33 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The name next to the verb
+
+1.34.0 decided a result by asking whether the account's name appeared in the
+dialog. Both players appear in that dialog — the header shows the winner, and the
+player rows show both names and both ratings — so the test was satisfied by the
+loser's own name.
+
+    tester 1480 · opponent 1502 · opponent won
+
+reads as a win for `tester` under a substring test. The correct reading is
+local: the word attached to `won`/`lost` is the side that verb is about, and it
+is the only token in the text that means anything:
+
+```js
+const near = /([a-z0-9_-]{2,})\s+(won|lost)\b/.exec(line);
+```
+
+That also removes the need for a name-based escape hatch: an empty account name
+still returns `null`, and a recognised name still wins only when it is the one
+holding the verb.
+
+Second fix in the same function: a rematch paints a fresh board under the old
+dialog for a moment, so the same text can be scanned once for the game it
+belongs to and once for the one that just started. A game with fewer than two
+plies on the board is not that game — chess.com aborts anything that never
+reached two moves, so a real result can never be that young. When there is no
+move list at all the dialog is all there is, and it is trusted.
 ## "tester wonRematch"
 
 The game-over dialog is the only place chess.com states a result, and it states
@@ -419,7 +446,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 163 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 165 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and
