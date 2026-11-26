@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.63.0 — 2026-11-27
+
+The beginner model could never run.
+
+- Neither chooser call site passed `accountElo`, and `styleProfile` takes the
+  level from that option only. `levelPlayTarget` therefore saw the target setting
+  (1500 or the account's own number) and returned 0 for every account, so the
+  band and the improvisation added in 1.60 and 1.61 were unreachable in the real
+  script. Measured live on chess.com's board before the fix: a 133 account
+  delivered 11.5 cp/move against a 293 band.
+- Both call sites pass `accountRatingNow() || state.boardRating` now.
+- The improvisation rate is solved instead of guessed: the best line costs ~8 cp
+  and an improvised move ~490, so `p = (target - 8) / 480`, clamped at 0.5.
+  At 1245 that is one move in eight; at 133, one in two.
+
 ## 1.62.0 — 2026-11-27
 
 A review with the live board behind it.

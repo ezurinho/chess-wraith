@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.62.0
+// @version      1.63.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.62.0';
+const VERSION = '1.63.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.62.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.63.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3457,14 +3457,15 @@ function levelPlayTarget(accountElo, cfg) {
 
 // The engine's tenth-best move is still a master's tenth-best move: below its
 // floor, re-weighting its own list cannot reach the account's loss rate. The
-// moves that are missing get improvised instead, uniformly from the legal
-// moves, at a rate that closes the gap between what the search offers and the
-// target. Measured: at 133 the ten best lines average 157 cp/move against a 293
-// target, so roughly four moves in ten have to be improvised.
+// moves that are missing get improvised instead, at a rate that closes the gap
+// between what the search offers and the target. The rate solved from the live
+// game of 1.62.0: the best line costs ~8 cp and an improvised move ~490, so
+// p = (target - 8) / 480. At 133 (target 293) that is one move in two; at 1245
+// (target 71) it is one in eight, which is what a 1200 actually does.
 function improvisationChance(target) {
   const t = Number(target) || 0;
-  if (!(t > 120)) return 0;
-  return clamp((t - 120) / 420, 0, 0.5);
+  if (!(t > 0)) return 0;
+  return clamp((t - 8) / 480, 0, 0.5);
 }
 
 // A uniform draw over the legal moves is not a beginner, it is a random number
@@ -6457,6 +6458,10 @@ function scheduleAutoMove(result) {
   }
   const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
+    // The account's own rating is what level play is aimed at. Without it the
+    // chooser falls back to the target setting and a 133 account plays at the
+    // engine's floor: the whole beginner path was unreachable in the real script.
+    accountElo: accountRatingNow() || state.boardRating || 0,
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
@@ -6697,6 +6702,7 @@ async function playNow() {
   }
   const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
+    accountElo: accountRatingNow() || state.boardRating || 0,
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),

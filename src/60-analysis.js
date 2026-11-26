@@ -58,14 +58,15 @@ function levelPlayTarget(accountElo, cfg) {
 
 // The engine's tenth-best move is still a master's tenth-best move: below its
 // floor, re-weighting its own list cannot reach the account's loss rate. The
-// moves that are missing get improvised instead, uniformly from the legal
-// moves, at a rate that closes the gap between what the search offers and the
-// target. Measured: at 133 the ten best lines average 157 cp/move against a 293
-// target, so roughly four moves in ten have to be improvised.
+// moves that are missing get improvised instead, at a rate that closes the gap
+// between what the search offers and the target. The rate solved from the live
+// game of 1.62.0: the best line costs ~8 cp and an improvised move ~490, so
+// p = (target - 8) / 480. At 133 (target 293) that is one move in two; at 1245
+// (target 71) it is one in eight, which is what a 1200 actually does.
 function improvisationChance(target) {
   const t = Number(target) || 0;
-  if (!(t > 120)) return 0;
-  return clamp((t - 120) / 420, 0, 0.5);
+  if (!(t > 0)) return 0;
+  return clamp((t - 8) / 480, 0, 0.5);
 }
 
 // A uniform draw over the legal moves is not a beginner, it is a random number

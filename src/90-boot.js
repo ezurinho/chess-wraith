@@ -1232,6 +1232,10 @@ function scheduleAutoMove(result) {
   }
   const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
+    // The account's own rating is what level play is aimed at. Without it the
+    // chooser falls back to the target setting and a 133 account plays at the
+    // engine's floor: the whole beginner path was unreachable in the real script.
+    accountElo: accountRatingNow() || state.boardRating || 0,
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
@@ -1472,6 +1476,7 @@ async function playNow() {
   }
   const legal = Chess.generateLegalMoves(snap);
   const choice = chooseMove(result.lines, slackCfg(), {
+    accountElo: accountRatingNow() || state.boardRating || 0,
     top1Streak: state.top1Streak,
     oppElo: state.opponentRating || state.oppEloEstimate,
     repeatUci: repeatedOpening(result.bestmove, ply),
