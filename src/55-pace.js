@@ -128,11 +128,22 @@ function paceFromGames(games, timeClass, user) {
   // A phase needs fewer samples than the whole profile: it only refines the
   // baseline, it cannot invent one.
   const phase = (arr) => (arr.length >= 12 ? median(arr) : null);
+  // When this account actually plays: the hour histogram and the busiest hour are
+  // free from the same read, and a 3 a.m. streak is the loudest pattern left.
+  const hours = new Array(24).fill(0);
+  for (const game of list) {
+    const ts = Number(game && game.end_time);
+    if (!Number.isFinite(ts) || ts <= 0) continue;
+    if (game.time_class !== timeClass) continue;
+    hours[new Date(ts * 1000).getHours()] += 1;
+  }
+  const peakHour = hours.indexOf(Math.max(...hours));
   return {
     medianMs: times.length >= 30 ? median(times) : null,
     phases: { opening: phase(buckets.opening), middle: phase(buckets.middle), end: phase(buckets.end) },
     samples: times.length,
-    games: used
+    games: used,
+    session: { hours, peakHour: Math.max(...hours) >= 3 ? peakHour : null }
   };
 }
 

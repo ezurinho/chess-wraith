@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.54.0
+// @version      1.54.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.54.0';
+const VERSION = '1.54.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.54.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.54.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2867,11 +2867,22 @@ function paceFromGames(games, timeClass, user) {
   // A phase needs fewer samples than the whole profile: it only refines the
   // baseline, it cannot invent one.
   const phase = (arr) => (arr.length >= 12 ? median(arr) : null);
+  // When this account actually plays: the hour histogram and the busiest hour are
+  // free from the same read, and a 3 a.m. streak is the loudest pattern left.
+  const hours = new Array(24).fill(0);
+  for (const game of list) {
+    const ts = Number(game && game.end_time);
+    if (!Number.isFinite(ts) || ts <= 0) continue;
+    if (game.time_class !== timeClass) continue;
+    hours[new Date(ts * 1000).getHours()] += 1;
+  }
+  const peakHour = hours.indexOf(Math.max(...hours));
   return {
     medianMs: times.length >= 30 ? median(times) : null,
     phases: { opening: phase(buckets.opening), middle: phase(buckets.middle), end: phase(buckets.end) },
     samples: times.length,
-    games: used
+    games: used,
+    session: { hours, peakHour: Math.max(...hours) >= 3 ? peakHour : null }
   };
 }
 

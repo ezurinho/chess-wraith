@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.54.1 — 2026-11-26
+
+The profile learns when the account plays.
+
+- `paceFromGames` now returns a 24-hour histogram and the busiest hour of the
+  archive it already reads (three games in an hour before it trusts one). Same read,
+  no extra request; nothing acts on it yet.
+
 ## 1.54.0 — 2026-11-26
 
 The account's rhythm has phases.
