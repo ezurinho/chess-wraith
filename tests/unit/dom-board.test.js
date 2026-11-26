@@ -49,7 +49,7 @@ function mount(html) {
     AbortSignal,
     getComputedStyle: window.getComputedStyle.bind(window)
   });
-  const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { readGridFromBoard, readSanMoveList, readMoveNodes, scanBoard, Chess };';
+  const source = FRAGMENTS.map(read).join('\n') + '\n;globalThis.__t = { readGridFromBoard, readSanMoveList, readMoveNodes, scanBoard, readOpponentRating, Chess };';
   vm.runInContext(source, context, { filename: 'dom-harness.js' });
   return { window, api: vm.runInContext('globalThis.__t', context), dom };
 }
@@ -158,4 +158,27 @@ test('a board marked flipped is read from the other side', () => {
   const read0 = api.readGridFromBoard(boardEl, true);
   assert.equal(read0.valid, true);
   assert.equal(api.Chess.gridToPlacement(read0.grid), 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR');
+});
+test('the opponent rating is found under the names the live layout uses', () => {
+  // Measured on /play/computer: player rows carry the rating in a
+  // [data-user-block-part=rating] node, not in user-tagline-rating.
+  const html = boardHtml() +
+    '<div class="board-layout-top"><div class="player-row-top"><div class="player-row-component">' +
+    '<div class="cc-user-block-component"><div class="cc-user-rating-white" data-user-block-part="rating">(1234)</div>' +
+    '</div></div></div></div>' +
+    '<div class="board-layout-bottom"><div class="player-row-bottom"><div class="player-row-component">' +
+    '<div class="cc-user-block-component"><div class="cc-user-rating-white" data-user-block-part="rating">(1500)</div>' +
+    '</div></div></div></div>';
+  const { api } = mount(html);
+  assert.equal(api.readOpponentRating('w', false), 1234, 'playing White, the opponent is on top');
+  assert.equal(api.readOpponentRating('b', false), 1500, 'playing Black, the opponent is at the bottom');
+});
+
+test('a page that hides the ratings reports unknown instead of a guess', () => {
+  const html = boardHtml() +
+    '<div class="board-layout-top"><div class="player-top"><div class="clock-component clock-top"><div class="clock-time-monospace">6:51</div></div></div></div>' +
+    '<div class="board-layout-bottom"><div class="player-bottom"></div></div>';
+  const { api } = mount(html);
+  assert.equal(api.readOpponentRating('w', false), null, 'the clock is not a rating');
+  assert.equal(api.readOpponentRating('b', false), null);
 });

@@ -195,6 +195,28 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## The rating had three names and the script knew none of them
+
+Census on two real pages, 2026-11-26 (`/game/live/168072860134` and
+`/play/computer`), counting what `readOpponentRating` looked for:
+
+| Selector | game page | vs computer |
+|---|---|---|
+| `.user-tagline-rating` | 0 | 0 |
+| `[data-cy="user-tagline-rating"]` | 0 | 0 |
+| `[data-user-block-part="rating"]` | 0 | 1 (`(300)`) |
+| `[class*="user-rating"]` | 0 | 1 |
+| `.player-top` / `.player-bottom` | 1 / 1 | 0 / 0 |
+| `.player-row-top` | 0 | 1 |
+| `.clock-component` | 2 | 0 |
+
+So the rating reader was aimed at a name that no page uses, and the clocks —
+which are correct — sit in `.clock-component`, inside `.player-top` on the game
+page and nowhere on a clockless bot game. The reader now walks the opponent's
+player container (`board-layout`, `player-top/bottom`, `player-row-top/bottom`),
+looks for the rating under all three names, and only then accepts a lone
+`(1234)` tag inside that container. A page that hides ratings (signed out) still
+returns `null`: unknown is not 1500.
 ## The default never ran
 
 `state.effectiveElo` was only resolved inside the rating callbacks. A signed-out
@@ -569,7 +591,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 171 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 173 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

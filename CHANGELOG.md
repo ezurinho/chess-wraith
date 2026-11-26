@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.40.0 — 2026-11-26
+
+The opponent's rating is read where chess.com actually keeps it.
+
+- Measured on two real pages: `.user-tagline-rating` and
+  `[data-cy="user-tagline-rating"]` do not exist (0 nodes), while the live
+  layouts expose the rating as `[data-user-block-part="rating"]` or a
+  `cc-user-rating-*` class inside `.player-top` / `.player-row-top`. The reader
+  walks the opponent's player container, tries all three names, and only then
+  accepts a lone numeric tag there.
+- It still returns `null` when the page hides ratings: an unknown opponent must
+  not become a 1500 guess in the strength calculation.
+- 173 tests, including the measured vs-computer markup and a page with a clock
+  and no rating.
+
 ## 1.39.1 — 2026-11-26
 
 The strength exists before the first search.

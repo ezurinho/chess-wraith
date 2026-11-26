@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.39.1
+// @version      1.40.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.39.1';
+const VERSION = '1.40.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.39.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.40.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -2065,18 +2065,46 @@ function readClockSeconds(mySide, flipped) {
   return parseClockTextSeconds(clockEl.textContent);
 }
 
-function readOpponentRating(mySide, flipped) {
-  const bottomColor = flipped ? 'b' : 'w';
-  const oppIsTop = !mySide || mySide === bottomColor;
-  const sel = oppIsTop
-    ? '.board-layout-top .user-tagline-rating, .player-top .user-tagline-rating, #board-layout-player-top .user-tagline-rating, .board-layout-top [data-cy="user-tagline-rating"]'
-    : '.board-layout-bottom .user-tagline-rating, .player-bottom .user-tagline-rating, #board-layout-player-bottom .user-tagline-rating, .board-layout-bottom [data-cy="user-tagline-rating"]';
-  const el = document.querySelector(sel);
-  if (!el || !el.textContent) return null;
-  const m = /(\d{3,4})/.exec(el.textContent);
+// Measured 2026-11-26: the live layout puts the players in `.board-layout-top` /
+// `.player-top`, and the rating survives under three different names depending
+// on the page (`user-tagline-rating`, `[data-cy]`, and the vs-computer
+// `[data-user-block-part="rating"]` holding `(1234)`). Signed out, the game
+// page shows no rating at all, so this returns null there — the caller treats
+// that as "unknown opponent", not as 1500.
+function ratingNumber(text) {
+  if (!text) return null;
+  const m = /(\d{3,4})/.exec(String(text).replace(/\s+/g, ' '));
   if (!m) return null;
   const rating = Number.parseInt(m[1], 10);
   return rating >= 400 && rating <= 3500 ? rating : null;
+}
+
+function readOpponentRating(mySide, flipped) {
+  const bottomColor = flipped ? 'b' : 'w';
+  const oppIsTop = !mySide || mySide === bottomColor;
+  const containers = oppIsTop
+    ? ['.board-layout-top', '.player-top', '#board-layout-player-top', '.player-row-top']
+    : ['.board-layout-bottom', '.player-bottom', '#board-layout-player-bottom', '.player-row-bottom'];
+  for (const container of containers) {
+    const root = document.querySelector(container);
+    if (!root) continue;
+    const named = root.querySelector(
+      '.user-tagline-rating, [data-cy="user-tagline-rating"], [data-cy*="rating"], ' +
+      '[data-user-block-part="rating"], [class*="user-rating"], [class*="tagline-rating"]'
+    );
+    const rating = ratingNumber(named && named.textContent);
+    if (rating) return rating;
+    // Last resort: a short, purely numeric tag inside the player block. The
+    // clock cannot match (colons), the username cannot (letters), and a piece
+    // count is never three or four digits.
+    for (const el of root.querySelectorAll('*')) {
+      const text = (el.textContent || '').trim();
+      if (text.length > 7 || !/^\(?\d{3,4}\)?$/.test(text)) continue;
+      const found = ratingNumber(text);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 // Measured on a real finished game page (chess.com, August 2026): the dialog is
