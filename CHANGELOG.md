@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.56.0 — 2026-11-26
+
+The panel now says how the game went, with the same numbers it played by.
+
+- `gameReport` (new fragment `src/62-report.js`) turns the loss of every chosen
+  move and the swing of every opponent move into one card: result, moves, both
+  sides' centipawn loss per move, the rating that play looks like, and the gap to
+  the account. Under five assessed moves it reports the result and no average.
+- The card lives in the Info tab, is stored per account and survives a reload.
+  The copy-report text carries it too, so a bug report includes the last game.
+- `performanceFromAcpl` is the inverse of the opponent estimate, so `like 2288`
+  on the card and `~2086` on the rival row cannot be two different curves.
+- `Your accuracy` is now `Loss / move`: it always showed centipawns, never a
+  percentage, and the label was the only thing claiming otherwise.
+
 ## 1.55.1 — 2026-11-26
 
 The ratings on the panel are the ones on the board.

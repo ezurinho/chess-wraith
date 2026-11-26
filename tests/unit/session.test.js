@@ -15,7 +15,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, 'src', rel), 'utf8');
 const FRAGMENTS = [
   '10-config.js', '20-utils.js', '30-chess.js', '35-chess-glue.js', '40-board.js',
-  '50-engine.js', '55-pace.js', '60-analysis.js', '65-afk.js', '70-input.js',
+  '50-engine.js', '55-pace.js', '60-analysis.js', '62-report.js', '65-afk.js', '70-input.js',
   '80-panel.js', '90-boot.js'
 ];
 

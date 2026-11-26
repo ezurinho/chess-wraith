@@ -34,6 +34,8 @@ function adoptAccountSettings(user) {
   syncRepertoire();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
+  // The last game's card is per account as well: the numbers belong to a player.
+  state.lastReport = readReport(name);
   // The probe count belongs to the account it was counted for; the report would
   // otherwise add one login's probes to another's repertoire line.
   state.probes = 0;
@@ -164,6 +166,8 @@ const state = {
   lossRecordedFen: null,
   myCpLosses: [],
   myAcpl: 0,
+  // The card after the last finished game; read back per account on boot.
+  lastReport: null,
   effectiveElo: null,
   warn: '',
   clockSeconds: null,
@@ -1000,6 +1004,7 @@ function statusView() {
     updateChecking: state.updateChecking,
     throttled: state.throttled,
     results: state.results,
+    report: state.lastReport,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -1495,6 +1500,18 @@ function runScan() {
         state.resultGame = state.gamesPlayed;
         state.results[result] += 1;
         saveSession();
+        // The card is built while the losses of this game are still in memory:
+        // `onNewGame` clears them, so a report made a second later would be empty.
+        state.lastReport = gameReport({
+          result,
+          moves: snapshot.plyCount,
+          myLosses: state.myCpLosses,
+          oppLosses: state.oppCpLosses,
+          rating: anchoredRating(),
+          at: Date.now()
+        });
+        saveReport(state.settingsAccount || currentAccount(), state.lastReport);
+        if (state.lastReport.myAcpl != null) noteEvent(`report: ${result} · ${state.lastReport.myAcpl} cp`);
       }
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
       clearAutoTimer();
@@ -1695,6 +1712,9 @@ function reportText() {
       ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)${state.probes ? ` · probe ${state.probes}` : ''}`
       : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    state.lastReport
+      ? `last game ${state.lastReport.result || '?'}${state.lastReport.moves ? ' · ' + state.lastReport.moves + ' moves' : ''} · you ${state.lastReport.myAcpl ?? '–'} cp/move${state.lastReport.myPerf ? ' (like ' + state.lastReport.myPerf + ')' : ''} · rival ${state.lastReport.oppAcpl ?? '–'}${state.lastReport.oppPerf ? ' (like ' + state.lastReport.oppPerf + ')' : ''} · account ${state.lastReport.rating ?? '–'}${Number.isFinite(state.lastReport.delta) ? ' (' + (state.lastReport.delta >= 0 ? '+' : '') + state.lastReport.delta + ')' : ''}`
+      : '',
     state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''
   ];

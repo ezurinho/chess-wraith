@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.55.1
+// @version      1.56.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.55.1';
+const VERSION = '1.56.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -115,7 +115,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.55.1/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.56.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3533,6 +3533,106 @@ function computeDelay(cfg, opts = {}) {
   return Math.round(clamp(ms, 250, 9000));
 }
 
+// The card after every game: what the engine saw, not what the result screen says.
+// Every number here is already computed during play (the loss of each chosen
+// move, the swing of each opponent move); this file only turns them into one
+// readable line. ACPL is the honest metric; chess.com's accuracy percentage is
+// their own formula and is not reproduced.
+
+// Centipawn loss to a rating. Same curve as the opponent estimate, so the two
+// numbers on the panel cannot disagree about what 'like 1800' means. It is a
+// fit, not a measurement: the panel says 'like'.
+function performanceFromAcpl(acpl) {
+  // Number(null) is 0, and 0 would be a perfect game: a missing sample must
+  // stay missing.
+  if (acpl === null || acpl === undefined || acpl === '') return null;
+  const value = Number(acpl);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(clamp(2750 - 380 * Math.log1p(value / 3.8), 1050, 2850));
+}
+
+function meanOf(list) {
+  return list.reduce((total, value) => total + value, 0) / list.length;
+}
+
+function cleanLosses(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    // A null is a missing sample, not a zero: Number(null) is 0 and would
+    // quietly drag the average down.
+    .filter((value) => value !== null && value !== undefined && value !== '')
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .map((value) => Math.min(600, Math.round(value)));
+}
+
+// Fewer than five assessed moves is not an average, it is noise: a single
+// brilliant move would advertise a 2800 performance for a 133 account.
+const REPORT_MIN_SAMPLES = 5;
+
+function gameReport(input) {
+  const o = input || {};
+  const mine = cleanLosses(o.myLosses);
+  const theirs = cleanLosses(o.oppLosses);
+  const myAcpl = mine.length >= REPORT_MIN_SAMPLES ? Math.round(meanOf(mine)) : null;
+  const oppAcpl = theirs.length >= REPORT_MIN_SAMPLES ? Math.round(meanOf(theirs)) : null;
+  const myPerf = performanceFromAcpl(myAcpl);
+  const oppPerf = performanceFromAcpl(oppAcpl);
+  const rating = Number(o.rating) > 0 ? Math.round(Number(o.rating)) : null;
+  return {
+    result: typeof o.result === 'string' ? o.result.slice(0, 12) : '',
+    moves: Number.isFinite(Number(o.moves)) && Number(o.moves) > 0 ? Math.round(Number(o.moves)) : null,
+    myAcpl,
+    oppAcpl,
+    myPerf,
+    oppPerf,
+    rating,
+    // How far above the account the play sat. Null when either side is missing:
+    // a delta against an unknown rating is a made-up number.
+    delta: myPerf !== null && rating !== null ? myPerf - rating : null,
+    samples: mine.length,
+    at: Number(o.at) > 0 ? Math.round(Number(o.at)) : Date.now()
+  };
+}
+
+function reportKey(user) {
+  const name = normalizeAccountName(user);
+  return `${STORAGE_KEY}:report:${name || 'anonymous'}`;
+}
+
+function readReport(user) {
+  try {
+    const raw = localStorage.getItem(reportKey(user));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const report = {
+      result: typeof parsed.result === 'string' ? parsed.result.slice(0, 12) : '',
+      moves: Number(parsed.moves) > 0 ? Math.round(Number(parsed.moves)) : null,
+      myAcpl: Number.isFinite(Number(parsed.myAcpl)) && parsed.myAcpl !== null ? Math.round(Number(parsed.myAcpl)) : null,
+      oppAcpl: Number.isFinite(Number(parsed.oppAcpl)) && parsed.oppAcpl !== null ? Math.round(Number(parsed.oppAcpl)) : null,
+      myPerf: Number.isFinite(Number(parsed.myPerf)) && parsed.myPerf !== null ? Math.round(Number(parsed.myPerf)) : null,
+      oppPerf: Number.isFinite(Number(parsed.oppPerf)) && parsed.oppPerf !== null ? Math.round(Number(parsed.oppPerf)) : null,
+      rating: Number(parsed.rating) > 0 ? Math.round(Number(parsed.rating)) : null,
+      delta: Number.isFinite(Number(parsed.delta)) && parsed.delta !== null ? Math.round(Number(parsed.delta)) : null,
+      samples: Number(parsed.samples) > 0 ? Math.round(Number(parsed.samples)) : 0,
+      at: Number(parsed.at) > 0 ? Math.round(Number(parsed.at)) : 0
+    };
+    return report.result ? report : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function saveReport(user, report) {
+  try {
+    if (!report || !report.result) localStorage.removeItem(reportKey(user));
+    else localStorage.setItem(reportKey(user), JSON.stringify(report));
+  } catch (error) {
+    /* storage blocked: the card still shows this session */
+  }
+}
+
 // AFK: keep the session going without a human. Three pieces, all of them
 // deliberately small: find the button chess.com offers after a game, pick the
 // one a person would press, and keep the tab from being frozen while you are
@@ -4281,7 +4381,7 @@ const PANEL_HTML = `
         <div class="card">
           <div class="card-h"><span class="card-t">Session</span><span class="card-s" data-el="turn">–</span></div>
           <div class="rows">
-            <div class="row"><span>Your accuracy</span><b data-el="acpl">–</b></div>
+            <div class="row"><span>Loss / move</span><b data-el="acpl">–</b></div>
             <div class="row"><span>Opponent</span><b data-el="opp">–</b></div>
             <div class="row"><span>Playing at</span><b data-el="target">–</b></div>
             <div class="row"><span>Your pace</span><b data-el="pace">–</b></div>
@@ -4343,6 +4443,15 @@ const PANEL_HTML = `
           <div class="info-row"><span>Source</span><a href="https://github.com/ezurinho/chess-wraith" target="_blank" rel="noopener noreferrer">github.com/ezurinho/chess-wraith</a></div>
           <div class="card-actions">
             <button class="act" type="button" data-el="copyReport">copy report</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Last game</span><span class="card-s" data-el="reportAt">none yet</span></div>
+          <div class="rows">
+            <div class="row"><span>Result</span><b data-el="reportResult">–</b></div>
+            <div class="row"><span>You</span><b data-el="reportYou">–</b></div>
+            <div class="row"><span>Rival</span><b data-el="reportRival">–</b></div>
+            <div class="row"><span>Account</span><b data-el="reportAccount">–</b></div>
           </div>
         </div>
         <div class="card">
@@ -4598,7 +4707,7 @@ class WraithPanel {
     const band = Number(v.band) || 0;
     const acpl = v.acpl > 0 ? Math.round(v.acpl) : null;
     const boost = Number(v.slackBoost) || 0;
-    this.el.acpl.textContent = acpl === null ? '–' : `${acpl} cp${band ? ` / ${band}` : ''}`;
+    this.el.acpl.textContent = acpl === null ? '–' : `${acpl} cp${band ? ` · band ${band}` : ''}`;
     this.el.acpl2.textContent = acpl === null ? '–' : `${acpl} cp`;
     this.el.bandCap.textContent = band ? `${band} cp` : '–';
     this.el.bandFill.style.setProperty('--band', String(band && acpl !== null ? clamp(acpl / band, 0, 1) : 0));
@@ -4711,6 +4820,20 @@ class WraithPanel {
             ? 'up to date'
             : 'not checked';
     this.el.kaInfo.textContent = v.keepAlive || 'off';
+    // The card after the last game. `lastReport` is null until one finished,
+    // and a game with too few assessed moves shows the result but no average.
+    const rep = v.report;
+    const cp = (acpl) => (Number.isFinite(acpl) ? `${acpl} cp/move` : '–');
+    const like = (perf) => (Number.isFinite(perf) ? ` · like ${perf}` : '');
+    this.el.reportAt.textContent = rep && rep.at ? eventLabel(rep.at, Date.now()) : 'none yet';
+    this.el.reportResult.textContent = rep && rep.result
+      ? `${rep.result}${rep.moves ? ` · ${rep.moves} moves` : ''}`
+      : '–';
+    this.el.reportYou.textContent = rep && Number.isFinite(rep.myAcpl) ? cp(rep.myAcpl) + like(rep.myPerf) : 'not enough moves';
+    this.el.reportRival.textContent = rep && Number.isFinite(rep.oppAcpl) ? cp(rep.oppAcpl) + like(rep.oppPerf) : '–';
+    this.el.reportAccount.textContent = rep && rep.rating
+      ? `${rep.rating}${Number.isFinite(rep.delta) ? ` · ${rep.delta >= 0 ? '+' : ''}${rep.delta}` : ''}`
+      : '–';
 
 
     for (const sw of this.panel.querySelectorAll('[data-toggle]')) {
@@ -4760,6 +4883,8 @@ function adoptAccountSettings(user) {
   syncRepertoire();
   // The history is per account too: another login must not inherit the night.
   state.events = readHistory();
+  // The last game's card is per account as well: the numbers belong to a player.
+  state.lastReport = readReport(name);
   // The probe count belongs to the account it was counted for; the report would
   // otherwise add one login's probes to another's repertoire line.
   state.probes = 0;
@@ -4890,6 +5015,8 @@ const state = {
   lossRecordedFen: null,
   myCpLosses: [],
   myAcpl: 0,
+  // The card after the last finished game; read back per account on boot.
+  lastReport: null,
   effectiveElo: null,
   warn: '',
   clockSeconds: null,
@@ -5726,6 +5853,7 @@ function statusView() {
     updateChecking: state.updateChecking,
     throttled: state.throttled,
     results: state.results,
+    report: state.lastReport,
     sessionMs: Date.now() - state.sessionStart,
     restMs: Math.max(0, cfg.sessionMaxMs - (Date.now() - state.sessionStart)),
     games: state.gamesPlayed,
@@ -6221,6 +6349,18 @@ function runScan() {
         state.resultGame = state.gamesPlayed;
         state.results[result] += 1;
         saveSession();
+        // The card is built while the losses of this game are still in memory:
+        // `onNewGame` clears them, so a report made a second later would be empty.
+        state.lastReport = gameReport({
+          result,
+          moves: snapshot.plyCount,
+          myLosses: state.myCpLosses,
+          oppLosses: state.oppCpLosses,
+          rating: anchoredRating(),
+          at: Date.now()
+        });
+        saveReport(state.settingsAccount || currentAccount(), state.lastReport);
+        if (state.lastReport.myAcpl != null) noteEvent(`report: ${result} · ${state.lastReport.myAcpl} cp`);
       }
       state.warn = cfg.autoRematch ? 'game over · next in a moment' : 'game over';
       clearAutoTimer();
@@ -6421,6 +6561,9 @@ function reportText() {
       ? `repertoire w ${openingTop(opening.white)} · b vs ${openingByFirstTop(opening)} (${opening.games} games)${state.probes ? ` · probe ${state.probes}` : ''}`
       : '',
     `settings depth ${cfg.maxDepth}${depthForAccount(cfg.maxDepth, state.effectiveElo) > cfg.maxDepth ? `->${depthForAccount(cfg.maxDepth, state.effectiveElo)}` : ''} · ${cfg.moveTimeMs} ms · slack ${cfg.humanSlackCp}${state.slackBoost ? `+${state.slackBoost}` : ''} cp · auto ${state.autoPlay ? 'on' : 'off'} · afk ${cfg.autoRematch ? 'on' : 'off'} · theme ${cfg.theme}`,
+    state.lastReport
+      ? `last game ${state.lastReport.result || '?'}${state.lastReport.moves ? ' · ' + state.lastReport.moves + ' moves' : ''} · you ${state.lastReport.myAcpl ?? '–'} cp/move${state.lastReport.myPerf ? ' (like ' + state.lastReport.myPerf + ')' : ''} · rival ${state.lastReport.oppAcpl ?? '–'}${state.lastReport.oppPerf ? ' (like ' + state.lastReport.oppPerf + ')' : ''} · account ${state.lastReport.rating ?? '–'}${Number.isFinite(state.lastReport.delta) ? ' (' + (state.lastReport.delta >= 0 ? '+' : '') + state.lastReport.delta + ')' : ''}`
+      : '',
     state.throttled ? 'tab hidden: timers batched' : '',
     state.warn ? `warn ${state.warn}` : ''
   ];

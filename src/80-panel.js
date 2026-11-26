@@ -284,7 +284,7 @@ const PANEL_HTML = `
         <div class="card">
           <div class="card-h"><span class="card-t">Session</span><span class="card-s" data-el="turn">–</span></div>
           <div class="rows">
-            <div class="row"><span>Your accuracy</span><b data-el="acpl">–</b></div>
+            <div class="row"><span>Loss / move</span><b data-el="acpl">–</b></div>
             <div class="row"><span>Opponent</span><b data-el="opp">–</b></div>
             <div class="row"><span>Playing at</span><b data-el="target">–</b></div>
             <div class="row"><span>Your pace</span><b data-el="pace">–</b></div>
@@ -346,6 +346,15 @@ const PANEL_HTML = `
           <div class="info-row"><span>Source</span><a href="https://github.com/ezurinho/chess-wraith" target="_blank" rel="noopener noreferrer">github.com/ezurinho/chess-wraith</a></div>
           <div class="card-actions">
             <button class="act" type="button" data-el="copyReport">copy report</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><span class="card-t">Last game</span><span class="card-s" data-el="reportAt">none yet</span></div>
+          <div class="rows">
+            <div class="row"><span>Result</span><b data-el="reportResult">–</b></div>
+            <div class="row"><span>You</span><b data-el="reportYou">–</b></div>
+            <div class="row"><span>Rival</span><b data-el="reportRival">–</b></div>
+            <div class="row"><span>Account</span><b data-el="reportAccount">–</b></div>
           </div>
         </div>
         <div class="card">
@@ -601,7 +610,7 @@ class WraithPanel {
     const band = Number(v.band) || 0;
     const acpl = v.acpl > 0 ? Math.round(v.acpl) : null;
     const boost = Number(v.slackBoost) || 0;
-    this.el.acpl.textContent = acpl === null ? '–' : `${acpl} cp${band ? ` / ${band}` : ''}`;
+    this.el.acpl.textContent = acpl === null ? '–' : `${acpl} cp${band ? ` · band ${band}` : ''}`;
     this.el.acpl2.textContent = acpl === null ? '–' : `${acpl} cp`;
     this.el.bandCap.textContent = band ? `${band} cp` : '–';
     this.el.bandFill.style.setProperty('--band', String(band && acpl !== null ? clamp(acpl / band, 0, 1) : 0));
@@ -714,6 +723,20 @@ class WraithPanel {
             ? 'up to date'
             : 'not checked';
     this.el.kaInfo.textContent = v.keepAlive || 'off';
+    // The card after the last game. `lastReport` is null until one finished,
+    // and a game with too few assessed moves shows the result but no average.
+    const rep = v.report;
+    const cp = (acpl) => (Number.isFinite(acpl) ? `${acpl} cp/move` : '–');
+    const like = (perf) => (Number.isFinite(perf) ? ` · like ${perf}` : '');
+    this.el.reportAt.textContent = rep && rep.at ? eventLabel(rep.at, Date.now()) : 'none yet';
+    this.el.reportResult.textContent = rep && rep.result
+      ? `${rep.result}${rep.moves ? ` · ${rep.moves} moves` : ''}`
+      : '–';
+    this.el.reportYou.textContent = rep && Number.isFinite(rep.myAcpl) ? cp(rep.myAcpl) + like(rep.myPerf) : 'not enough moves';
+    this.el.reportRival.textContent = rep && Number.isFinite(rep.oppAcpl) ? cp(rep.oppAcpl) + like(rep.oppPerf) : '–';
+    this.el.reportAccount.textContent = rep && rep.rating
+      ? `${rep.rating}${Number.isFinite(rep.delta) ? ` · ${rep.delta >= 0 ? '+' : ''}${rep.delta}` : ''}`
+      : '–';
 
 
     for (const sw of this.panel.querySelectorAll('[data-toggle]')) {
