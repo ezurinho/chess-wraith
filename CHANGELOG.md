@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.51.1 — 2026-11-26
+
+A long session keeps reading the archive instead of the hour it booted.
+
+- The shared archive read now lives 15 minutes (`ARCHIVE_TTL_MS`), so the
+  repertoire follows the account through a long AFK session instead of freezing at
+  the first read. Measured: two reads inside the window cost one request, a read
+  after 16 minutes costs another.
+- 194 tests.
+
 ## 1.51.0 — 2026-11-26
 
 One archive read feeds both the pace and the openings.

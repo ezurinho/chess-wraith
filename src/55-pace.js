@@ -272,10 +272,13 @@ function monthPath(offset) {
 // chess.com answers with a 429. The promise is cached per month, so both models
 // await the same read; a failed read is dropped so the next scan can retry.
 const archiveReads = new Map();
-function archiveGames(user, offset) {
+// A long session must not keep opening moves from the hour it booted: the cache
+// lives one pacing refresh, then the archive is read again.
+const ARCHIVE_TTL_MS = 15 * 60 * 1000;
+function archiveGames(user, offset, force) {
   const key = `${String(user).toLowerCase()}|${monthPath(offset)}`;
   const hit = archiveReads.get(key);
-  if (hit) return hit;
+  if (hit && !force && Date.now() - hit.at < ARCHIVE_TTL_MS) return hit.promise;
   const pending = (async () => {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
@@ -293,8 +296,11 @@ function archiveGames(user, offset) {
       if (timer) clearTimeout(timer);
     }
   })();
-  archiveReads.set(key, pending);
-  pending.catch(() => archiveReads.delete(key));
+  archiveReads.set(key, { promise: pending, at: Date.now() });
+  pending.catch(() => {
+    const cur = archiveReads.get(key);
+    if (cur && cur.promise === pending) archiveReads.delete(key);
+  });
   return pending;
 }
 
@@ -327,7 +333,7 @@ async function syncPaceProfile(force) {
     let rawGames = [];
     if (force) forgetArchive(user);
     for (const offset of [0, 1]) {
-      const games = await archiveGames(user, offset);
+      const games = await archiveGames(user, offset, force);
       // The current month is the freshest repertoire; a previous one only fills in
       // when this month has no finished class games yet.
       if (rawGames.length === 0) rawGames = games;
@@ -389,7 +395,7 @@ async function syncRepertoire(force) {
     let opening = null;
     if (force) forgetArchive(user);
     for (const offset of [0, 1]) {
-      const parsed = repertoireFromGames(await archiveGames(user, offset), user);
+      const parsed = repertoireFromGames(await archiveGames(user, offset, force), user);
       if (parsed.games >= 5) { opening = parsed; break; }
     }
     if (!opening) throw new Error('no games');

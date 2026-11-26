@@ -197,6 +197,13 @@ says is a guess and not a substitute.
 
 ## Two models of one archive read it once
 
+Sharing has a price: a boot that cached the archive would keep the openings from
+the minute it loaded, and the 20-minute refresh below it would re-read a promise
+instead of the archive. The cache therefore lives **15 minutes** (`ARCHIVE_TTL_MS`),
+one pacing refresh, and after that the next read is real. Measured in the harness:
+two reads inside the window cost one request, a read after 16 minutes costs another.
+
+
 The pace profile and the repertoire were reading `pub/player/<user>/games/<month>`
 independently: two requests per month, and the second one is exactly what chess.com
 answers with a 429 (measured threshold: keep >=1.1 s between requests).
@@ -822,7 +829,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 193 tests in 22 files (7 of them boot the whole script) |
+| Tests | 22 files | 194 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

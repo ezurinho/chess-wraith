@@ -343,3 +343,27 @@ test('two models of one archive read it once', async () => {
   await retry.syncRepertoire(true).catch(() => null);
   assert.ok(first >= 1 && failing.length > first, 'a failed read is retried');
 });
+
+test('a cached archive is not kept forever', async () => {
+  const calls = [];
+  const store = new Map();
+  const games = [game('hikaru', 'a', '1. e4 e5'), game('hikaru', 'b', '1. d4 d5')];
+  const fetcher = async (url) => {
+    calls.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ games }) };
+  };
+  const api = harness(store, fetcher);
+  await api.syncRepertoire();
+  const first = calls.length;
+  assert.ok(first >= 1);
+  await api.syncRepertoire();
+  assert.equal(calls.length, first, 'inside the window the read is shared');
+  const realNow = Date.now;
+  Date.now = () => realNow() + 16 * 60 * 1000;
+  try {
+    await api.syncRepertoire(true);
+  } finally {
+    Date.now = realNow;
+  }
+  assert.ok(calls.length > first, 'after the window the archive is read again');
+});

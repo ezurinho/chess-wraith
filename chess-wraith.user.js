@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.51.0
+// @version      1.51.1
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.51.0';
+const VERSION = '1.51.1';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.51.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.51.1/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3011,10 +3011,13 @@ function monthPath(offset) {
 // chess.com answers with a 429. The promise is cached per month, so both models
 // await the same read; a failed read is dropped so the next scan can retry.
 const archiveReads = new Map();
-function archiveGames(user, offset) {
+// A long session must not keep opening moves from the hour it booted: the cache
+// lives one pacing refresh, then the archive is read again.
+const ARCHIVE_TTL_MS = 15 * 60 * 1000;
+function archiveGames(user, offset, force) {
   const key = `${String(user).toLowerCase()}|${monthPath(offset)}`;
   const hit = archiveReads.get(key);
-  if (hit) return hit;
+  if (hit && !force && Date.now() - hit.at < ARCHIVE_TTL_MS) return hit.promise;
   const pending = (async () => {
     const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), 10000) : null;
@@ -3032,8 +3035,11 @@ function archiveGames(user, offset) {
       if (timer) clearTimeout(timer);
     }
   })();
-  archiveReads.set(key, pending);
-  pending.catch(() => archiveReads.delete(key));
+  archiveReads.set(key, { promise: pending, at: Date.now() });
+  pending.catch(() => {
+    const cur = archiveReads.get(key);
+    if (cur && cur.promise === pending) archiveReads.delete(key);
+  });
   return pending;
 }
 
@@ -3066,7 +3072,7 @@ async function syncPaceProfile(force) {
     let rawGames = [];
     if (force) forgetArchive(user);
     for (const offset of [0, 1]) {
-      const games = await archiveGames(user, offset);
+      const games = await archiveGames(user, offset, force);
       // The current month is the freshest repertoire; a previous one only fills in
       // when this month has no finished class games yet.
       if (rawGames.length === 0) rawGames = games;
@@ -3128,7 +3134,7 @@ async function syncRepertoire(force) {
     let opening = null;
     if (force) forgetArchive(user);
     for (const offset of [0, 1]) {
-      const parsed = repertoireFromGames(await archiveGames(user, offset), user);
+      const parsed = repertoireFromGames(await archiveGames(user, offset, force), user);
       if (parsed.games >= 5) { opening = parsed; break; }
     }
     if (!opening) throw new Error('no games');
