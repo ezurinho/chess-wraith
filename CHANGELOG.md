@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.78.0 — 2026-11-27
+
+Every move is measured, not just the improvised ones.
+
+- A calibration at a 1320 account reported 0 cp/move for thirteen moves. The
+  non-improvised moves were never measured: they pushed the engine's own slack
+  figure, which is the model marking its own homework. All moves now go through
+  the same measurement, before-eval against after-eval, by a fresh search.
+- `selection.test.js` failed about once in twenty full runs: 400 binomial samples
+  around 0.6 put a 0.55-0.65 window inside two sigma. 1000 samples now.
+
 ## 1.77.0 — 2026-11-27
 
 Review of 1.76.0: the published 82 was a measurement error.

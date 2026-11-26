@@ -1582,16 +1582,24 @@ function settleLandedMove(grid, snap, choice, move) {
   if (choice && choice.cpLoss === 0) state.top1Streak += 1;
   else state.top1Streak = 0;
   if (choice) {
-    if (choice.improvised) {
-      if (choice.afterFen && Number.isFinite(choice.beforeCp)) {
-        measureLanded({ fen: choice.afterFen, before: choice.beforeCp, turn: snap.turn, flipped: snap.flipped });
-      } else {
-        pushMyLoss(choice.cpLoss);
-      }
-      state.improvisedPicks += 1;
+    // Every move is measured the same way now, improvised or not: the eval of the
+    // position it came from against the eval of the position it creates. The
+    // engine's own slack was the measurement for non-improvised moves, which is
+    // the model marking its own homework - at a 1320 account it reported 0 cp for
+    // thirteen moves in a row.
+    const next = snap ? Chess.generateLegalMoves(snap).find((m) => Chess.moveToUci(m) === move) : null;
+    const afterFen = choice.afterFen || (next ? Chess.buildFen(next.nextState) : null);
+    const beforeCp = Number.isFinite(choice.beforeCp)
+      ? choice.beforeCp
+      : (state.analysis && state.analysis.fen === (snap && snap.fen) && state.analysis.lines && state.analysis.lines[0]
+        ? state.analysis.lines[0].whiteCp
+        : null);
+    if (afterFen && Number.isFinite(beforeCp)) {
+      measureLanded({ fen: afterFen, before: beforeCp, turn: snap.turn, flipped: snap.flipped });
     } else {
       pushMyLoss(choice.cpLoss);
     }
+    if (choice.improvised) state.improvisedPicks += 1;
   }
   recordOpening(move, plyOf(snap));
   recordPace(state.lastDelayMs);

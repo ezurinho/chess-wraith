@@ -288,9 +288,11 @@ test('a 60-of-60 habit is played almost every time, not three times in four', ()
     counts[pick.line.bestSan] += 1;
   }
   assert.ok(counts.e4 > 360, JSON.stringify(counts));
-  // And a 60/40 habit really is 60/40.
+  // And a 60/40 habit really is 60/40. 1000 samples, not 400: at 400 the
+  // binomial sd is 0.024, so a 0.55-0.65 window failed about once in twenty runs
+  // and turned a green suite red for no reason.
   const two = { e4: 0, d4: 0 };
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 1000; i++) {
     const pick = api.chooseMove(lines, cfg, { oppElo: 1600, openingShares: { e4: 0.6, d4: 0.4 } });
     if (pick.line.bestSan === 'Nf3') continue;
     two[pick.line.bestSan] += 1;

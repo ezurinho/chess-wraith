@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.77.0
+// @version      1.78.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.77.0';
+const VERSION = '1.78.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.77.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.78.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -6856,16 +6856,24 @@ function settleLandedMove(grid, snap, choice, move) {
   if (choice && choice.cpLoss === 0) state.top1Streak += 1;
   else state.top1Streak = 0;
   if (choice) {
-    if (choice.improvised) {
-      if (choice.afterFen && Number.isFinite(choice.beforeCp)) {
-        measureLanded({ fen: choice.afterFen, before: choice.beforeCp, turn: snap.turn, flipped: snap.flipped });
-      } else {
-        pushMyLoss(choice.cpLoss);
-      }
-      state.improvisedPicks += 1;
+    // Every move is measured the same way now, improvised or not: the eval of the
+    // position it came from against the eval of the position it creates. The
+    // engine's own slack was the measurement for non-improvised moves, which is
+    // the model marking its own homework - at a 1320 account it reported 0 cp for
+    // thirteen moves in a row.
+    const next = snap ? Chess.generateLegalMoves(snap).find((m) => Chess.moveToUci(m) === move) : null;
+    const afterFen = choice.afterFen || (next ? Chess.buildFen(next.nextState) : null);
+    const beforeCp = Number.isFinite(choice.beforeCp)
+      ? choice.beforeCp
+      : (state.analysis && state.analysis.fen === (snap && snap.fen) && state.analysis.lines && state.analysis.lines[0]
+        ? state.analysis.lines[0].whiteCp
+        : null);
+    if (afterFen && Number.isFinite(beforeCp)) {
+      measureLanded({ fen: afterFen, before: beforeCp, turn: snap.turn, flipped: snap.flipped });
     } else {
       pushMyLoss(choice.cpLoss);
     }
+    if (choice.improvised) state.improvisedPicks += 1;
   }
   recordOpening(move, plyOf(snap));
   recordPace(state.lastDelayMs);
