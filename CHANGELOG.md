@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.85.0 — 2026-11-27
+
+The gate that made the rate irrelevant.
+
+- `opts.improvise.length > 5` stood in for "there is something to pick from", and
+  it shut the door wherever the search offered a short list: at a 1320 account it
+  offers four moves, so the 0.20 rate added in 1.81.0 could never fire. Twelve
+  moves, zero improvised, 10 cp/move against a 60 cp band.
+- The gate asks for one alternative now. Found by measuring 1.84.0 instead of
+  trusting the unit test, which passed both before and after.
+
 ## 1.84.0 — 2026-11-27
 
 The panel was watching the engine agree with itself.

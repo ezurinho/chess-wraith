@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.84.0
+// @version      1.85.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.84.0';
+const VERSION = '1.85.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -119,7 +119,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.84.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.85.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3639,7 +3639,11 @@ function chooseMove(lines, cfg, opts = {}) {
   const target = profile.level || 0;
   // A move the search never saw, because it is not good enough to be in the top
   // N. This is what a beginner's move actually is.
-  if (target > 0 && Array.isArray(opts.improvise) && opts.improvise.length > 5) {
+  // `length > 5` was a proxy for "there is something to choose from", and it
+  // silently disabled improvising wherever the search only offered a short list:
+  // at a 1320 account the list is four moves, so the gate never opened and a
+  // 0.20 rate produced zero improvised moves in twelve.
+  if (target > 0 && Array.isArray(opts.improvise) && opts.improvise.length > 1) {
     const rnd = typeof opts.rng === 'function' ? opts.rng : Math.random;
     if (rnd() < improvisationChance(target)) {
       const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);

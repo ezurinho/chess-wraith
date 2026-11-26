@@ -212,7 +212,11 @@ function chooseMove(lines, cfg, opts = {}) {
   const target = profile.level || 0;
   // A move the search never saw, because it is not good enough to be in the top
   // N. This is what a beginner's move actually is.
-  if (target > 0 && Array.isArray(opts.improvise) && opts.improvise.length > 5) {
+  // `length > 5` was a proxy for "there is something to choose from", and it
+  // silently disabled improvising wherever the search only offered a short list:
+  // at a 1320 account the list is four moves, so the gate never opened and a
+  // 0.20 rate produced zero improvised moves in twelve.
+  if (target > 0 && Array.isArray(opts.improvise) && opts.improvise.length > 1) {
     const rnd = typeof opts.rng === 'function' ? opts.rng : Math.random;
     if (rnd() < improvisationChance(target)) {
       const pool = opts.improvise.filter((c) => c && c.uci && c.uci !== best.bestUci);
