@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CHESS WRAITH
 // @namespace    chess.wraith
-// @version      1.30.0
+// @version      1.31.0
 // @updateURL    https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.meta.js
 // @downloadURL  https://github.com/ezurinho/chess-wraith/releases/latest/download/chess-wraith.user.js
 // @description  Human-paced Chess.com assistant: local Stockfish 19 NNUE, evaluation, candidate lines and optional auto-play that waits like a person and stops when something needs you. One account, no passwords, no telemetry.
@@ -41,7 +41,7 @@ board reader and the panel all run in this tab.
 (function () {
 'use strict';
 
-const VERSION = '1.30.0';
+const VERSION = '1.31.0';
 const STORAGE_KEY = 'chess-wraith-settings-v1';
 
 // The panel checks this on boot and every six hours; both answers are public
@@ -110,7 +110,7 @@ const LEGIT = { elo: null, skill: 20, slack: 40, miss: 0, label: 'Legit' };
 
 // Pinned to the release tag, not @main: this file is executed inside chess.com,
 // so the bytes behind it must not change without a tag and a version bump.
-const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.30.0/vendor';
+const ENGINE_MIRROR = 'https://cdn.jsdelivr.net/gh/ezurinho/chess-wraith@v1.31.0/vendor';
 const ENGINE_FILES = {
   nnueJs: `${ENGINE_MIRROR}/stockfish-19-lite-single.js`,
   nnueWasm: `${ENGINE_MIRROR}/stockfish-19-lite-single.wasm`,
@@ -3701,6 +3701,7 @@ const PANEL_HTML = `
           <div class="info-row"><span>AFK</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">F</span></span></div>
           <div class="info-row"><span>Play one move</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">M</span></span></div>
           <div class="info-row"><span>Hide panel</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">H</span></span></div>
+          <div class="info-row"><span>Stop everything</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
         </div>
       </div>
     </div>
@@ -5367,6 +5368,25 @@ function attachBoard(boardEl) {
   }
 }
 
+// Hiding the panel is not stopping: the scan loop keeps playing while the window
+// is out of sight. This key is for the moment someone walks in — auto play off,
+// AFK off, timers cleared, panel gone.
+function panicStop() {
+  state.autoPlay = false;
+  cfg.autoPlayOnLoad = false;
+  cfg.autoRematch = false;
+  saveSettings(cfg);
+  clearAutoTimer();
+  clearMoveRetry();
+  clearRematchTimer();
+  engine.stop();
+  state.thinking = false;
+  state.warn = 'stopped';
+  noteEvent('panic stop · auto play and AFK off');
+  if (!panel.hidden) panel.toggleHidden();
+  refreshPanel();
+}
+
 function onKeyDown(event) {
   if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
   const key = event.key.toLowerCase();
@@ -5382,6 +5402,9 @@ function onKeyDown(event) {
   } else if (key === 'f') {
     event.preventDefault();
     toggleAfk();
+  } else if (key === 's') {
+    event.preventDefault();
+    panicStop();
   }
 }
 

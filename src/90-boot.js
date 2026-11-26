@@ -1336,6 +1336,25 @@ function attachBoard(boardEl) {
   }
 }
 
+// Hiding the panel is not stopping: the scan loop keeps playing while the window
+// is out of sight. This key is for the moment someone walks in — auto play off,
+// AFK off, timers cleared, panel gone.
+function panicStop() {
+  state.autoPlay = false;
+  cfg.autoPlayOnLoad = false;
+  cfg.autoRematch = false;
+  saveSettings(cfg);
+  clearAutoTimer();
+  clearMoveRetry();
+  clearRematchTimer();
+  engine.stop();
+  state.thinking = false;
+  state.warn = 'stopped';
+  noteEvent('panic stop · auto play and AFK off');
+  if (!panel.hidden) panel.toggleHidden();
+  refreshPanel();
+}
+
 function onKeyDown(event) {
   if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
   const key = event.key.toLowerCase();
@@ -1351,6 +1370,9 @@ function onKeyDown(event) {
   } else if (key === 'f') {
     event.preventDefault();
     toggleAfk();
+  } else if (key === 's') {
+    event.preventDefault();
+    panicStop();
   }
 }
 

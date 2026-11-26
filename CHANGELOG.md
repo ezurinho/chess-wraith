@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.31.0 — 2026-11-25
+
+A key that stops the session, not just the panel.
+
+- `Alt+Shift+H` hides the panel by setting `display:none`. Nothing in the play
+  loop reads that flag, so a hidden panel kept playing: the one gesture that looks
+  like stopping did not stop anything.
+- `Alt+Shift+S` is a panic stop: auto-play off, `autoPlayOnLoad` off, AFK off,
+  search cancelled, move and rematch timers cleared, panel hidden, and a
+  `panic stop` line in the per-account history so the state is legible later.
+- The panel's key list and the README table both carry it.
+- 154 tests: a jsdom test turns auto-play and AFK on, sends the key, and asserts
+  all four effects.
+
 ## 1.30.0 — 2026-11-25
 
 The docs prove their numbers.

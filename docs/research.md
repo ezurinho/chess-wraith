@@ -195,6 +195,19 @@ the code still borrows the nearest class as it did before, which the earlier
 measurement (37 accounts, 31 of 33 differ by more than 400 Elo between classes)
 says is a guess and not a substitute.
 
+## Hide is not stop
+
+`panel.toggleHidden()` sets `style.display = 'none'` and flips a boolean. Nothing
+in the play path reads that boolean: `grep panel\.hidden src/` returns the panel
+itself and one line in `panicStop`. So a hidden panel with auto-play armed is a
+script still playing at full speed behind an empty corner — which is the exact
+shape of the moment someone walks into the room.
+
+`Alt+Shift+S` therefore does the work hiding does not: auto-play off,
+`autoPlayOnLoad` off, `autoRematch` off, the search cancelled, the move and
+rematch timers cleared, and only then the panel hidden. It writes a `panic stop`
+line to the per-account history, so the next person to open the panel can tell
+the difference between 'it never played' and 'it was stopped'.
 ## Timers in a hidden tab
 
 What is documented: Chrome has throttled timers in hidden pages since 88, in
@@ -340,7 +353,7 @@ are automated and lists 100+ gameplay factors.
 | Input | synthetic `KeyboardEvent` | synthetic `PointerEvent` |
 | Account model | per-account pace ceiling from the account's own top speed | published rating per time class + learned pace + opening memory + earned accuracy slack, all keyed by username |
 | Session model | queue with breaks, DQ streak handling | rematch loop, keep-alive, hand-on-board stop |
-| Tests | 22 files | 153 tests in 22 files (6 of them boot the whole script) |
+| Tests | 22 files | 154 tests in 22 files (7 of them boot the whole script) |
 | Release | dispatch, gated by checks | same, plus a version/mirror gate |
 
 The gap that remains is verification: nitro-wraith has a test file per module and

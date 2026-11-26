@@ -121,3 +121,20 @@ test('boot reaches the engine and asks it for a move', async () => {
     stop();
   }
 });
+
+test('the panic key stops the session instead of only hiding the panel', () => {
+  const { window, api, stop } = boot();
+  try {
+    api.state.autoPlay = true;
+    api.cfg.autoRematch = true;
+    api.cfg.autoPlayOnLoad = true;
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 's', altKey: true, shiftKey: true }));
+    assert.equal(api.state.autoPlay, false, 'auto play is off');
+    assert.equal(api.cfg.autoRematch, false, 'AFK is off');
+    assert.equal(api.cfg.autoPlayOnLoad, false, 'and it will not re-arm on the next load');
+    assert.equal(api.panel.hidden, true, 'the panel is gone');
+    assert.match(api.state.events[0].text, /panic stop/, 'and the history says why');
+  } finally {
+    stop();
+  }
+});

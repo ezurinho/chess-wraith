@@ -364,6 +364,7 @@ const PANEL_HTML = `
           <div class="info-row"><span>AFK</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">F</span></span></div>
           <div class="info-row"><span>Play one move</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">M</span></span></div>
           <div class="info-row"><span>Hide panel</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">H</span></span></div>
+          <div class="info-row"><span>Stop everything</span><span><span class="kbd">Alt</span> <span class="kbd">Shift</span> <span class="kbd">S</span></span></div>
         </div>
       </div>
     </div>
