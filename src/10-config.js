@@ -69,6 +69,7 @@ const CONFIG = {
 
   // Panel
   theme: 'carbon', // 'carbon' | 'aurora' | 'sunset' | 'ice' | 'violet' | 'rgb'
+  motion: 'standard', // 'calm' | 'standard' | 'full'
 
   panelCollapsed: false,
   // The rail remembers the view: `live`, `tune`, `info` or `stats`.

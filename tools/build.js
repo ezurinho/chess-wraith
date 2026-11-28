@@ -23,6 +23,7 @@ const HEADER = '00-header.js';
 const MODULES = [
   '10-config.js',
   '20-utils.js',
+  '25-update.js',
   '30-chess.js',
   '35-chess-glue.js',
   '40-board.js',

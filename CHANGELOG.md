@@ -1,6 +1,6 @@
-# Changelog
+﻿# Changelog
 
-## 1.89.2 — 2026-11-26
+## 1.89.2 â€” 2026-11-26
 
 The engine and the update answer have a hash to prove themselves.
 
@@ -15,7 +15,7 @@ The engine and the update answer have a hash to prove themselves.
   corrupted NNUE sidecar (only the verified JS fallback runs); a third pins the
   vendor hashes and the manifest to the committed artifact.
 
-## 1.89.1 — 2026-11-26
+## 1.89.1 â€” 2026-11-26
 
 A passive tab can no longer rearm a stopped session.
 
@@ -27,7 +27,7 @@ A passive tab can no longer rearm a stopped session.
 - One boot regression holds the lease in another tab, seeds a stopped account,
   takes the lease back and checks AUTO stays off.
 
-## 1.89.0 — 2026-11-26
+## 1.89.0 â€” 2026-11-26
 
 The session cap is a stop, not a rollover.
 
@@ -43,7 +43,7 @@ The session cap is a stop, not a rollover.
   stays off and the session is gone, then resumes and checks the new run starts
   at one game.
 
-## 1.88.0 — 2026-11-26
+## 1.88.0 â€” 2026-11-26
 
 The rail behaves like Nitro's.
 
@@ -54,7 +54,7 @@ The rail behaves like Nitro's.
 - `Alt+Shift+T` cycles the six themes without opening Tune.
 - Three tests cover the restored tab, the keyboard path and the theme hotkey.
 
-## 1.87.0 — 2026-11-26
+## 1.87.0 â€” 2026-11-26
 
 The panel stays where you put it.
 
@@ -64,7 +64,7 @@ The panel stays where you put it.
   returns it to the default corner. A window resize reclamps a saved corner.
 - Two regressions seed a saved corner, reload it, and drive the keyboard path.
 
-## 1.86.2 — 2026-11-27
+## 1.86.2 â€” 2026-11-27
 
 AUTO is a mode, not a switch.
 
@@ -83,7 +83,7 @@ AUTO is a mode, not a switch.
 - Two regressions: a stored false cannot boot AUTO off, and Alt+Shift+A can
   resume but never toggle it off.
 
-## 1.86.1 — 2026-11-27
+## 1.86.1 â€” 2026-11-27
 
 The eight lines 1.86.0 promised never left the engine.
 
@@ -93,7 +93,7 @@ The eight lines 1.86.0 promised never left the engine.
 - A fake-worker test asks for eight lines and checks that eight formatted lines
   come back; it fails on the 1.86.0 clamp.
 
-## 1.86.0 — 2026-11-27
+## 1.86.0 â€” 2026-11-27
 
 Four lines were not enough to price a 60 cp band.
 
@@ -105,7 +105,7 @@ Four lines were not enough to price a 60 cp band.
 - The 1320 rung is re-measured next; the previous run (20 plies, 0 improvised,
   5 cp/move) is what motivated this.
 
-## 1.85.0 — 2026-11-27
+## 1.85.0 â€” 2026-11-27
 
 The gate that made the rate irrelevant.
 
@@ -116,7 +116,7 @@ The gate that made the rate irrelevant.
 - The gate asks for one alternative now. Found by measuring 1.84.0 instead of
   trusting the unit test, which passed both before and after.
 
-## 1.84.0 — 2026-11-27
+## 1.84.0 â€” 2026-11-27
 
 The panel was watching the engine agree with itself.
 
@@ -127,7 +127,7 @@ The panel was watching the engine agree with itself.
 - Costs one extra search per move. Not measured live yet; the 1320 rung is the run
   that will show it.
 
-## 1.83.0 — 2026-11-27
+## 1.83.0 â€” 2026-11-27
 
 Review of 1.82.0: the 133 rung landed on the band's floor.
 
@@ -137,7 +137,7 @@ Review of 1.82.0: the 133 rung landed on the band's floor.
 - Two rungs, one method: 133 delivers 261 (band 270-320), 600 delivers 236
   (band 200). Both inside one game's spread of their band.
 
-## 1.82.0 — 2026-11-27
+## 1.82.0 â€” 2026-11-27
 
 Review of 1.81.0: the 600 rung moved from 159 to 236 on a 200 band.
 
@@ -145,7 +145,7 @@ Review of 1.81.0: the 600 rung moved from 159 to 236 on a 200 band.
   took the rung from 20% under to 18% over. The dilution is gone; what is left is
   one game's spread, and it is written down as such.
 
-## 1.81.0 — 2026-11-27
+## 1.81.0 â€” 2026-11-27
 
 The improvisation rate was a curve through its own fitting points.
 
@@ -158,7 +158,7 @@ The improvisation rate was a curve through its own fitting points.
   and the test says so instead of pretending otherwise.
 - Not re-measured live yet: the 600 rung was 159 against 200 with the old rate.
 
-## 1.80.0 — 2026-11-27
+## 1.80.0 â€” 2026-11-27
 
 Review of 1.79.0: the top of the ladder delivers nothing, and it is published.
 
@@ -170,7 +170,7 @@ Review of 1.79.0: the top of the ladder delivers nothing, and it is published.
   reference would price.
 - Grades move down, not up: product 8.5, verification 8.3, overall 8.4.
 
-## 1.79.0 — 2026-11-27
+## 1.79.0 â€” 2026-11-27
 
 Review of 1.78.0: the ladder, with the rung that cannot be measured.
 
@@ -182,7 +182,7 @@ Review of 1.78.0: the ladder, with the rung that cannot be measured.
 - Defect 9 (the model graded its own non-improvised moves) and defect 10 (a test
   that failed one full run in twenty) are in the review with the numbers.
 
-## 1.78.0 — 2026-11-27
+## 1.78.0 â€” 2026-11-27
 
 Every move is measured, not just the improvised ones.
 
@@ -193,7 +193,7 @@ Every move is measured, not just the improvised ones.
 - `selection.test.js` failed about once in twenty full runs: 400 binomial samples
   around 0.6 put a 0.55-0.65 window inside two sigma. 1000 samples now.
 
-## 1.77.0 — 2026-11-27
+## 1.77.0 â€” 2026-11-27
 
 Review of 1.76.0: the published 82 was a measurement error.
 
@@ -203,17 +203,17 @@ Review of 1.76.0: the published 82 was a measurement error.
 - The correction is in `docs/review.md` next to the number it replaces, and
   `docs/research.md` marks which figures use the old metric.
 
-## 1.76.0 — 2026-11-27
+## 1.76.0 â€” 2026-11-27
 
 Measured properly, the band was overshot: six candidates, not three.
 
 - With the ACPL definition fixed in 1.75.0, a 133 account delivered 343 cp/move
-  against the 270-320 band — above it, with four of fifteen moves clamped at 600.
+  against the 270-320 band â€” above it, with four of fifteen moves clamped at 600.
 - The shortlist was ordered by the restricted search's price, which is the noisy
   number, so the candidate that verified best was often thrown away. Six are
   verified now and the best verified one is played.
 
-## 1.75.0 — 2026-11-27
+## 1.75.0 â€” 2026-11-27
 
 The loss was measured after the opponent's reply, which refunded it.
 
@@ -221,12 +221,12 @@ The loss was measured after the opponent's reply, which refunded it.
   my move creates. The panel measured after the reply, so when the opponent gave
   the material back the loss became 0: a move verified at 293 cp reported 82.
 - Improvised moves now carry the position they create and the eval they came from,
-  and the panel re-measures that position itself — independent of the search that
-  chose the move — as soon as the move lands.
+  and the panel re-measures that position itself â€” independent of the search that
+  chose the move â€” as soon as the move lands.
 - `recordMyMeasuredLoss`, its `pendingMyLoss` field and the scan-timing guard are
   gone: one definition, measured in one place.
 
-## 1.74.0 — 2026-11-27
+## 1.74.0 â€” 2026-11-27
 
 Review of 1.73.0: the first calibration against a same-level opponent.
 
@@ -238,7 +238,7 @@ Review of 1.73.0: the first calibration against a same-level opponent.
   vanished when the opponent was fast, and the restricted price that called a move
   293 when it cost 0.
 
-## 1.73.0 — 2026-11-27
+## 1.73.0 â€” 2026-11-27
 
 The restricted search proposes, a real search disposes.
 
@@ -246,10 +246,10 @@ The restricted search proposes, a real search disposes.
   a 133 account: the multi-move restricted search priced a candidate at 293 and
   the position after it evaluated 0 worse.
 - The three best-ranked candidates are now each verified with a plain full search
-  of the position the move creates, and the verified difference — the same
-  subtraction the panel uses afterwards — decides which one is played.
+  of the position the move creates, and the verified difference â€” the same
+  subtraction the panel uses afterwards â€” decides which one is played.
 
-## 1.72.0 — 2026-11-27
+## 1.72.0 â€” 2026-11-27
 
 Priced at the depth the loss is measured at.
 
@@ -260,7 +260,7 @@ Priced at the depth the loss is measured at.
 - The improvised search now runs at `cfg.maxDepth` with a 900 ms budget and six
   candidates instead of ten, so the price and the measurement share a depth.
 
-## 1.71.0 — 2026-11-27
+## 1.71.0 â€” 2026-11-27
 
 The price of an improvised move was a depth difference.
 
@@ -274,7 +274,7 @@ The price of an improvised move was a depth difference.
 - The engine's best move now enters the restricted search, and the baseline is its
   line at the same depth. The multiplier is gone.
 
-## 1.70.0 — 2026-11-27
+## 1.70.0 â€” 2026-11-27
 
 The loss was only counted when the opponent was slow.
 
@@ -284,9 +284,9 @@ The loss was only counted when the opponent was slow.
   opponent delivers both plies inside one scan.
 - The guard reads the board now: the FEN moved, the ply did not go backwards, and
   it is my turn again. The measurement no longer depends on how fast the opponent
-  is — which is the one thing a same-level calibration changes.
+  is â€” which is the one thing a same-level calibration changes.
 
-## 1.69.0 — 2026-11-27
+## 1.69.0 â€” 2026-11-27
 
 A debug helper for the calibration nobody could run.
 
@@ -296,7 +296,7 @@ A debug helper for the calibration nobody could run.
   the rules module deletes itself from the page globals after boot.
 - `ChessWraith.legalMoves()` returns every legal move in UCI. Debug build only.
 
-## 1.68.0 — 2026-11-27
+## 1.68.0 â€” 2026-11-27
 
 Review of 1.67.0, with the sources behind the claims.
 
@@ -308,7 +308,7 @@ Review of 1.67.0, with the sources behind the claims.
   move lands on the right squares.
 - Four games at a 133 account now published together: 185.8, 118.2, 62.0, 104.5.
 
-## 1.67.0 — 2026-11-27
+## 1.67.0 â€” 2026-11-27
 
 The second attempt is not a different rule.
 
@@ -322,27 +322,27 @@ The second attempt is not a different rule.
 - Both attempts now share one verdict, `Chess.moveLanded`, returning `landed`,
   `wrong` or `none`, and one accounting function, `settleLandedMove`.
 
-## 1.66.1 — 2026-11-27
+## 1.66.1 â€” 2026-11-27
 
 Review of 1.66.0: three games, three numbers, and the spread is the finding.
 
 - 185.8, 118.2 and 62.0 cp/move at the same 133 account, three releases, three
-  24–26 ply sessions. Thirteen white moves is not a sample.
+  24â€“26 ply sessions. Thirteen white moves is not a sample.
 - The band is a design, not a result. `docs/review.md` says so, next to the
   measurements and the defect that produced each release.
 
-## 1.66.0 — 2026-11-27
+## 1.66.0 â€” 2026-11-27
 
 Half the moves wrong is not a 133.
 
 - Measured on 1.65.2, live, 26 plies: 118 cp/move. The improvised moves were
-  right on the band — 247, 555, 215, 265, 147 — but only five of thirteen moves
+  right on the band â€” 247, 555, 215, 265, 147 â€” but only five of thirteen moves
   were improvised, so the game averaged half the band.
 - The rate cap goes from 0.5 to 0.85 and the denominator from 480 to 400: at 293
   it is now one move in 1.4 rather than one in two. A 133 does not play half its
   moves well.
 
-## 1.65.2 — 2026-11-27
+## 1.65.2 â€” 2026-11-27
 
 A random list of candidates misses the expensive move.
 
@@ -352,7 +352,7 @@ A random list of candidates misses the expensive move.
 - Half the candidates now come from the moves that leave material loose, the
   other half at random. The engine still prices all ten and picks.
 
-## 1.65.1 — 2026-11-27
+## 1.65.1 â€” 2026-11-27
 
 Aim above the band, because the opponent declines.
 
@@ -362,7 +362,7 @@ Aim above the band, because the opponent declines.
 - The candidate is chosen to be priced at 1.6x the band. The price is still what
   the panel reports, not the band.
 
-## 1.65.0 — 2026-11-27
+## 1.65.0 â€” 2026-11-27
 
 The improvised move is priced by the engine.
 
@@ -377,16 +377,16 @@ The improvised move is priced by the engine.
 - Mate in one is still refused, and the price is thrown away if the board moved
   while the engine was answering.
 
-## 1.64.1 — 2026-11-27
+## 1.64.1 â€” 2026-11-27
 
 The review is the release note.
 
 - `docs/review.md` rewritten for 1.64.0: the three measurement defects the live
-  sessions found, the strength table (133 asks 270–320 cp/move, 66.5 delivered),
+  sessions found, the strength table (133 asks 270â€“320 cp/move, 66.5 delivered),
   the competitor table, and the next release named.
 - No code change.
 
-## 1.64.0 — 2026-11-27
+## 1.64.0 â€” 2026-11-27
 
 A click can move a piece I did not ask for.
 
@@ -394,27 +394,27 @@ A click can move a piece I did not ask for.
   selected the wrong piece, the board moved it, the grid changed, and `playMove`
   called that a success because it only compared "changed" with "not changed".
 - The landed position is now compared with the position the rules say that move
-  produces (`generateLegalMoves` → `nextState.grid`). A different move is
+  produces (`generateLegalMoves` â†’ `nextState.grid`). A different move is
   reported as such and is not counted as played.
 
-## 1.63.3 — 2026-11-27
+## 1.63.3 â€” 2026-11-27
 
 A hanging move is chosen, not weighed.
 
 - Measured on 1.63.2, live, at a 133 account: five improvised moves in ten and
-  6 cp/move. Weighting the hanging move at 2.5 per point was not enough — a free
+  6 cp/move. Weighting the hanging move at 2.5 per point was not enough â€” a free
   pawn capture weighs more, and most moves leave nothing hanging at all, so the
   pool fell back to good moves.
 - When the pool has a move that leaves material on a covered square, that move is
   picked. Otherwise the old weighting stands.
 
-## 1.63.2 — 2026-11-27
+## 1.63.2 â€” 2026-11-27
 
 The improvised move hung nothing.
 
 - Measured on 1.63.1, live, at a 133 account: ten moves, three of them
   improvised, 40 cp/move against a 293 band. The capture-first weighting was
-  the problem — taking a free piece is a good move, so the "beginner" played
+  the problem â€” taking a free piece is a good move, so the "beginner" played
   well and the band was never reachable.
 - `hangingAfter` reads the board after each candidate: the worst of the account's
   pieces the opponent attacks and nobody defends. `beginnerWeight` adds 2.5 per
@@ -422,7 +422,7 @@ The improvised move hung nothing.
   is the shape of a 133's move: material first, then the piece back.
 - `isSquareAttacked` is exported for it.
 
-## 1.63.1 — 2026-11-27
+## 1.63.1 â€” 2026-11-27
 
 The loss of an improvised move was the target, not a measurement.
 
@@ -436,7 +436,7 @@ The loss of an improvised move was the target, not a measurement.
   `myLossFromWhiteCp`, tested from both sides.
 - A move that improves is not a loss, and one move is capped at 600 cp.
 
-## 1.63.0 — 2026-11-27
+## 1.63.0 â€” 2026-11-27
 
 The beginner model could never run.
 
@@ -451,17 +451,17 @@ The beginner model could never run.
   and an improvised move ~490, so `p = (target - 8) / 480`, clamped at 0.5.
   At 1245 that is one move in eight; at 133, one in two.
 
-## 1.62.0 — 2026-11-27
+## 1.62.0 â€” 2026-11-27
 
 A review with the live board behind it.
 
 - New `docs/review.md`: grade per area, the comparison with A.C.A.S., chesshook
-  and Game Review, and the primary sources (Stockfish 1320–3190, chess.com's
+  and Game Review, and the primary sources (Stockfish 1320â€“3190, chess.com's
   closure numbers and the sentence about analysing games in progress).
-- The review records what the live run proved — quiet move, castling, en passant
-  and promotion through real pointer events — and what it broke: the arrows.
+- The review records what the live run proved â€” quiet move, castling, en passant
+  and promotion through real pointer events â€” and what it broke: the arrows.
 
-## 1.61.2 — 2026-11-27
+## 1.61.2 â€” 2026-11-27
 
 The board arrows never drew.
 
@@ -475,7 +475,7 @@ The board arrows never drew.
   `?cw=1` and the real wasm engine: the script played Nf3 and Ne5 through real
   pointer events and verified them; the overlay was the one thing missing.
 
-## 1.61.1 — 2026-11-27
+## 1.61.1 â€” 2026-11-27
 
 Debug hooks for the one path tests cannot reach.
 
@@ -483,20 +483,20 @@ Debug hooks for the one path tests cannot reach.
   so the click geometry and the move verification can be exercised on a real
   chess.com board instead of only in jsdom. No user-visible change.
 
-## 1.61.0 — 2026-11-27
+## 1.61.0 â€” 2026-11-27
 
 Bad moves that look like a beginner, not like a dice roll.
 
 - The improvised move was a uniform draw over the legal moves. That is not how a
   133 plays: it walks the king into the open and ignores a free queen, which is
   the one way the account's moves could still look like a machine. It is weighted
-  now — material first, then checks, then castling, with king moves cut to 15%
-  and an early queen halved — so the miss is a human miss.
+  now â€” material first, then checks, then castling, with king moves cut to 15%
+  and an early queen halved â€” so the miss is a human miss.
 - The chooser learns what the move does (`capture`, `check`, `castle`, `piece`)
   from the board in `90-boot.js`; the taste stays in `60-analysis.js` and is
   testable on its own.
 
-## 1.60.1 — 2026-11-27
+## 1.60.1 â€” 2026-11-27
 
 The card's rating stops lying about beginners.
 
@@ -507,7 +507,7 @@ The card's rating stops lying about beginners.
 - The opponent estimate carried the same formula copied inline; both sites call
   the one function, so the card and the panel cannot disagree.
 
-## 1.60.0 — 2026-11-27
+## 1.60.0 â€” 2026-11-27
 
 Beginner moves, not a beginner-shaped re-weighting.
 
@@ -524,13 +524,13 @@ Beginner moves, not a beginner-shaped re-weighting.
 - The band caption read `accuracy 19 cp` for what is a loss per move; it says
   `loss/move`.
 
-## 1.59.0 — 2026-11-26
+## 1.59.0 â€” 2026-11-26
 
 Play at your level, not at the engine's floor.
 
 - `acplBand` is two curves joined at Stockfish's 1320 floor: a 133 account is
   expected to lose ~293 cp a move, a 1320 account ~57. The panel's `Playing at`
-  row now says `133 · your level` instead of `1320 · floor`.
+  row now says `133 Â· your level` instead of `1320 Â· floor`.
 - `chooseMove` aims at that loss rate when the account is under the floor: the
   weight is centred on the target instead of on 0, so the account plays moves of
   its own size rather than the fourth-best move every time. `Level play` in Tune
@@ -539,7 +539,7 @@ Play at your level, not at the engine's floor.
 - Slack follows the target (up to 720 cp), so MultiPV 4 can actually contain the
   moves the account is supposed to play.
 
-## 1.58.0 — 2026-11-26
+## 1.58.0 â€” 2026-11-26
 
 The engine's move, on the board.
 
@@ -553,23 +553,23 @@ The engine's move, on the board.
   including the unexplained `gameOverSeen` flake under load.
 - `docs/research.md`: what the 2026 public scripts actually ship (Complete Move
   Guide, Chess.com Bot 7.1, chess-sniper, Chessvision, Game Review) and the one
-  thing none of them does — anchor the engine to the account's own rating.
+  thing none of them does â€” anchor the engine to the account's own rating.
 
-## 1.57.0 — 2026-11-26
+## 1.57.0 â€” 2026-11-26
 
 A Stats tab: the shape of the night, not one card.
 
 - `pushReport` keeps the last twenty games per account in localStorage, one
   entry per game even if the same result screen is scanned twice.
 - `reportSummary` gives the record, win rate, both sides' average loss per move,
-  the rating that play looks like and the best game — and skips missing samples
+  the rating that play looks like and the best game â€” and skips missing samples
   instead of averaging zeros.
 - New rail tab **Stats**: one bar per game in the last twelve (height is the
   inverse of the loss, colour is the result), plus the six numbers above.
 - The tab is rebuilt only when the sequence changes, so the 2 s render cannot
   make the bars flicker.
 
-## 1.56.0 — 2026-11-26
+## 1.56.0 â€” 2026-11-26
 
 The panel now says how the game went, with the same numbers it played by.
 
@@ -584,7 +584,7 @@ The panel now says how the game went, with the same numbers it played by.
 - `Your accuracy` is now `Loss / move`: it always showed centipawns, never a
   percentage, and the label was the only thing claiming otherwise.
 
-## 1.55.1 — 2026-11-26
+## 1.55.1 â€” 2026-11-26
 
 The ratings on the panel are the ones on the board.
 
@@ -594,12 +594,12 @@ The ratings on the panel are the ones on the board.
 - `readBoardRatings` no longer needs one of four container classes: it finds the
   two ratings wherever they live and assigns top/bottom from the row class, the
   board geometry, or document order. `readMyRating` is the signed-in player's.
-- The anchor now falls back to your own row (`133 · page`) before the 1500
-  default, so `Playing at` shows `1245 · floor` instead of `1525`.
+- The anchor now falls back to your own row (`133 Â· page`) before the 1500
+  default, so `Playing at` shows `1245 Â· floor` instead of `1525`.
 - A real opponent rating wins over the ACPL estimate in the target, the move
   choice and the panel. `~2086` was an estimate shown in place of a known 113.
 
-## 1.55.0 — 2026-11-26
+## 1.55.0 â€” 2026-11-26
 
 The run does not end by itself any more.
 
@@ -608,20 +608,20 @@ The run does not end by itself any more.
   open by hand.
 - The session cap is a rollover, not a stop. When 15 games or 3 hours trip, the run
   closes and the next one opens with the same settings; the history says
-  `session limit: 15 games · rolled over` instead of the panel going quiet.
+  `session limit: 15 games Â· rolled over` instead of the panel going quiet.
 - Tune has an Always auto switch. Turning it on restores the three settings; turning
   them off one by one still works, and the per-account settings survive a reload.
 - `sessionLimit` takes `rollover` and its verdict always carries the flag. Three tests
   cover the rollover, the plain stop and the default.
 
-## 1.54.2 — 2026-11-26
+## 1.54.2 â€” 2026-11-26
 
 The report shows the hour the account usually plays.
 
 - `report()` adds `usual hour N` to the pace line when the archive had at least
   three games in that hour. The data was collected in 1.54.1 and had no reader.
 
-## 1.54.1 — 2026-11-26
+## 1.54.1 â€” 2026-11-26
 
 The profile learns when the account plays.
 
@@ -629,7 +629,7 @@ The profile learns when the account plays.
   archive it already reads (three games in an hour before it trusts one). Same read,
   no extra request; nothing acts on it yet.
 
-## 1.54.0 — 2026-11-26
+## 1.54.0 â€” 2026-11-26
 
 The account's rhythm has phases.
 
@@ -639,7 +639,7 @@ The account's rhythm has phases.
 - `paceBaseline(ply)` prefers the phase median, so a slow middlegame and a quick
   opening are both the account's, not an average of the two.
 
-## 1.53.0 — 2026-11-26
+## 1.53.0 â€” 2026-11-26
 
 Move times are right-skewed, like a person's.
 
@@ -647,15 +647,15 @@ Move times are right-skewed, like a person's.
   never produces the occasional long think. It now samples an empirical shape
   (0.55x to 1.95x, mostly near 1x) with a real tail, inside the same 0.65x-1.5x band.
 
-## 1.52.3 — 2026-11-26
+## 1.52.3 â€” 2026-11-26
 
 The probe request exists once.
 
-- `probeRequest(fen, uciMoves, uci)` owns the restricted-search shape — MultiPV 1,
-  depth cap, `searchmoves`, budget — for both the timer and the play button. That
+- `probeRequest(fen, uciMoves, uci)` owns the restricted-search shape â€” MultiPV 1,
+  depth cap, `searchmoves`, budget â€” for both the timer and the play button. That
   shape is what drifted in 1.52.0; one copy is left.
 
-## 1.52.2 — 2026-11-26
+## 1.52.2 â€” 2026-11-26
 
 One probe budget, one place.
 
@@ -663,7 +663,7 @@ One probe budget, one place.
   caller, and the second copy drifted in 1.52.0. `probeBudgetMs()` now owns it and
   both the timer and the button call it.
 
-## 1.52.1 — 2026-11-26
+## 1.52.1 â€” 2026-11-26
 
 The button's probe obeys the same budget as the timer's.
 
@@ -671,7 +671,7 @@ The button's probe obeys the same budget as the timer's.
   clock let the manual path think longer than the auto path. Both now use
   `min(400, cfg.moveTimeMs, max(180, 0.6 x searchBudget))`.
 
-## 1.52.0 — 2026-11-26
+## 1.52.0 â€” 2026-11-26
 
 The play button plays the account's move too.
 
@@ -681,7 +681,7 @@ The play button plays the account's move too.
   falls back to the old path when the position moved on.
 - It became `async`; every caller already ignored its return value.
 
-## 1.51.6 — 2026-11-26
+## 1.51.6 â€” 2026-11-26
 
 `probe N` counts the probes that actually judged a move.
 
@@ -689,7 +689,7 @@ The play button plays the account's move too.
   had moved on or the move was already a candidate. It now increments only when the
   line reaches the decision, so the report means "N of my moves were judged".
 
-## 1.51.5 — 2026-11-26
+## 1.51.5 â€” 2026-11-26
 
 The probe count belongs to the account that earned it.
 
@@ -698,7 +698,7 @@ The probe count belongs to the account that earned it.
   `adoptAccountSettings`, so the report never adds one login's probes to another's
   repertoire line.
 
-## 1.51.4 — 2026-11-26
+## 1.51.4 â€” 2026-11-26
 
 The probe never outlasts the search the user chose.
 
@@ -706,7 +706,7 @@ The probe never outlasts the search the user chose.
   subsidary search ran longer than the main one. The budget is now
   `min(400, cfg.moveTimeMs, max(180, 0.6 x searchBudget))` ms with an 80 ms floor.
 
-## 1.51.3 — 2026-11-26
+## 1.51.3 â€” 2026-11-26
 
 The probe's budget follows the clock.
 
@@ -714,7 +714,7 @@ The probe's budget follows the clock.
   spent most of the move's search on a move the account plays without thinking.
   It is now `min(400, max(180, 0.6 x searchBudget))` ms.
 
-## 1.51.2 — 2026-11-26
+## 1.51.2 â€” 2026-11-26
 
 The report says whether the repertoire was really consulted.
 
@@ -723,7 +723,7 @@ The report says whether the repertoire was really consulted.
   move was judged instead of merely reordered.
 - 194 tests.
 
-## 1.51.1 — 2026-11-26
+## 1.51.1 â€” 2026-11-26
 
 A long session keeps reading the archive instead of the hour it booted.
 
@@ -733,7 +733,7 @@ A long session keeps reading the archive instead of the hour it booted.
   after 16 minutes costs another.
 - 194 tests.
 
-## 1.51.0 — 2026-11-26
+## 1.51.0 â€” 2026-11-26
 
 One archive read feeds both the pace and the openings.
 
@@ -743,18 +743,18 @@ One archive read feeds both the pace and the openings.
 - A manual refresh still clears that account's cached reads.
 - 193 tests.
 
-## 1.50.0 — 2026-11-26
+## 1.50.0 â€” 2026-11-26
 
 The probe's thinking counts as thinking, and a stale result never gets a move.
 
-- The opening probe's 70–400 ms is now subtracted from the pace delay (`spentMs`),
+- The opening probe's 70â€“400 ms is now subtracted from the pace delay (`spentMs`),
   so a move with a probe takes the same wall-clock time as one without it.
 - `scheduleAutoMove` refuses a result whose `fen` no longer matches the board: the
   probe re-enters it a moment later, and a move computed for one position is never
   armed for another.
 - 192 tests.
 
-## 1.49.0 — 2026-11-26
+## 1.49.0 â€” 2026-11-26
 
 The account's own move gets its own search, so the repertoire can be played.
 
@@ -763,14 +763,14 @@ The account's own move gets its own search, so the repertoire can be played.
 - When the tree's top move has a share of 0.6 or more and the main search never
   offered it, auto-play runs that restricted search and merges the answer as a
   candidate flagged `opening`, once per position.
-- That candidate is allowed `slack + 70` cp and a 3× wider eval spread: in the
+- That candidate is allowed `slack + 70` cp and a 3Ã— wider eval spread: in the
   opening the evidence is the account's record, not the eval. A probed move that
   loses more than that is never played.
 - Shares are no longer compressed: `0.02 + share` instead of `0.2 + 4.5 * share`,
   so a 60-of-60 habit is now a 95 % pick (was 89 %) and a 60/40 habit is 60/40.
 - 191 tests.
 
-## 1.48.0 — 2026-11-26
+## 1.48.0 â€” 2026-11-26
 
 The openings come from the whole tree, not just the first move.
 
@@ -780,7 +780,7 @@ The openings come from the whole tree, not just the first move.
   to the next one up when a line is unknown.
 - Measured on a 167-game account: 117 nodes, six of them two plies in. After
   1.e4 e5 it plays 2.Ne2 in 9 of 9 games; after 1.e4 e5 2.Nf3 it answers 2...d6
-  in 9 of 9. An engine never picks 2.Ne2 — that is the point.
+  in 9 of 9. An engine never picks 2.Ne2 â€” that is the point.
 - The repertoire now applies at every opening ply (`ply < 8`), not only the first.
 - A PGN's `Nf3+` and an engine's `Nf3+` are the same move: `sanKey` strips the
   suffix on both sides, so a check never silently drops into the engine's line.
@@ -788,40 +788,40 @@ The openings come from the whole tree, not just the first move.
   move the search never considered is not forced (MultiPV 4).
 - 187 tests.
 
-## 1.47.0 — 2026-11-26
+## 1.47.0 â€” 2026-11-26
 
 Black's repertoire is keyed by the move it answers, and it loads without a clock.
 
 - Measured on a real 1631-blitz account (167 games): vs 1.e4 e5 93 %, vs 1.d4 d5
-  89 %, while the marginal table says e5 56 %, d5 32 % — the average would answer
+  89 %, while the marginal table says e5 56 %, d5 32 % â€” the average would answer
   1.d4 with a move that player never played against it.
 - `blackByFirst` keys black's shares by the white first move in UCI; a first move
   faced fewer than twice is left to the engine, never to the average.
 - `syncRepertoire` reads the same archive for the openings only, so bot games and
   the analysis board (no clock, no time class) get the repertoire too: one request
   per account per six hours, cached, with a 20-minute backoff on an empty month.
-- The report shows the conditioned table: `repertoire w e4 100% · b vs e4 e5 93% ·
+- The report shows the conditioned table: `repertoire w e4 100% Â· b vs e4 e5 93% Â·
   d4 d5 89% (60 games)`.
 - 186 tests.
 
-## 1.46.0 — 2026-11-26
+## 1.46.0 â€” 2026-11-26
 
 The opening comes from the account's own games, not from a dice roll.
 
 - Measured: four near-equal lines gave 26 %/26 %/26 %/23 % over 400 draws, and
-  the anti-repeat rule pushed the repeated first move down to **12 %** — less
+  the anti-repeat rule pushed the repeated first move down to **12 %** â€” less
   human than repeating it.
 - `repertoireFromGames()` counts the first move of the last 60 games per colour
   from the archive the pace reader already downloads; no extra request. Real
   archive check (hikaru, 2026/11, 486 games): white e4 39 %, c4 39 %, d4 18 %.
 - `chooseMove` weights candidates by those shares, so the script plays the
   account's repertoire with the engine's eval as a tie-breaker. The anti-repeat
-  rule stands down for a move with share ≥ 0.3.
-- The report prints the repertoire it read: `repertoire w e4 75% · d4 25% · b c5
+  rule stands down for a move with share â‰¥ 0.3.
+- The report prints the repertoire it read: `repertoire w e4 75% Â· d4 25% Â· b c5
   100% (9 games)`.
 - 182 tests.
 
-## 1.45.0 — 2026-11-26
+## 1.45.0 â€” 2026-11-26
 
 The engine is named by the engine, not by a constant.
 
@@ -832,7 +832,7 @@ The engine is named by the engine, not by a constant.
   report follow it. The 2019 JS fallback keeps its own name.
 - 178 tests.
 
-## 1.44.0 — 2026-11-26
+## 1.44.0 â€” 2026-11-26
 
 The delay is the whole interval, so the search is no longer paid for twice.
 
@@ -840,11 +840,11 @@ The delay is the whole interval, so the search is no longer paid for twice.
   search against a 700 ms bullet median made the real interval 1.4 s, and 28 s
   of clock over a 40-move game. `visibleDelayMs()` now waits only what is left of
   the target, with a 120 ms floor.
-- The report prints `last delay … · search …` so the interval can be checked
+- The report prints `last delay â€¦ Â· search â€¦` so the interval can be checked
   instead of assumed.
 - 177 tests.
 
-## 1.43.0 — 2026-11-26
+## 1.43.0 â€” 2026-11-26
 
 The depth cap follows the account, so a strong account is not played at a 1500
 account's depth.
@@ -858,11 +858,11 @@ account's depth.
   21. The report prints `depth 14->21` when the cap is raised.
 - 176 tests.
 
-## 1.42.0 — 2026-11-26
+## 1.42.0 â€” 2026-11-26
 
 The bug report carries the anchor chain, and the page costs 1.8 ms.
 
-- `copy report` now prints `rating … · rival … · form … · effective … (source)`.
+- `copy report` now prints `rating â€¦ Â· rival â€¦ Â· form â€¦ Â· effective â€¦ (source)`.
   "effective 1374" was unverifiable without the numbers it was anchored to.
 - New research section with three measurements: a scan is 1.8 ms on a real
   game page, 1.41.0 boots clean on `/analysis` and `/play/online` with no
@@ -870,7 +870,7 @@ The bug report carries the anchor chain, and the page costs 1.8 ms.
   while the repeated move drops to 12 %.
 - 175 tests.
 
-## 1.41.0 — 2026-11-26
+## 1.41.0 â€” 2026-11-26
 
 The rival's rating lands in the anchor in the same scan, and the comparison is
 now read from the competitors' source.
@@ -885,16 +885,16 @@ now read from the competitors' source.
   account's rating.
 - 174 tests.
 
-## 1.40.1 — 2026-11-26
+## 1.40.1 â€” 2026-11-26
 
 The rating floor is 250, not 400.
 
 - Chess.com's cheapest bot is 250 and a club player can be 300; the old floor
-  threw those away. The 3–4 digit regex plus the player-container scope already
+  threw those away. The 3â€“4 digit regex plus the player-container scope already
   reject clocks and usernames, so the floor only has to reject fragments.
 - 173 tests: the measured vs-computer markup reads `(300)` as 300.
 
-## 1.40.0 — 2026-11-26
+## 1.40.0 â€” 2026-11-26
 
 The opponent's rating is read where chess.com actually keeps it.
 
@@ -909,24 +909,24 @@ The opponent's rating is read where chess.com actually keeps it.
 - 173 tests, including the measured vs-computer markup and a page with a clock
   and no rating.
 
-## 1.39.1 — 2026-11-26
+## 1.39.1 â€” 2026-11-26
 
 The strength exists before the first search.
 
 - `state.effectiveElo` was resolved only inside the rating callbacks, so a
   signed-out tab or a blocked profile request left it `null` and the search fell
-  back to `cfg.targetElo` (0), which the engine clamps to 1320 — the panel
+  back to `cfg.targetElo` (0), which the engine clamps to 1320 â€” the panel
   documented 1500. It is now resolved at boot and on every settings change.
 - A manual target typed into the panel applies immediately, not after the next
   rating fetch.
 - 171 tests: the signed-out boot removes the navbar name, makes the stats
   endpoint answer 404, and asserts 1500.
 
-## 1.39.0 — 2026-11-26
+## 1.39.0 â€” 2026-11-26
 
 The strength stays the account's while the night moves the account.
 
-- Form: each game asks for a deterministic ±30 point offset keyed by the
+- Form: each game asks for a deterministic Â±30 point offset keyed by the
   account and the game number, inside the existing `-75/+25` envelope. One
   strength for a whole session is a fingerprint; a player has good and bad days.
 - The profile rating used to be cached for six hours and never refreshed while
@@ -936,7 +936,7 @@ The strength stays the account's while the night moves the account.
 - 170 tests, including the envelope at the boot level: a 1480 account is never
   asked to play above 1505.
 
-## 1.38.0 — 2026-11-25
+## 1.38.0 â€” 2026-11-25
 
 The score no longer depends on a move list that the page does not render.
 
@@ -948,7 +948,7 @@ The score no longer depends on a move list that the page does not render.
 - The score fixtures now start from a position two plies in, because a start
   position under a finished dialog is a state the site never produces.
 
-## 1.37.0 — 2026-11-25
+## 1.37.0 â€” 2026-11-25
 
 Playing as Black is no longer treated as playing as White.
 
@@ -961,7 +961,7 @@ Playing as Black is no longer treated as playing as White.
 - 167 tests, including one that flips the board and reads the dialog; it fails
   by name if the view facts are dropped again.
 
-## 1.36.0 — 2026-11-25
+## 1.36.0 â€” 2026-11-25
 
 Game-over detection now matches the page it runs on.
 
@@ -973,7 +973,7 @@ Game-over detection now matches the page it runs on.
   had been looking for classes the site does not use; the old names stay as a
   fallback.
 - The real title names the colour ("Black Won"), not the player, so the parser
-  resolves white/black against the side you are playing — which also makes a
+  resolves white/black against the side you are playing â€” which also makes a
   signed-out tab able to score a draw.
 - `textContent` glues every sibling block ("tester wonby checkmate"), not just
   capitalised ones. The dialog text now prefers `innerText`, with a leaf-walk
@@ -982,12 +982,12 @@ Game-over detection now matches the page it runs on.
   `position: relative` header inside a fixed modal used to read as hidden.
 - 166 tests, and the session test now uses the real markup class for class.
 
-## 1.35.0 — 2026-11-25
+## 1.35.0 â€” 2026-11-25
 
 The session score no longer trusts a name it can see anywhere in the dialog.
 
 - 1.34.0 asked whether the account's name appeared in the game-over dialog.
-  Both players do — the player rows list both names and both ratings — so the
+  Both players do â€” the player rows list both names and both ratings â€” so the
   loser's own name made a loss read as a win. The result is now decided by the
   word attached to `won`/`lost`, which is the only token in that text that
   means anything.
@@ -996,7 +996,7 @@ The session score no longer trusts a name it can see anywhere in the dialog.
   counted; chess.com never scores a game that young.
 - 165 tests.
 
-## 1.34.0 — 2026-11-25
+## 1.34.0 â€” 2026-11-25
 
 The panel can tell you how the night went.
 
@@ -1012,7 +1012,7 @@ The panel can tell you how the night went.
   ("tester wonRematch"), which made the first parser miss every real dialog.
 - 163 tests.
 
-## 1.33.0 — 2026-11-25
+## 1.33.0 â€” 2026-11-25
 
 The retry now covers the ways the engine dies quietly.
 
@@ -1024,12 +1024,12 @@ The retry now covers the ways the engine dies quietly.
   resets the ladder whichever path brought the engine back.
 - 159 tests, including the mute worker and the exhausted crash cluster.
 
-## 1.32.0 — 2026-11-25
+## 1.32.0 â€” 2026-11-25
 
 Offline at boot is no longer permanent.
 
-- Boot happened once. If both the NNUE fetch and the JS fallback threw — a
-  laptop waking from sleep, a CDN edge without the new tag, a captive portal —
+- Boot happened once. If both the NNUE fetch and the JS fallback threw â€” a
+  laptop waking from sleep, a CDN edge without the new tag, a captive portal â€”
   the engine stayed `offline` until the tab was reloaded, with AFK armed and
   nothing playing.
 - The engine now retries on a backoff: 5 s, 20 s, 60 s, then every 5 minutes,
@@ -1042,7 +1042,7 @@ Offline at boot is no longer permanent.
   404 does not).
 - 157 tests: the backoff, the network-vs-build distinction, and the 404 case.
 
-## 1.31.0 — 2026-11-25
+## 1.31.0 â€” 2026-11-25
 
 A key that stops the session, not just the panel.
 
@@ -1056,12 +1056,12 @@ A key that stops the session, not just the panel.
 - 154 tests: a jsdom test turns auto-play and AFK on, sends the key, and asserts
   all four effects.
 
-## 1.30.0 — 2026-11-25
+## 1.30.0 â€” 2026-11-25
 
 The docs prove their numbers.
 
 Twice in two days the test count printed in `AGENTS.md` and in the research
-table described a suite that no longer existed, and nothing failed — including
+table described a suite that no longer existed, and nothing failed â€” including
 the release check. A stale count is small, but it is the kind of small that
 teaches people to stop reading the docs.
 
@@ -1072,7 +1072,7 @@ teaches people to stop reading the docs.
 - 1.29.0's `bundle.test.js` entry is unchanged; this only guards the claims
   around it.
 
-## 1.29.0 — 2026-11-25
+## 1.29.0 â€” 2026-11-25
 
 The artifact is tested, not just the source.
 
@@ -1080,25 +1080,25 @@ The artifact is tested, not just the source.
   `chess-wraith.user.js`, built by a manual `MODULES` order in
   `tools/build.js`; a fragment dropped from that list kept every unit test green
   and shipped a script that throws on load.
-- `bundle.test.js` now boots the committed bundle in jsdom — chess.com-shaped
-  board, protocol-level fake worker, stubbed public API and storage — and runs
+- `bundle.test.js` now boots the committed bundle in jsdom â€” chess.com-shaped
+  board, protocol-level fake worker, stubbed public API and storage â€” and runs
   the script's own `selftest`: engine up, board read as the start position, 11
   checks green. It sits next to the five static checks that were already there.
 - `tests/unit/harness.js` holds the page, the fake worker and the timer tracking
   so the fragments test and the bundle test cannot drift apart.
 - While adding it I overwrote the existing `bundle.test.js` instead of extending
-  it; the test count (150 → 146) is what caught it. The five checks are back,
+  it; the test count (150 â†’ 146) is what caught it. The five checks are back,
   byte for byte, with the boot test appended.
 - 151 tests, 22 files.
 
-## 1.28.0 — 2026-11-25
+## 1.28.0 â€” 2026-11-25
 
 A limit that resets itself is not a limit.
 
 - `gamesPlayed` and `sessionStart` lived in memory, so every page load handed
   the account a fresh allowance. A Tampermonkey update accepted at 03:00, or a
   discarded tab the browser restored, silently moved `9 of 15` back to `1 of
-  15` — the safety valve the user set was advisory.
+  15` â€” the safety valve the user set was advisory.
 - The run is now stored per account (`chess-wraith-session-v1:<user>`) and
   resumed on boot while it is still the same run: inside `sessionMaxMs`, with a
   start time that is not in the future. Anything else starts fresh.
@@ -1110,13 +1110,13 @@ A limit that resets itself is not a limit.
 - 150 tests: the resume rules (fresh, kept, stale, clock skew, junk) and a boot
   that restores six games and the original start time.
 
-## 1.27.0 — 2026-11-25
+## 1.27.0 â€” 2026-11-25
 
 The night outlives the tab.
 
 - The panel history from 1.26.0 lived in memory only. A Tampermonkey update, a
   discarded tab or a chess.com navigation started the script again and wiped
-  the only record of why it stopped — which is the exact moment you want it.
+  the only record of why it stopped â€” which is the exact moment you want it.
 - The five entries are now written per account
   (`chess-wraith-history-v1:<user>`), restored on boot and when a late account
   name is adopted, and cleared once the list is empty.
@@ -1126,15 +1126,15 @@ The night outlives the tab.
   so a night that crosses midnight is not misread as twenty minutes.
 - 148 tests: the date label, the per-account restore, and the epoch line.
 
-## 1.26.0 — 2026-11-25
+## 1.26.0 â€” 2026-11-25
 
 A tab you left alone can say what happened.
 
 - `state.warn` was a single line: the newest reason overwrote the one before it,
   so coming back to "paused" never said whether it stopped at 01:12 or 05:40.
-- The panel now keeps the last five transitions with an `HH:MM` — session limit,
+- The panel now keeps the last five transitions with an `HH:MM` â€” session limit,
   AFK stopped, rematch declined, manual move suspected, rematch pressed, game
-  over with auto-play off — and shows the newest two under the foot. The
+  over with auto-play off â€” and shows the newest two under the foot. The
   tooltip carries all five.
 - The bug report gained a `history` line with the same entries.
 - `pushEvent` collapses consecutive repeats and caps the list, so a retry loop
@@ -1142,12 +1142,12 @@ A tab you left alone can say what happened.
 - 146 tests: the cap, the repeat collapse, the blank line, the 24-hour clock,
   and the AFK rematch press showing up in the history end to end.
 
-## 1.25.0 — 2026-11-25
+## 1.25.0 â€” 2026-11-25
 
 The bench that starts the script.
 
 Every other test loaded a slice. Boot was never run outside a browser, so the
-one failure that ends a session first — the script throwing on page load — had
+one failure that ends a session first â€” the script throwing on page load â€” had
 no test at all.
 
 - `tests/unit/session.test.js` loads all twelve fragments into jsdom and lets
@@ -1161,7 +1161,7 @@ no test at all.
   exits on its own.
 - 144 tests, 21 files.
 
-## 1.24.0 — 2026-11-25
+## 1.24.0 â€” 2026-11-25
 
 Promotion does not spend a low clock waiting.
 
@@ -1169,20 +1169,20 @@ Promotion does not spend a low clock waiting.
   the drop and the piece choice. With 1:30 on the clock that is nothing; with
   two seconds it is the game.
 - `promotionPollPlan(clockSeconds)` scales it: below 8 s the pauses drop to 40 ms
-  and the budget is a third of the clock (`1 s` → 4 looks over 160 ms), above it
+  and the budget is a third of the clock (`1 s` â†’ 4 looks over 160 ms), above it
   the old patience is unchanged.
 - The bug report now carries the clock, the last move delay and the search
   budget, so a "it stopped" report says whether the clock was the cause.
 - Docs: the test table said 106 tests in 14 files; it is 20 files and 141 tests.
 
-## 1.23.0 — 2026-11-25
+## 1.23.0 â€” 2026-11-25
 
 Say when the engine cannot be as weak as the account.
 
 - `UCI_Elo` bottoms out at 1320 upstream (`LowestElo` in `src/search.h`). Every
   account under that was aimed at a number the engine silently ignored: a
   900-rated player was told `900` and got 1320.
-- The panel now marks the clamp: `1320 · floor`, and the tooltip says how far
+- The panel now marks the clamp: `1320 Â· floor`, and the tooltip says how far
   under the floor the account is. The report text carries it too.
 - Compensation instead of pretence: `floorSlack(elo)` widens the accepted move
   window by a fifth of the gap (capped at 120 cp), so a 900 account picks from
@@ -1190,7 +1190,7 @@ Say when the engine cannot be as weak as the account.
 - 140 tests: the clamp at both ends, no slack above the floor, 84 cp at 900,
   the cap at 600, monotone in the gap.
 
-## 1.22.0 — 2026-11-25
+## 1.22.0 â€” 2026-11-25
 
 Strength anchored to a rating that has games behind it.
 
@@ -1201,7 +1201,7 @@ Strength anchored to a rating that has games behind it.
   `settledRating(rating, games, prior)` blends the rating with a 1200 prior by
   that weight. Two games at 2100 aim at 1583; twenty aim at 1905; the weight is
   capped at 0.9 so the prior never fully disappears.
-- Panel: `· prov` instead of `· acct` under 20 games in the class, with the real
+- Panel: `Â· prov` instead of `Â· acct` under 20 games in the class, with the real
   published number in the tooltip. The games count rides along in the six-hour
   cache, so a reload does not un-shrink it.
 - The published rate now also survives a stale cache: the old code only restored
@@ -1209,7 +1209,7 @@ Strength anchored to a rating that has games behind it.
 - 140 tests: weight monotonic and capped, two games under the settled value, zero
   games all prior, garbage in null out.
 
-## 1.21.1 — 2026-11-25
+## 1.21.1 â€” 2026-11-25
 
 Softened 1.21.0's claim. "Worker timers are not batched the same way page timers
 are" is folklore: practitioners repeat it, no official document states it, and
@@ -1217,7 +1217,7 @@ the honest position is that the worker is a best-effort wake-up while the lag
 check is the guarantee. README and `docs/research.md` now say that, with the
 stage schedule Chrome does document.
 
-## 1.21.0 — 2026-11-25
+## 1.21.0 â€” 2026-11-25
 
 AFK in a hidden tab, which is how AFK actually runs.
 
@@ -1227,16 +1227,16 @@ AFK in a hidden tab, which is how AFK actually runs.
   so: it looked like the board had stopped taking moves.
 - A 1 s worker ticker now pings the page while the tab is hidden, since worker
   intervals are not batched the same way page timers are. Best effort by
-  nature — the browser sets the rules — but it is the only wake-up left when the
+  nature â€” the browser sets the rules â€” but it is the only wake-up left when the
   main thread is starved.
-- The scan tick measures its own lag. More than 1.8× late (or 2.5 s, whichever
+- The scan tick measures its own lag. More than 1.8Ã— late (or 2.5 s, whichever
   is bigger) while the tab is hidden sets `state.throttled` and the panel foot
-  says `tab hidden · timers batched`. The report text carries it too. Detection
+  says `tab hidden Â· timers batched`. The report text carries it too. Detection
   is exact; the ticker is the mitigation.
 - A test for the rule: a minute for a 2 s tick is throttling, 2.4 s is jitter, a
   visible tab is never throttled. 140 tests.
 
-## 1.20.0 — 2026-11-25
+## 1.20.0 â€” 2026-11-25
 
 Time management that reads the clock instead of the config.
 
@@ -1248,34 +1248,34 @@ Time management that reads the clock instead of the config.
   at half the clock, so a dead engine is noticed while there is still time to
   click.
 - Measured why it matters: 57,340 blitz moves from the public archives, 2.6%
-  played with under 5 s left — about one such move per game.
+  played with under 5 s left â€” about one such move per game.
 - Three tests for the bounds, including that a healthy clock changes nothing.
   139 tests.
 
-## 1.19.2 — 2026-11-25
+## 1.19.2 â€” 2026-11-25
 
 Measured the thing 1.19.0 assumed: a destroyed NNUE worker is ready again in
 206, 205 and 306 ms on the live analysis page, shim fetch and wasm compile
 included. Recovery is cheaper than a stalled search by two orders of magnitude,
 and `docs/research.md` now records it.
 
-## 1.19.1 — 2026-11-25
+## 1.19.1 â€” 2026-11-25
 
 `destroy()` left `ready: true` behind. The next search posted into a null worker
-and waited out the whole budget for an answer that could not come — the same
+and waited out the whole budget for an answer that could not come â€” the same
 failure the 1.19.0 recovery exists to catch, arriving through the front door.
 Found while measuring a rebuild in the browser: `boot()` reported ready in 3 ms,
 which is not a wasm compile, it is a lie. Destroy now clears `ready`, `booted`
 and the option cache, and a test pins it so a destroyed engine cannot pretend.
 136 tests.
 
-## 1.19.0 — 2026-11-25
+## 1.19.0 â€” 2026-11-25
 
 The engine can now lose a worker and come back inside the same move.
 
 - **A worker that died after booting kept `ready` true.** The UCI handshake had
   said readyok, so `ensureReady` returned immediately and every search after the
-  crash waited out the whole budget (6–40 s) before the watchdog noticed. On a
+  crash waited out the whole budget (6â€“40 s) before the watchdog noticed. On a
   3-second clock that is the game. `#recover` now kills the worker, drops the
   ready flag, settles whoever was waiting and boots a replacement in the
   background, so the next scan finds a live engine instead of paying a
@@ -1288,14 +1288,14 @@ The engine can now lose a worker and come back inside the same move.
 - Test with the fake worker: kill it after readyok, the engine is not ready any
   more, and a fresh worker is spawned and handshaking. 135 tests.
 
-## 1.18.2 — 2026-11-25
+## 1.18.2 â€” 2026-11-25
 
 The measurement behind 1.18.1, recorded so the claim does not rest on a hunch:
 661 rapid games from the October leaderboard, 521 of them (79%) ended with the
-board untouched — 318 resignations, 195 flags, 5 agreed draws, 3 abandonments.
+board untouched â€” 318 resignations, 195 flags, 5 agreed draws, 3 abandonments.
 `docs/research.md` now says so, next to the reason it mattered.
 
-## 1.18.1 — 2026-11-25
+## 1.18.1 â€” 2026-11-25
 
 The rematch never fired after a game that ended on the clock, which is the
 normal way a session ends at night.
@@ -1303,17 +1303,17 @@ normal way a session ends at night.
 - **Game over was only read when the position changed.** `runScan` checked
   `scanned.gameOver` inside the `if (changed)` branch. A flag fall or a
   resignation does not move a piece, so the check never ran: the script sat on
-  the last position, `gameOverSeen` stayed false, and `queueRematch` — which is
-  called from that same branch — was never reached. The modal is now read on
+  the last position, `gameOverSeen` stayed false, and `queueRematch` â€” which is
+  called from that same branch â€” was never reached. The modal is now read on
   every scan, before the changed/unchanged split. This is the likeliest reason
   the session "stopped" mid-game in the first place.
 - **The 1.18.0 watchdog could fire into a finished game.** It is now gated by
   `autoArmDecision`, which refuses a finished board, and `playNow` refuses too,
   because a timeout leaves the last analysis and the last turn still on screen.
-- A jsdom test for the modal itself (visible modal → game over, hidden modal →
+- A jsdom test for the modal itself (visible modal â†’ game over, hidden modal â†’
   not), and the decision helper is tested case by case. 134 tests.
 
-## 1.18.0 — 2026-11-25
+## 1.18.0 â€” 2026-11-25
 
 Auto-play could stop mid-game and never say why, and the panel could show no
 pace while the moves were paced. The stalls first.
@@ -1328,19 +1328,19 @@ pace while the moves were paced. The stalls first.
   set, so the 2 s tick skipped the rescan and the position sat there. Every
   failure path now lands in the retry.
 - **Nothing noticed a dead loop.** The 2 s tick also checks: auto-play on, our
-  turn, a fresh analysis, no auto timer and no retry timer — then arms the move.
+  turn, a fresh analysis, no auto timer and no retry timer â€” then arms the move.
   That is the watchdog for the stall nobody predicted.
 - **A takeover takes two scans.** One scan can see the board mid-paint and accuse
   you of moving when the script's own click was late; it now confirms the same
   position twice before pausing. The rule is otherwise unchanged: real clock,
   certain turn, ply advanced, grid not the one we produced.
-- **The panel names the pace source.** It showed `–` while a fresh profile was
+- **The panel names the pace source.** It showed `â€“` while a fresh profile was
   paced by its class default, and `learned` even when the learned sample came
-  from another time class. `paceAnchorFor` is now the single answer — acct,
-  learned, class or none — and the row prints it next to the milliseconds.
+  from another time class. `paceAnchorFor` is now the single answer â€” acct,
+  learned, class or none â€” and the row prints it next to the milliseconds.
 - Five tests for `moveRetryPlan`, one for the anchor sources. 132 tests.
 
-## 1.17.0 — 2026-11-25
+## 1.17.0 â€” 2026-11-25
 
 Pace, third pass: the learned sample was still class-blind, and the rapid number
 was finally measured on chess.com instead of borrowed.
@@ -1348,9 +1348,9 @@ was finally measured on chess.com instead of borrowed.
 - **The learned median was one bucket for every time class.** The published
   median has been per class since it was written, but the locally learned one was
   stored under `chess-wraith-pace-v1:<user>`, so a bullet rhythm learned in
-  1-minute games could pace a 10-minute game — the same failure as the double
+  1-minute games could pace a 10-minute game â€” the same failure as the double
   scaling fixed in 1.16.0, one layer down. The key now carries the class
-  (`…:<user>:bullet`), and a class with no history falls to its class default
+  (`â€¦:<user>:bullet`), and a class with no history falls to its class default
   instead of to another class's rhythm. Old samples are left in the old key and
   ignored: forty moves rebuild the profile in one game.
 - **Rapid measured, not inherited.** October 2026 rapid leaderboard, top 50, one
@@ -1362,7 +1362,7 @@ was finally measured on chess.com instead of borrowed.
 - One test for the new key, and the research note that backs the numbers.
 - 129 tests.
 
-## 1.16.1 — 2026-11-25
+## 1.16.1 â€” 2026-11-25
 
 Wording, not behaviour: 1.16.0 said the three class medians were measured on
 chess.com. Bullet and blitz were (328 games from the public archive); rapid was
@@ -1371,44 +1371,44 @@ comment, the README row and the note under 1.16.0 now say which is which.
 
 Also unwrapped the `AGENTS.md` line that had run past the column.
 
-## 1.16.0 — 2026-11-25
+## 1.16.0 â€” 2026-11-25
 
 Pacing: the account's own rhythm was being scaled twice, and a fresh profile had
 no class to stand on.
 
 - **Double scaling.** The published median is fetched per time class, so it is
   already the bullet or rapid number. `computeDelay` then multiplied it by the
-  clock (×0.5 under two minutes, ×1.15 from ten) again: a bullet account whose
-  own games average 700 ms was played at 350 ms, half its own rhythm — exactly
+  clock (Ã—0.5 under two minutes, Ã—1.15 from ten) again: a bullet account whose
+  own games average 700 ms was played at 350 ms, half its own rhythm â€” exactly
   the gap a fair-play check compares against the account's history. A
   class-scoped baseline now skips the clock multiplier; the locally learned
   sample, which is class-agnostic, still scales.
 - **A fresh profile opened rapid games at blitz speed.** With no published and
-  no learned baseline, a 10-minute game used the generic 700–1600 ms window, so
-  the first moves came in around 1.4 s. Now the fallback is the class median —
+  no learned baseline, a 10-minute game used the generic 700â€“1600 ms window, so
+  the first moves came in around 1.4 s. Now the fallback is the class median â€”
   bullet 0.7 s and blitz 1.6 s measured on chess.com, rapid 5.5 s from the
-  Lichess cross-check — and the band sits on it. Daily and unknown classes keep the generic window.
+  Lichess cross-check â€” and the band sits on it. Daily and unknown classes keep the generic window.
 - Six tests: the skipped multiplier, the scaled learned sample, the unchanged
   class scale, the class table and the rapid default. 128 tests.
 
-## 1.15.0 — 2026-11-25
+## 1.15.0 â€” 2026-11-25
 
 Promotion: the one move that used to be clicked blind.
 
-- After the drop, the script slept 95–175 ms, looked **once** for
+- After the drop, the script slept 95â€“175 ms, looked **once** for
   `.promotion-window .promotion-piece` and clicked if it was there. On a slow
   board the dialog is painted later than that; the click went nowhere, the move
   never registered, the opposite-gesture retry dragged the pawn again onto the
   same square and the session ended in a pause. Promotions are rare enough that
   it never showed up in the games that were tested.
 - `awaitPromotionPiece` polls eight times, 120 ms apart (~1 s), and the click is
-  re-issued once if the dialog is still on screen 220 ms later — cheaper than a
+  re-issued once if the dialog is still on screen 220 ms later â€” cheaper than a
   whole move retry.
 - The lookup no longer throws when there is no `document` (tests, workers).
 - Five tests for the poll: late dialog, already-open dialog, never-open dialog,
   single attempt, and the selector it builds. 122 tests.
 
-## 1.14.0 — 2026-11-25
+## 1.14.0 â€” 2026-11-25
 
 AFK: the one path that parked a session on a dialog nobody was going to press.
 
@@ -1416,7 +1416,7 @@ AFK: the one path that parked a session on a dialog nobody was going to press.
   script marked the rematch as tried and never looked again, so when the
   opponent had left, chess.com kept its `Rematch` button on screen forever and
   auto-play sat there. Now, twelve seconds later, it takes the next button the
-  dialog offers — `New 5 min` and friends — skipping the one already pressed, up
+  dialog offers â€” `New 5 min` and friends â€” skipping the one already pressed, up
   to three attempts before it stops out loud (`rematch declined; AFK stopped`).
 - **A late dialog is not a miss.** When the game-over modal is not painted at
   the moment the delay expires, it looks three times, four seconds apart, before
@@ -1428,12 +1428,12 @@ AFK: the one path that parked a session on a dialog nobody was going to press.
   verified against a synthetic game-over dialog.
 - Two tests for the skip list and the retry window. 117 tests.
 
-## 1.13.0 — 2026-11-25
+## 1.13.0 â€” 2026-11-25
 
 A real engine bug, found while proving the 1.12.0 timings against a bare FEN.
 
 - **An empty move list analysed the starting position.** `#runNow` asked
-  `job.uciMoves ? …`, and the field is always an array, so a snapshot with no
+  `job.uciMoves ? â€¦`, and the field is always an array, so a snapshot with no
   readable move list (a board joined mid-game, a position without history) sent
   `position startpos` and the engine answered for the opening. On the analysed
   endgame FEN it suggested `Nf3`, a move that does not exist there; auto-play
@@ -1444,14 +1444,14 @@ A real engine bug, found while proving the 1.12.0 timings against a bare FEN.
 - Two tests for both branches; the old assertion that encoded `startpos` for an
   empty history was corrected. 115 tests.
 
-## 1.12.0 — 2026-11-25
+## 1.12.0 â€” 2026-11-25
 
 Review of the search and of the update row.
 
 - **Search time follows the phase.** An opening move does not need the full
   700 ms and the ten-man endgame is where the half-pawn decides the result, so
-  the request is scaled by material: 0.85× in the opening (first 16 plies, full
-  board), 1.15× at 11–16 men, 1.35× at 10 men or fewer. The watchdog budget is
+  the request is scaled by material: 0.85Ã— in the opening (first 16 plies, full
+  board), 1.15Ã— at 11â€“16 men, 1.35Ã— at 10 men or fewer. The watchdog budget is
   derived from the same number, so nothing waits longer than before.
 - **`checked` reads like a sentence**: `just now`, `5m ago`, `3h ago`, `3d ago`
   instead of `4320m ago` after a long break.
@@ -1459,7 +1459,7 @@ Review of the search and of the update row.
   verified against the live build.
 - Three tests for the phase scale, the budget bounds and the age text. 113 tests.
 
-## 1.11.0 — 2026-11-25
+## 1.11.0 â€” 2026-11-25
 
 The update pill now shows up on its own; it used to depend on a timer that a
 background tab freezes.
@@ -1475,7 +1475,7 @@ background tab freezes.
   skipped, which is what the live verification reads.
 - One test for the throttle window (`updateCheckDue`). 110 tests.
 
-## 1.10.0 — 2026-11-25
+## 1.10.0 â€” 2026-11-25
 
 Review of the input path: one real failure mode, one timing assumption.
 
@@ -1492,19 +1492,19 @@ Review of the input path: one real failure mode, one timing assumption.
   inside its own 100 px cell), a board too small to click returning nothing, and
   the retry invariant. 109 tests.
 
-## 1.9.1 — 2026-11-25
+## 1.9.1 â€” 2026-11-25
 
 - `docs/research.md`: the PubAPI rate-limit rule quoted, and why the pace fetch is
   serial (two requests, six-hour cache, twenty-minute backoff on `429`).
 
-## 1.9.0 — 2026-11-25
+## 1.9.0 â€” 2026-11-25
 
 Three checks that can only fail on a real page, and two pace bugs found by
 asking what the cache was actually doing.
 
 - **`selftest()` now covers eleven checks**, not eight: the `%clk` parser is run
   against the exact token shape chess.com writes (a silent break would leave the
-  delay on a fixed window), the delay is asserted inside 250–9000 ms for the
+  delay on a fixed window), the delay is asserted inside 250â€“9000 ms for the
   current settings, and the settings key is checked to be the scoped one. That
   is the part of the script a unit test cannot see.
 - **The 20 minute archive backoff never worked**: an error entry is written
@@ -1516,7 +1516,7 @@ asking what the cache was actually doing.
 - The pace constants moved into `src/55-pace.js`; they lived in boot, so the
   standalone pace harness could not see them and the cache silently threw.
 
-## 1.8.1 — 2026-11-25
+## 1.8.1 â€” 2026-11-25
 
 - The published-pace cache is now per account **and per time class**. A player
   who alternates bullet and blitz was re-downloading the same half megabyte of
@@ -1524,7 +1524,7 @@ asking what the cache was actually doing.
 - One test for the key, and the pace harness now resolves the signed-in name the
   same way the page does. 103 tests.
 
-## 1.8.0 — 2026-11-25
+## 1.8.0 â€” 2026-11-25
 
 The pace anchor stops averaging the opponent into your own rhythm.
 
@@ -1541,7 +1541,7 @@ The pace anchor stops averaging the opponent into your own rhythm.
   2 s, and recency (a month of clockless games followed by one recent game).
   102 tests.
 
-## 1.7.2 — 2026-11-25
+## 1.7.2 â€” 2026-11-25
 
 Settings stop belonging to the browser and start belonging to the account.
 
@@ -1560,7 +1560,7 @@ Settings stop belonging to the browser and start belonging to the account.
 - Five tests: key scoping, name sanitization, navbar vs session-object detection,
   isolation between two accounts, and the migration. 100 tests.
 
-## 1.7.1 — 2026-11-25
+## 1.7.1 â€” 2026-11-25
 
 A six second pace is honest until the clock is not.
 
@@ -1571,7 +1571,7 @@ A six second pace is honest until the clock is not.
 - One test: ten minutes keeps the rhythm, forty seconds keeps an eighteen-move
   tank, nine seconds becomes a scramble and never zero.
 
-## 1.7.0 — 2026-11-25
+## 1.7.0 â€” 2026-11-25
 
 The pacing stops being a default and becomes the account's own measured rhythm.
 
@@ -1585,12 +1585,12 @@ The pacing stops being a default and becomes the account's own measured rhythm.
   bullet median 0.70 s (p90 2.3 s), blitz median 1.60 s (p90 8.9 s). A fixed
   400-700 ms think time is not neutral: it is faster than a grandmaster's median
   blitz move. That is the number the account anchor fixes.
-- The Session row now reads `1.6s · acct` or `1.6s · learned`, so it is obvious
+- The Session row now reads `1.6s Â· acct` or `1.6s Â· learned`, so it is obvious
   which baseline produced the delay, and `copy report` prints it.
 - Four tests for the parser and the sample floor: per-side deltas, book moves
   excluded, premove, stall, class filter, 30-move minimum. 95 tests.
 
-## 1.6.8 — 2026-11-25
+## 1.6.8 â€” 2026-11-25
 
 `copy report` printed `slack undefined cp`.
 
@@ -1598,7 +1598,7 @@ The pacing stops being a default and becomes the account's own measured rhythm.
   `humanSlackCp`. It now prints the real number and the guard's session boost
   (`slack 40+15 cp`), so the one line that explains the move choice is true.
 
-## 1.6.7 — 2026-11-25
+## 1.6.7 â€” 2026-11-25
 
 The engine stops being the untested part, and a bug report becomes one click.
 
@@ -1617,7 +1617,7 @@ The engine stops being the untested part, and a bug report becomes one click.
   honest choice: a userscript cannot make chess.com cross-origin isolated, and
   the full build is ~94 MB.
 
-## 1.6.6 — 2026-11-25
+## 1.6.6 â€” 2026-11-25
 
 A move that failed to register used to fail silently.
 
@@ -1627,7 +1627,7 @@ A move that failed to register used to fail silently.
   status line and the scan loop resumes.
 - `ChessWraith.step()` and the hotkey path no longer leak an unhandled rejection.
 
-## 1.6.5 — 2026-11-25
+## 1.6.5 â€” 2026-11-25
 
 The selector layer stops being the untested part.
 
@@ -1642,7 +1642,7 @@ The selector layer stops being the untested part.
   when `ENGINE_MIRROR` drifts from `package.json`. A green release with a dead
   engine URL is the failure this catches.
 
-## 1.6.4 — 2026-11-25
+## 1.6.4 â€” 2026-11-25
 
 Two things the panel could not tell you, and one it was lying about.
 
@@ -1659,13 +1659,13 @@ Two things the panel could not tell you, and one it was lying about.
   duplicated.
 - 83 tests, unchanged.
 
-## 1.6.3 — 2026-11-25
+## 1.6.3 â€” 2026-11-25
 
 `npm run ship` passed each word of the release title through a shell. It now
 spawns npm through its JavaScript entry point, so arguments keep their exact
 boundaries and the deprecation warning about shell concatenation is gone.
 
-## 1.6.2 — 2026-11-25
+## 1.6.2 â€” 2026-11-25
 
 - **A failed rating request no longer retries on every reload.** chess.com's
   PubAPI docs say serial access is unlimited but a throttled answer is possible
@@ -1677,13 +1677,13 @@ boundaries and the deprecation warning about shell concatenation is gone.
   drifting apart.
 - 83 tests, unchanged.
 
-## 1.6.1 — 2026-11-25
+## 1.6.1 â€” 2026-11-25
 
 People get slower as a session goes on; the delay now does too, 2% an hour
 capped at 6% after three hours (the same drift `nitro-wraith`'s typing model
 uses, from de Jong et al. 2020 on time-on-task). 83 tests.
 
-## 1.6.0 — 2026-11-25
+## 1.6.0 â€” 2026-11-25
 
 The rating is no longer a number you type. It is the account's own.
 
@@ -1692,7 +1692,7 @@ The rating is no longer a number you type. It is the account's own.
   chess.com tab on 2026-11-25) and keeps the rating for every time class. The
   clock on the board picks which one applies, so the same account is anchored at
   its rapid rating in a 10-minute game and its blitz rating in a 3-minute one.
-  The panel shows `1840 blitz` and `Playing at 1840 · acct`.
+  The panel shows `1840 blitz` and `Playing at 1840 Â· acct`.
 - **The ceiling is the account.** `effectiveElo` lets the engine drift 75 Elo
   below and 25 above the published rating instead of aiming 130 above whoever is
   across the board. `Target Elo` in Tune still exists as a manual override; `0`
@@ -1706,16 +1706,16 @@ The rating is no longer a number you type. It is the account's own.
   thinking for three seconds in an obvious position.
 - 82 tests (was 78); two new files: the rating normalizer and the account test.
 
-## 1.5.4 — 2026-11-25
+## 1.5.4 â€” 2026-11-25
 
-The Info tab's Build card showed `–` for its own version: the new Updates card
+The Info tab's Build card showed `â€“` for its own version: the new Updates card
 reused `data-el="build"`, and the second binding won.
 
 - The Updates card row is `installed`, and a unit test now fails when any two
   elements in the panel share a `data-el` name.
 - 78 tests (was 76).
 
-## 1.5.3 — 2026-11-25
+## 1.5.3 â€” 2026-11-25
 
 Two things that only show up on a release day.
 
@@ -1728,16 +1728,16 @@ Two things that only show up on a release day.
   stale for hours, the release API is exact but rate-limited.
 - 76 tests, unchanged.
 
-## 1.5.2 — 2026-11-25
+## 1.5.2 â€” 2026-11-25
 
 The pill said `UPDATE 1.5.1` and ate the header: the title rendered as
-`CHESS WRA…`.
+`CHESS WRAâ€¦`.
 
 - The pill shows only the version next to its arrow, and the tooltip and
   `aria-label` carry the full sentence.
 - 76 tests, unchanged.
 
-## 1.5.1 — 2026-11-25
+## 1.5.1 â€” 2026-11-25
 
 `@latest` on jsDelivr kept answering `1.4.2` for minutes after 1.5.0 was tagged,
 so a copy that had just been released was told it was up to date.
@@ -1746,7 +1746,7 @@ so a copy that had just been released was told it was up to date.
   to the jsDelivr `@latest` copy of `package.json` when that fails.
 - 76 tests, unchanged.
 
-## 1.5.0 — 2026-11-25
+## 1.5.0 â€” 2026-11-25
 
 Two changes: the panel now tells you when there is a newer release, and there is
 no longer any way to make it play like an engine.
@@ -1766,29 +1766,29 @@ no longer any way to make it play like an engine.
   and the pinned update URLs, and the selection tests now assert the single
   legit contract instead of the removed presets.
 
-## 1.4.2 — 2026-11-25
+## 1.4.2 â€” 2026-11-25
 
 CI caught a flaky assertion in the pace test, and the flake was the feature
 working badly: the account band clamped a uniform draw, so a session's median
 sat wherever the clamp put it.
 
-- The delay is now drawn around the account's own baseline (0.78–1.22×, median
-  on the baseline) instead of being clamped into 0.65–1.5×, which piled mass on
+- The delay is now drawn around the account's own baseline (0.78â€“1.22Ã—, median
+  on the baseline) instead of being clamped into 0.65â€“1.5Ã—, which piled mass on
   both edges and let the median drift past 2 800 ms on a 2 000 ms account.
-- The test asserts the median lands within ±10% of the baseline.
+- The test asserts the median lands within Â±10% of the baseline.
 - 72 tests, five consecutive green runs.
 
-## 1.4.1 — 2026-11-25
+## 1.4.1 â€” 2026-11-25
 
 The engine reporting `readyok` cleared every warning, including the two that
 explain why auto-play just turned itself off.
 
-- The guard messages (`paused: …`, `another tab is playing`) survive the engine
+- The guard messages (`paused: â€¦`, `another tab is playing`) survive the engine
   boot; a normal warning still clears.
-- The footer says `second tab · passive` while the lease belongs to another tab.
+- The footer says `second tab Â· passive` while the lease belongs to another tab.
 - 72 tests, unchanged: the fix is in the wiring, not in the pure helpers.
 
-## 1.4.0 — 2026-11-25
+## 1.4.0 â€” 2026-11-25
 
 Three ways a bot gets caught that have nothing to do with move quality: it plays
 after a human took over, two tabs drive the same board, and the account plays
@@ -1812,7 +1812,7 @@ numbers behind them.
   card with the signed-in user, rating, session length and current guard.
 - 72 tests (was 53); the 19 new ones live in `tests/unit/guards.test.js`.
 
-## 1.3.1 — 2026-11-25
+## 1.3.1 â€” 2026-11-25
 
 A session with no end is the one shape that is hard to explain away, and the AFK
 loop had none.
@@ -1824,7 +1824,7 @@ loop had none.
   missing-values case.
 - 53 tests (was 49).
 
-## 1.3.0 — 2026-11-25
+## 1.3.0 â€” 2026-11-25
 
 The engine the README promised and the engine that ran were not the same one.
 This release makes Stockfish 19 NNUE actually boot, and makes the pacing depend
@@ -1833,18 +1833,18 @@ on the account and the opponent instead of only on a fixed window.
 - **NNUE was never failing to load: it was asking for the wrong file.** The
   build does not request `stockfish.wasm`; it builds a name from
   `self.location.href` plus a content hash, so the request looked like
-  `https://www.chess.comhttps://www.chess.com/554211df-…` and the old shim --
+  `https://www.chess.comhttps://www.chess.com/554211df-â€¦` and the old shim --
   which matched on `.wasm` -- never fired. The shim now answers every request
   that is not the engine's own script with the wasm from the mirror.
   Measured in Chrome on chess.com: `uciok` in 111 ms, 1,285,348 nodes in
-  1,657 ms with MultiPV 3 and WDL on (≈776 kN/s, depth 18). The JS build stays
+  1,657 ms with MultiPV 3 and WDL on (â‰ˆ776 kN/s, depth 18). The JS build stays
   as the documented fallback for a blocked worker or a cold cache.
 - **The NNUE verdict is no longer sticky.** A successful boot clears the
   seven-day skip marker, so a fix ships to browsers that had cached the old
   failure.
 - **Pace is account-based.** Settings stay global; the opening memory and a new
   rolling median of this account's own think times are stored per signed-in
-  username. Once there are six samples, a move is kept inside 0.65×–1.5× of the
+  username. Once there are six samples, a move is kept inside 0.65Ã—â€“1.5Ã— of the
   account's own rhythm, so the same account does not play like two people.
 - **Pace follows the opponent.** The gap between our move landing and theirs is
   their think time; the delay never drops below 35% of it (capped at 3.2 s),
@@ -1860,7 +1860,7 @@ on the account and the opponent instead of only on a fixed window.
   when the mirror, the package, the header, the README badge and the CHANGELOG
   disagree.
 
-## 1.2.0 — 2026-11-25
+## 1.2.0 â€” 2026-11-25
 
 A review against the live site found seven ways the script could be confidently
 wrong. This release makes the wrong cases visible instead of silent.
@@ -1897,7 +1897,7 @@ wrong. This release makes the wrong cases visible instead of silent.
   the unused `bestSan` branch.
 - 37 tests (was 29): turn certainty per source, the search budget, the NNUE
   verdict cache and the README version badge.
-## 1.1.0 — 2026-11-25
+## 1.1.0 â€” 2026-11-25
 
 The interface is now the NITRO WRAITH system, and the session can run unattended.
 
@@ -1907,7 +1907,7 @@ The interface is now the NITRO WRAITH system, and the session can run unattended
   a big eval-and-best hero, a session card and a footer line. Motion is limited
   to state (boot, pulse, bump, scan) and dies under `prefers-reduced-motion`.
 - **AFK** (`Alt+Shift+F`, chip in the header): after a game ends it waits a
-  human pause (1.7–4.2 s, 12% of the time 5–9.5 s), presses Rematch or the
+  human pause (1.7â€“4.2 s, 12% of the time 5â€“9.5 s), presses Rematch or the
   shortest new game it can find, and re-arms auto-play when the next board
   appears. It stops and says so if no button is offered.
 - **Keep-alive**: optional near-silent AudioContext tone so Chrome treats the
@@ -1916,7 +1916,7 @@ The interface is now the NITRO WRAITH system, and the session can run unattended
 - 29 unit tests (was 22): rematch selection, disabled buttons, delay windows,
   hostile configs and button text normalisation.
 
-## 1.0.3 — 2026-11-25
+## 1.0.3 â€” 2026-11-25
 
 - The debug API is no longer a global by default. chess.com's own analysis of
   cheat clients lists "global scope audits" as a detection angle; `window.ChessWraith`
@@ -1924,7 +1924,7 @@ The interface is now the NITRO WRAITH system, and the session can run unattended
   `localStorage['chess-wraith-debug'] = '1'`. The panel, auto-play and engine are
   unaffected.
 
-## 1.0.2 — 2026-11-25
+## 1.0.2 â€” 2026-11-25
 
 A code review turned up three things the previous release claimed but did not
 do. All three are fixed, and the play itself is closer to a person.
@@ -1932,25 +1932,25 @@ do. All three are fixed, and the play itself is closer to a person.
 - **The styles never weakened the engine.** `mode.includes('19')` is true for
   "Stockfish 2019 JS", so the fallback took the NNUE-only option path and every
   preset played at full strength. A real `nnue` flag now selects the branch, and
-  the fallback maps the target Elo onto `Skill Level` (1320 → 0, 3190 → 20).
+  the fallback maps the target Elo onto `Skill Level` (1320 â†’ 0, 3190 â†’ 20).
 - **Adaptive mode never measured the opponent.** The loss was read from
   `state.analysis` after it had been cleared, so `oppCpLosses` stayed empty and
   the estimate was always 1500. Measurement moved to the moment the new position
   is evaluated, which is the only point where both evaluations exist.
 - **Dead code removed:** `turnOverride: cfg.sideOverride === 'auto' ? 'auto' : 'auto'`.
 - **Deliberate misses:** the Casual preset now misses 12% of the time and
-  Adaptive 5%, capped at 2.5× the slack, never throwing away a forced mate. Club
+  Adaptive 5%, capped at 2.5Ã— the slack, never throwing away a forced mate. Club
   and GM stay clean.
 - **Opening variety:** the first two plies are remembered in localStorage and a
   first move repeated three times in six games is down-weighted to 28%.
 - **Time from the position, not only the clock:** the gap between the top two
-  lines moves the delay (±18–28%), checks add 12%, captures come 8% faster, and
-  3.5% of moves get a rare second thought 1.45–1.95× longer.
+  lines moves the delay (Â±18â€“28%), checks add 12%, captures come 8% faster, and
+  3.5% of moves get a rare second thought 1.45â€“1.95Ã— longer.
 - **Panel:** live ACPL for your own moves, opponent estimate and the target Elo.
-- 22 unit tests (was 16), including the Elo→skill map, adaptive targeting, miss
+- 22 unit tests (was 16), including the Eloâ†’skill map, adaptive targeting, miss
   rate, repeat penalty, gap-driven delay and the rethink cap.
 
-## 1.0.1 — 2026-11-25
+## 1.0.1 â€” 2026-11-25
 
 Verified against the published mirror (jsDelivr) on the live chess.com analysis
 board, which exposed two real defects:
@@ -1963,7 +1963,7 @@ board, which exposed two real defects:
   panel is now 304 px with a zero-minimum grid, so the settings button no longer
   sits on the border.
 
-## 1.0.0 — 2026-11-25
+## 1.0.0 â€” 2026-11-25
 
 First release.
 
@@ -1983,6 +1983,7 @@ First release.
 - Hotkeys: `Alt+Shift+A` auto-play, `Alt+Shift+M` play one move, `Alt+Shift+H`
   panel.
 - Fallback engine (`stockfish.js`, no WASM) when the NNUE worker cannot start.
+
 
 
 
